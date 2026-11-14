@@ -14,6 +14,7 @@ en variables de entorno. En local, define FLASK_ENV=development en .env.
 """
 
 import os
+
 from app import create_app
 
 # Obtener el entorno desde variable de entorno (production por defecto, para

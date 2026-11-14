@@ -28,7 +28,7 @@ api = Api(
 )
 
 # Agregar namespaces a la API
-from app.routes.api import auth, mascotas, solicitudes
+from app.routes.api import auth, mascotas, solicitudes  # noqa: E402 (después de crear api, import circular)
 
 api.add_namespace(auth.ns)
 api.add_namespace(mascotas.ns)

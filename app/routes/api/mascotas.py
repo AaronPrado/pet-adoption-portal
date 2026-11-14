@@ -5,6 +5,7 @@ Endpoints públicos de mascotas para la API.
 from flask import request
 from flask_restx import Namespace, Resource, fields
 
+from app import db
 from app.models import Mascota
 
 ns = Namespace("mascotas", description="Mascotas")
@@ -56,7 +57,7 @@ class MascotaList(Resource):
         tamano = request.args.get('tamano')
         if tamano:
             query = query.filter_by(tamano=tamano)
-        
+
         mascotas = query.order_by(Mascota.fecha_ingreso.desc()).all()
         return [m.to_dict() for m in mascotas]
 
@@ -67,5 +68,5 @@ class MascotaDetail(Resource):
     @ns.response(404, 'Mascota no encontrada')
     def get(self, id):
         """Obtiene el detalle de una mascota por ID."""
-        mascota = Mascota.query.get_or_404(id)
+        mascota = db.get_or_404(Mascota, id)
         return mascota.to_dict()

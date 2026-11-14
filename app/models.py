@@ -3,11 +3,22 @@ Modelos de la base de datos usando SQLAlchemy.
 Representa las entidades: Usuario, Mascota, Solicitud.
 """
 
-from datetime import datetime
-from werkzeug.security import generate_password_hash, check_password_hash
+from datetime import UTC, datetime
+
 from flask_login import UserMixin
+from werkzeug.security import check_password_hash, generate_password_hash
 
 from app import db
+
+
+def utcnow():
+    """
+    Fecha y hora actual en UTC sin zona horaria.
+
+    Las columnas DateTime guardan UTC "naive"; utcnow() está obsoleto
+    desde Python 3.12, así que se calcula con zona y se quita después.
+    """
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 class Usuario(UserMixin, db.Model):
@@ -50,7 +61,7 @@ class Usuario(UserMixin, db.Model):
     telefono = db.Column(db.String(20))
     direccion = db.Column(db.Text)
     rol = db.Column(db.String(20), nullable=False, default='adoptante', index=True)
-    fecha_registro = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    fecha_registro = db.Column(db.DateTime, nullable=False, default=utcnow)
     activo = db.Column(db.Boolean, nullable=False, default=True)
     oauth_provider = db.Column(db.String(20), nullable=True)
     oauth_id = db.Column(db.String(100), nullable=True, unique=True)
@@ -186,7 +197,7 @@ class Mascota(db.Model):
     descripcion = db.Column(db.Text)
     estado = db.Column(db.String(20), nullable=False, default='disponible', index=True)
     foto_url = db.Column(db.String(255))
-    fecha_ingreso = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    fecha_ingreso = db.Column(db.DateTime, nullable=False, default=utcnow)
     vacunado = db.Column(db.Boolean, nullable=False, default=False)
     esterilizado = db.Column(db.Boolean, nullable=False, default=False)
 
@@ -297,7 +308,7 @@ class Solicitud(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False, index=True)
     mascota_id = db.Column(db.Integer, db.ForeignKey('mascotas.id'), nullable=False, index=True)
-    fecha_solicitud = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    fecha_solicitud = db.Column(db.DateTime, nullable=False, default=utcnow)
     estado = db.Column(db.String(20), nullable=False, default='pendiente', index=True)
     cuestionario_json = db.Column(db.JSON)
     comentarios_admin = db.Column(db.Text)
@@ -332,7 +343,7 @@ class Solicitud(db.Model):
         """
         self.estado = 'aprobada'
         self.revisado_por = admin_id
-        self.fecha_revision = datetime.utcnow()
+        self.fecha_revision = utcnow()
         self.comentarios_admin = comentario
 
         # Marcar la mascota como adoptada
@@ -350,7 +361,7 @@ class Solicitud(db.Model):
         """
         self.estado = 'rechazada'
         self.revisado_por = admin_id
-        self.fecha_revision = datetime.utcnow()
+        self.fecha_revision = utcnow()
         self.comentarios_admin = comentario
         db.session.commit()
 

@@ -8,9 +8,8 @@ Tests incluidos:
 - Validaciones y permisos
 """
 
-import pytest
-from app.models import Mascota
 from app import db
+from app.models import Mascota
 
 
 class TestCatalogo:
@@ -139,7 +138,8 @@ class TestAdminPanel:
         content = response.data.decode().lower()
         assert 'admin' in content or 'permiso' in content or 'no tienes' in content
 
-    def test_admin_panel_muestra_todas_mascotas(self, client, auth_headers_admin, mascota_disponible, mascota_en_proceso):
+    def test_admin_panel_muestra_todas_mascotas(self, client, auth_headers_admin,
+                                                mascota_disponible, mascota_en_proceso):
         """Test: Panel admin muestra todas las mascotas."""
         response = client.get('/mascotas/admin')
 
@@ -223,7 +223,7 @@ class TestCRUD:
         assert response.status_code == 200
 
         # Verificar que fue eliminada
-        mascota = Mascota.query.get(mascota_id)
+        mascota = db.session.get(Mascota, mascota_id)
         assert mascota is None
 
 

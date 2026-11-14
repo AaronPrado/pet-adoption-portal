@@ -3,7 +3,7 @@ Tests de las ramas de error de la API (JWT, login, filtros) y de la
 revisión de solicitudes que no cubren test_api.py ni test_solicitudes.py.
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import jwt
 import pytest
@@ -25,7 +25,7 @@ class TestJWT:
 
     def test_token_expirado(self, app, client, usuario_adoptante):
         token = token_con(app, user_id=usuario_adoptante.id,
-                          exp=datetime.now(timezone.utc) - timedelta(minutes=1))
+                          exp=datetime.now(UTC) - timedelta(minutes=1))
 
         response = mis_solicitudes(client, token)
 
@@ -33,7 +33,8 @@ class TestJWT:
         assert response.get_json()['error'] == 'Token expirado'
 
     def test_token_firmado_con_otra_clave(self, client, usuario_adoptante):
-        token = jwt.encode({'user_id': usuario_adoptante.id}, 'otra-clave', algorithm='HS256')
+        otra_clave = 'otra-clave-distinta-de-al-menos-32-bytes'
+        token = jwt.encode({'user_id': usuario_adoptante.id}, otra_clave, algorithm='HS256')
         assert mis_solicitudes(client, token).get_json()['error'] == 'Token inválido'
 
     def test_token_sin_user_id(self, app, client):
@@ -100,7 +101,7 @@ class TestCrearSolicitudApi:
 
     def crear(self, app, client, usuario, cuestionario):
         token = token_con(app, user_id=usuario.id,
-                          exp=datetime.now(timezone.utc) + timedelta(hours=1))
+                          exp=datetime.now(UTC) + timedelta(hours=1))
         return client.post('/api/solicitudes/', json={'mascota_id': 1, 'cuestionario': cuestionario},
                            headers={'Authorization': f'Bearer {token}'})
 

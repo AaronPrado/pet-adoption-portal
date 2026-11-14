@@ -8,9 +8,10 @@ de usuarios en el sistema.
 from urllib.parse import urlparse
 
 from authlib.integrations.base_client.errors import OAuthError
-from flask import Blueprint, render_template, redirect, url_for, flash, request, current_app
-from flask_login import login_user, logout_user, login_required, current_user
-from app import db, oauth, limiter
+from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
+from flask_login import current_user, login_required, login_user, logout_user
+
+from app import db, limiter, oauth
 from app.models import Usuario
 
 # Longitud mínima de contraseña en el registro
@@ -43,17 +44,17 @@ bp = Blueprint('auth', __name__, url_prefix='/auth')
 def registro():
     """
     Ruta de registro de nuevos usuarios.
-    
+
     GET: Muestra el formulario de registro
     POST: Procesa el registro y crea el usuario
-    
+
     Returns:
         Template renderizado o redirección
     """
     # Si el usuario ya está autenticado, redirigir al inicio
     if current_user.is_authenticated:
         return redirect(url_for('index'))
-    
+
     if request.method == 'POST':
         # Obtener datos del formulario
         email = request.form.get('email', '').strip().lower()
@@ -63,25 +64,25 @@ def registro():
         direccion = request.form.get('direccion', '').strip()
         password = request.form.get('password')
         password_confirm = request.form.get('password_confirm')
-        
+
         # Validaciones
         if not email or not nombre or not password:
             flash('Email, nombre y contraseña son obligatorios.', 'danger')
             return render_template('auth/registro.html')
-        
+
         if password != password_confirm:
             flash('Las contraseñas no coinciden.', 'danger')
             return render_template('auth/registro.html')
-        
+
         if len(password) < PASSWORD_MIN_LENGTH:
             flash(f'La contraseña debe tener al menos {PASSWORD_MIN_LENGTH} caracteres.', 'danger')
             return render_template('auth/registro.html')
-        
+
         # Verificar si el email ya existe
         if Usuario.query.filter_by(email=email).first():
             flash('El email ya está registrado. Intenta iniciar sesión.', 'warning')
             return redirect(url_for('auth.login'))
-        
+
         # Crear nuevo usuario
         try:
             nuevo_usuario = Usuario(
@@ -93,19 +94,19 @@ def registro():
             nuevo_usuario.apellidos = apellidos
             nuevo_usuario.telefono = telefono
             nuevo_usuario.direccion = direccion
-            
+
             db.session.add(nuevo_usuario)
             db.session.commit()
-            
+
             flash('¡Registro exitoso! Ya puedes iniciar sesión.', 'success')
             return redirect(url_for('auth.login'))
-        
+
         except Exception:
             db.session.rollback()
             current_app.logger.exception('Error al crear usuario')
             flash('No se pudo crear el usuario. Inténtalo de nuevo.', 'danger')
             return render_template('auth/registro.html')
-    
+
     # GET: Mostrar formulario
     return render_template('auth/registro.html')
 
@@ -115,51 +116,51 @@ def registro():
 def login():
     """
     Ruta de inicio de sesión.
-    
+
     GET: Muestra el formulario de login
     POST: Autentica al usuario
-    
+
     Returns:
         Template renderizado o redirección
     """
     # Si el usuario ya está autenticado, redirigir al inicio
     if current_user.is_authenticated:
         return redirect(url_for('index'))
-    
+
     if request.method == 'POST':
         email = request.form.get('email', '').strip().lower()
         password = request.form.get('password')
         remember = request.form.get('remember', False)  # Checkbox "Recordarme"
-        
+
         # Validaciones básicas
         if not email or not password:
             flash('Email y contraseña son obligatorios.', 'danger')
             return render_template('auth/login.html')
-        
+
         # Buscar usuario por email
         usuario = Usuario.query.filter_by(email=email).first()
-        
+
         # Verificar credenciales
         if usuario is None or not usuario.check_password(password):
             flash('Email o contraseña incorrectos.', 'danger')
             return render_template('auth/login.html')
-        
+
         # Verificar si la cuenta está activa
         if not usuario.activo:
             flash('Tu cuenta ha sido desactivada. Contacta al administrador.', 'warning')
             return render_template('auth/login.html')
-        
+
         # Login exitoso
         login_user(usuario, remember=remember)
         flash(f'¡Bienvenido, {usuario.nombre}!', 'success')
-        
+
         # Redirigir a la página que intentaba acceder o al inicio
         next_page = request.args.get('next')
         if es_redireccion_segura(next_page):
             return redirect(next_page)
         else:
             return redirect(url_for('index'))
-    
+
     # GET: Mostrar formulario
     return render_template('auth/login.html')
 
@@ -169,9 +170,9 @@ def login():
 def logout():
     """
     Ruta de cierre de sesión.
-    
+
     Cierra la sesión del usuario actual y redirige al inicio.
-    
+
     Returns:
         Redirección a la página de inicio
     """

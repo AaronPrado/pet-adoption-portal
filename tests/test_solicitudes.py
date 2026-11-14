@@ -8,9 +8,8 @@ Tests incluidos:
 - Validaciones y restricciones
 """
 
-import pytest
-from app.models import Solicitud, Mascota
 from app import db
+from app.models import Mascota, Solicitud
 
 
 class TestCrearSolicitud:
@@ -235,7 +234,7 @@ class TestRevisarSolicitud:
         assert solicitud_pendiente.comentarios_admin is not None
 
         # Verificar que mascota pasó a adoptado
-        mascota = Mascota.query.get(solicitud_pendiente.mascota_id)
+        mascota = db.session.get(Mascota, solicitud_pendiente.mascota_id)
         assert mascota.estado == 'adoptado'
 
     def test_rechazar_solicitud(self, client, auth_headers_admin, solicitud_pendiente, usuario_admin):
@@ -282,7 +281,7 @@ class TestModelo:
         assert solicitud_pendiente.fecha_revision is not None
 
         # Verificar que mascota se marcó como adoptado
-        mascota = Mascota.query.get(solicitud_pendiente.mascota_id)
+        mascota = db.session.get(Mascota, solicitud_pendiente.mascota_id)
         assert mascota.estado == 'adoptado'
 
     def test_rechazar_metodo(self, app, solicitud_pendiente, usuario_admin):

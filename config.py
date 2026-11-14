@@ -13,6 +13,7 @@ Uso:
 """
 
 import os
+
 from dotenv import load_dotenv
 
 # Cargar variables de entorno desde .env
@@ -100,8 +101,8 @@ class DevelopmentConfig(Config):
     TESTING = False
 
     # Claves solo válidas en local; se pueden sobrescribir desde .env
-    SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev-secret-key-solo-local'
-    JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY') or 'dev-jwt-secret-key-solo-local'
+    SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev-secret-key-solo-para-desarrollo-local'
+    JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY') or 'dev-jwt-secret-key-solo-para-desarrollo-local'
 
     # Base de datos: PostgreSQL en Docker Compose (localhost)
     SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or \
@@ -140,6 +141,7 @@ class ProductionConfig(Config):
 
     # Variables que deben venir del entorno
     REQUIRED_SETTINGS = ('SECRET_KEY', 'JWT_SECRET_KEY', 'SQLALCHEMY_DATABASE_URI')
+    MIN_SECRET_BYTES = 32
 
     @classmethod
     def init_app(cls, app):
@@ -161,6 +163,14 @@ class ProductionConfig(Config):
                 + ', '.join(faltan)
             )
 
+        # HS256 necesita una clave de al menos 32 bytes (RFC 7518, 3.2)
+        for clave in ('SECRET_KEY', 'JWT_SECRET_KEY'):
+            if len(app.config[clave].encode()) < cls.MIN_SECRET_BYTES:
+                raise RuntimeError(
+                    f'{clave} debe tener al menos {cls.MIN_SECRET_BYTES} bytes. '
+                    'Genera una con: python -c "import secrets; print(secrets.token_hex(32))"'
+                )
+
 
 class TestingConfig(Config):
     """
@@ -175,8 +185,8 @@ class TestingConfig(Config):
     DEBUG = False
     TESTING = True
 
-    SECRET_KEY = 'test-secret-key'
-    JWT_SECRET_KEY = 'test-jwt-secret-key'
+    SECRET_KEY = 'test-secret-key-de-al-menos-32-bytes'
+    JWT_SECRET_KEY = 'test-jwt-secret-key-de-al-menos-32-bytes'
 
     # Base de datos en memoria para tests (SQLite)
     SQLALCHEMY_DATABASE_URI = 'sqlite:///:memory:'

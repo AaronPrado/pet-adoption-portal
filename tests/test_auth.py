@@ -8,9 +8,8 @@ Tests incluidos:
 - Protección de rutas
 """
 
-import pytest
-from app.models import Usuario
 from app import db
+from app.models import Usuario
 
 
 class TestRegistro:
