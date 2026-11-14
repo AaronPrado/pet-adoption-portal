@@ -8,12 +8,13 @@ Este módulo maneja:
 - Aprobación/rechazo de solicitudes (solo admin)
 """
 
-from app.decorators import admin_required
-from flask import Blueprint, render_template, redirect, url_for, flash, request
-from flask_login import login_required, current_user
+from flask import Blueprint, flash, redirect, render_template, request, url_for
+from flask_login import current_user, login_required
 from sqlalchemy.exc import IntegrityError
+
 from app import db
-from app.models import Solicitud, Mascota
+from app.decorators import admin_required
+from app.models import Mascota, Solicitud
 
 # Crear blueprint
 bp = Blueprint('solicitudes', __name__, url_prefix='/solicitudes')
@@ -32,7 +33,7 @@ def nueva(mascota_id):
     Args:
         mascota_id (int): ID de la mascota a adoptar
     """
-    mascota = Mascota.query.get_or_404(mascota_id)
+    mascota = db.get_or_404(Mascota, mascota_id)
 
     # Verificar que la mascota esté disponible
     if not mascota.esta_disponible():
@@ -118,7 +119,7 @@ def detalle(solicitud_id):
     Args:
         solicitud_id (int): ID de la solicitud
     """
-    solicitud = Solicitud.query.get_or_404(solicitud_id)
+    solicitud = db.get_or_404(Solicitud, solicitud_id)
 
     # Verificar permisos: solo el dueño o admin pueden ver
     if not current_user.is_admin() and solicitud.usuario_id != current_user.id:
@@ -175,7 +176,7 @@ def admin_revisar(solicitud_id):
         solicitud_id (int): ID de la solicitud
     """
 
-    solicitud = Solicitud.query.get_or_404(solicitud_id)
+    solicitud = db.get_or_404(Solicitud, solicitud_id)
 
     if request.method == 'POST':
         # Una solicitud ya resuelta no se puede volver a aprobar o rechazar
@@ -192,10 +193,11 @@ def admin_revisar(solicitud_id):
                 flash(f'{solicitud.mascota.nombre} ya ha sido adoptado.', 'warning')
                 return redirect(url_for('solicitudes.admin_lista'))
             solicitud.aprobar(current_user.id, comentarios)
-            flash(f'Solicitud aprobada. {solicitud.usuario.nombre} ha adoptado a {solicitud.mascota.nombre}.', 'success')
+            flash(f'Solicitud aprobada. {solicitud.usuario.nombre} ha adoptado a {solicitud.mascota.nombre}.',
+                  'success')
         elif accion == 'rechazar':
             solicitud.rechazar(current_user.id, comentarios)
-            flash(f'Solicitud rechazada.', 'info')
+            flash('Solicitud rechazada.', 'info')
 
         return redirect(url_for('solicitudes.admin_lista'))
 

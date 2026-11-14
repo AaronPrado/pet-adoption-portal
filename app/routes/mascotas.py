@@ -7,13 +7,13 @@ Este módulo maneja:
 - Panel de administración con CRUD completo (solo admin)
 """
 
-from flask import Blueprint, render_template, redirect, url_for, flash, request, current_app
-from flask_login import login_required, current_user
-from app import db
-from app.models import Mascota
-from app.decorators import admin_required
-from app.s3 import upload_to_s3, delete_from_s3, es_url_imagen_valida
+from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
+from flask_login import login_required
 
+from app import db
+from app.decorators import admin_required
+from app.models import Mascota
+from app.s3 import delete_from_s3, es_url_imagen_valida, upload_to_s3
 
 # Crear blueprint
 bp = Blueprint('mascotas', __name__, url_prefix='/mascotas')
@@ -86,7 +86,7 @@ def detalle(mascota_id):
     Args:
         mascota_id (int): ID de la mascota
     """
-    mascota = Mascota.query.get_or_404(mascota_id)
+    mascota = db.get_or_404(Mascota, mascota_id)
     return render_template('mascotas/detalle.html', mascota=mascota)
 
 
@@ -253,7 +253,7 @@ def admin_editar(mascota_id):
     """
 
     # Obtener la mascota
-    mascota = Mascota.query.get_or_404(mascota_id)
+    mascota = db.get_or_404(Mascota, mascota_id)
 
     if request.method == 'POST':
         # Obtener datos del formulario
@@ -351,7 +351,7 @@ def admin_eliminar(mascota_id):
     """
 
     # Obtener la mascota
-    mascota = Mascota.query.get_or_404(mascota_id)
+    mascota = db.get_or_404(Mascota, mascota_id)
 
     # Verificar si tiene solicitudes asociadas
     if mascota.solicitudes.count() > 0:
