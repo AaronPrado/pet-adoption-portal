@@ -1,0 +1,39 @@
+{#
+  Navegación entre páginas de un resultado de Flask-SQLAlchemy (.paginate()).
+  Conserva los filtros actuales de la URL y solo cambia el parámetro page.
+#}
+{% macro paginacion(pagina, endpoint) %}
+{% if pagina.pages > 1 %}
+{% set args = request.args.to_dict() %}
+<nav aria-label="Paginación" class="mt-4">
+    <ul class="pagination justify-content-center flex-wrap">
+        <li class="page-item {% if not pagina.has_prev %}disabled{% endif %}">
+            {% if pagina.has_prev %}
+            {% set _ = args.update({'page': pagina.prev_num}) %}
+            <a class="page-link" href="{{ url_for(endpoint, **args) }}" rel="prev">Anterior</a>
+            {% else %}
+            <span class="page-link">Anterior</span>
+            {% endif %}
+        </li>
+        {% for numero in pagina.iter_pages(left_edge=1, left_current=2, right_current=2, right_edge=1) %}
+            {% if numero is none %}
+            <li class="page-item disabled"><span class="page-link">…</span></li>
+            {% elif numero == pagina.page %}
+            <li class="page-item active" aria-current="page"><span class="page-link">{{ numero }}</span></li>
+            {% else %}
+            {% set _ = args.update({'page': numero}) %}
+            <li class="page-item"><a class="page-link" href="{{ url_for(endpoint, **args) }}">{{ numero }}</a></li>
+            {% endif %}
+        {% endfor %}
+        <li class="page-item {% if not pagina.has_next %}disabled{% endif %}">
+            {% if pagina.has_next %}
+            {% set _ = args.update({'page': pagina.next_num}) %}
+            <a class="page-link" href="{{ url_for(endpoint, **args) }}" rel="next">Siguiente</a>
+            {% else %}
+            <span class="page-link">Siguiente</span>
+            {% endif %}
+        </li>
+    </ul>
+</nav>
+{% endif %}
+{% endmacro %}

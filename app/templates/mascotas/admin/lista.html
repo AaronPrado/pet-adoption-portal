@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from 'macros/paginacion.html' import paginacion %}
 
 {% block title %}Panel Admin - Mascotas{% endblock %}
 
@@ -165,8 +166,9 @@
                     </table>
                 </div>
                 <p class="text-muted mt-3 mb-0">
-                    Total: {{ mascotas|length }} mascota{% if mascotas|length != 1 %}s{% endif %}
+                    Total: {{ pagina.total }} mascota{% if pagina.total != 1 %}s{% endif %}
                 </p>
+                {{ paginacion(pagina, 'mascotas.admin_lista') }}
             </div>
         </div>
     </div>

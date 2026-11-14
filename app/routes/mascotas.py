@@ -56,7 +56,11 @@ def catalogo():
             pass  # Ignorar si el filtro de edad no es válido
 
     # Ordenar por fecha de ingreso (más recientes primero)
-    mascotas = query.order_by(Mascota.fecha_ingreso.desc()).all()
+    pagina = query.order_by(Mascota.fecha_ingreso.desc()).paginate(
+        page=request.args.get('page', 1, type=int),
+        per_page=current_app.config['CATALOGO_POR_PAGINA'],
+        error_out=False,
+    )
 
     # Obtener lista de especies únicas disponibles
     especies_disponibles = db.session.query(Mascota.especie)\
@@ -67,7 +71,8 @@ def catalogo():
     especies_disponibles = [esp[0] for esp in especies_disponibles if esp[0]]
 
     return render_template('mascotas/catalogo.html',
-                         mascotas=mascotas,
+                         mascotas=pagina.items,
+                         pagina=pagina,
                          especies_disponibles=especies_disponibles,
                          especie_filtro=especie_filtro,
                          tamano_filtro=tamano_filtro,
@@ -139,10 +144,15 @@ def admin_lista():
         # Orden por defecto
         query = query.order_by(Mascota.id.asc())
 
-    mascotas = query.all()
+    pagina = query.paginate(
+        page=request.args.get('page', 1, type=int),
+        per_page=current_app.config['ADMIN_POR_PAGINA'],
+        error_out=False,
+    )
 
     return render_template('mascotas/admin/lista.html',
-                         mascotas=mascotas,
+                         mascotas=pagina.items,
+                         pagina=pagina,
                          estado_filtro=estado_filtro,
                          orden_campo=orden_campo,
                          orden_dir=orden_dir)
