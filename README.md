@@ -116,6 +116,12 @@ con OAuth 2.0 y `http://localhost:5000/auth/google/callback` como URI de redirec
 **AWS S3:** bucket con acceso público de lectura y usuario IAM con permisos
 `PutObject`, `GetObject` y `DeleteObject`.
 
+## Despliegue
+
+La app incluye `Dockerfile`, `Procfile` y `gunicorn.conf.py`. Las variables
+de entorno de producción, el proxy inverso y los pasos del primer despliegue
+están en [docs/DESPLIEGUE.md](docs/DESPLIEGUE.md).
+
 ## Tests
 
 ```bash
