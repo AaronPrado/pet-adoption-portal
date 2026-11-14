@@ -88,3 +88,14 @@ jobs:
         run: |
           flask --app run db downgrade base
           flask --app run db upgrade
+
+  imagen:
+    # Comprueba que la imagen de producción se construye
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build
+        run: docker build -t pet-adoption-portal .
