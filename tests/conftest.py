@@ -6,6 +6,8 @@ Las fixtures proporcionan datos de prueba y configuración del entorno de testin
 """
 
 import pytest
+from flask import g
+
 from app import create_app, db
 from app.models import Usuario, Mascota, Solicitud
 
@@ -23,6 +25,15 @@ def app():
     """
     # Crear app en modo testing
     app = create_app('testing')
+
+    # El contexto de aplicación del fixture sigue activo durante las
+    # peticiones del cliente, así que todas comparten `g`. Flask-Login guarda
+    # ahí el usuario cargado y, sin limpiarlo, load_user no se volvía a
+    # ejecutar en las peticiones siguientes (en producción cada petición
+    # tiene su propio `g`).
+    @app.teardown_request
+    def limpiar_usuario_cargado(exc):
+        g.pop('_login_user', None)
 
     # Establecer contexto de aplicación
     with app.app_context():
