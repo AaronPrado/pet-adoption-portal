@@ -4,7 +4,8 @@ Configuración de la aplicación Flask por entornos.
 Este módulo define las clases de configuración para diferentes entornos:
 - Config: Configuración base
 - DevelopmentConfig: Configuración para desarrollo local
-- ProductionConfig: Configuración para producción (Railway)
+- ProductionConfig: Configuración para producción
+- TestingConfig: Configuración para tests
 
 Uso:
     from config import DevelopmentConfig
@@ -26,9 +27,9 @@ class Config:
     Las clases hijas heredan y pueden sobrescribir estos valores.
     """
 
-    # SECRET_KEY: Clave secreta para sesiones, CSRF, cookies firmadas
-    # IMPORTANTE: En producción debe ser una cadena aleatoria segura
-    SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev-secret-key-change-in-production'
+    # SECRET_KEY: Clave secreta para sesiones, CSRF, cookies firmadas.
+    # Sin valor por defecto: cada entorno define el suyo y producción lo exige.
+    SECRET_KEY = os.environ.get('SECRET_KEY')
 
     # Google OAuth
     GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID')
@@ -41,8 +42,11 @@ class Config:
     AWS_S3_REGION = os.environ.get('AWS_S3_REGION', 'eu-west-1')
 
     # JWT (API REST)
-    JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY') or 'dev-jwt-secret-key-cambiar-en-prod'
+    JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY')
     JWT_EXPIRATION_HOURS = 24
+
+    # Documentación Swagger de la API (/api/docs)
+    API_DOCS_ENABLED = True
 
     # SQLAlchemy: Desactivar tracking de modificaciones (ahorra memoria)
     SQLALCHEMY_TRACK_MODIFICATIONS = False
@@ -64,6 +68,11 @@ class Config:
     # Upload de archivos: Tamaño máximo de archivo (5MB en bytes)
     MAX_CONTENT_LENGTH = 5 * 1024 * 1024  # 5 MB
 
+    @classmethod
+    def init_app(cls, app):
+        """Hook para validaciones específicas de cada entorno."""
+        pass
+
 
 class DevelopmentConfig(Config):
     """
@@ -78,6 +87,10 @@ class DevelopmentConfig(Config):
     DEBUG = True
     TESTING = False
 
+    # Claves solo válidas en local; se pueden sobrescribir desde .env
+    SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev-secret-key-solo-local'
+    JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY') or 'dev-jwt-secret-key-solo-local'
+
     # Base de datos: PostgreSQL en Docker Compose (localhost)
     SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or \
         'postgresql://admin:password@localhost:5432/adopciones_db'
@@ -88,26 +101,30 @@ class DevelopmentConfig(Config):
 
 class ProductionConfig(Config):
     """
-    Configuración para entorno de producción (Railway).
+    Configuración para entorno de producción.
 
     Características:
     - DEBUG desactivado (seguridad)
-    - Base de datos PostgreSQL managed de Railway
+    - Base de datos PostgreSQL indicada en DATABASE_URL
     - SQLAlchemy ECHO desactivado (no contaminar logs)
-    - SECRET_KEY obligatoria desde variable de entorno
+    - SECRET_KEY, JWT_SECRET_KEY y DATABASE_URL obligatorias
+    - Swagger desactivado
     """
 
     DEBUG = False
     TESTING = False
 
-    # Base de datos: PostgreSQL managed en Railway
-    # Railway proporciona DATABASE_URL automáticamente
     SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL')
 
     # En producción no mostrar queries SQL
     SQLALCHEMY_ECHO = False
 
-    # Validación: SECRET_KEY es obligatoria en producción
+    # No publicar la documentación interactiva de la API
+    API_DOCS_ENABLED = False
+
+    # Variables que deben venir del entorno
+    REQUIRED_SETTINGS = ('SECRET_KEY', 'JWT_SECRET_KEY', 'SQLALCHEMY_DATABASE_URI')
+
     @classmethod
     def init_app(cls, app):
         """
@@ -117,15 +134,15 @@ class ProductionConfig(Config):
             app: Instancia de Flask
 
         Raises:
-            RuntimeError: Si SECRET_KEY no está configurada
+            RuntimeError: Si falta alguna variable obligatoria
         """
-        Config.init_app(app)
+        super().init_app(app)
 
-        # Asegurar que SECRET_KEY esté configurada
-        if not app.config['SECRET_KEY'] or app.config['SECRET_KEY'] == 'dev-secret-key-change-in-production':
+        faltan = [k for k in cls.REQUIRED_SETTINGS if not app.config.get(k)]
+        if faltan:
             raise RuntimeError(
-                'SECRET_KEY debe estar configurada en producción. '
-                'Define la variable de entorno SECRET_KEY.'
+                'Faltan variables de entorno obligatorias en producción: '
+                + ', '.join(faltan)
             )
 
 
@@ -141,6 +158,9 @@ class TestingConfig(Config):
 
     DEBUG = False
     TESTING = True
+
+    SECRET_KEY = 'test-secret-key'
+    JWT_SECRET_KEY = 'test-jwt-secret-key'
 
     # Base de datos en memoria para tests (SQLite)
     SQLALCHEMY_DATABASE_URI = 'sqlite:///:memory:'

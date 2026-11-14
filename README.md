@@ -73,6 +73,8 @@ Disponible en <http://localhost:5000>.
 Crea un `.env` en la raíz (ver `.env.example`):
 
 ```
+FLASK_ENV=development
+SECRET_KEY=clave_secreta_para_sesiones
 GOOGLE_CLIENT_ID=tu_client_id
 GOOGLE_CLIENT_SECRET=tu_client_secret
 AWS_ACCESS_KEY_ID=tu_access_key
