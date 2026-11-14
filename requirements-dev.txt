@@ -7,3 +7,7 @@ pytest-cov==7.1.0
 
 # Lint
 ruff==0.17.5
+
+# Tests end-to-end (además: python -m playwright install chromium)
+playwright==1.65.2
+pytest-playwright==0.10.0

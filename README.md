@@ -126,10 +126,20 @@ están en [docs/DESPLIEGUE.md](docs/DESPLIEGUE.md).
 
 ```bash
 python -m pytest
-python -m pytest --cov=app --cov-report=html
+python -m pytest --cov=app --cov-branch --cov-report=html
+ruff check .
 ```
 
-Se ejecutan automáticamente en GitHub Actions en cada push.
+Los tests end-to-end abren la app en Chromium con Playwright y van aparte:
+
+```bash
+python -m playwright install chromium
+python -m pytest -m e2e
+```
+
+GitHub Actions ejecuta en cada push los tests (con un mínimo de 95 % de
+cobertura de ramas), el lint, la auditoría de dependencias, los e2e, las
+migraciones contra PostgreSQL y la construcción de la imagen Docker.
 
 ## Estructura
 
