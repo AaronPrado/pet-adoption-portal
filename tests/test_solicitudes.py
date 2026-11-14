@@ -148,7 +148,7 @@ class TestDetalleSolicitud:
         db.session.commit()
 
         # Logout y login como otro usuario
-        client.get('/auth/logout')
+        client.post('/auth/logout')
         client.post('/auth/login', data={
             'email': 'otro2@test.com',
             'password': 'pass123'

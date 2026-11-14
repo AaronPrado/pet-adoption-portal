@@ -108,6 +108,7 @@
 
                 <!-- Formulario de decisión -->
                 <form method="POST">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <div class="mb-3">
                         <label for="comentarios" class="form-label">Comentarios para el solicitante</label>
                         <textarea class="form-control" id="comentarios" name="comentarios" rows="4"
