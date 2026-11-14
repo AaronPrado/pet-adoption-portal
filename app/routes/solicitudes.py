@@ -11,6 +11,7 @@ Este módulo maneja:
 from app.decorators import admin_required
 from flask import Blueprint, render_template, redirect, url_for, flash, request
 from flask_login import login_required, current_user
+from sqlalchemy.exc import IntegrityError
 from app import db
 from app.models import Solicitud, Mascota
 
@@ -74,10 +75,14 @@ def nueva(mascota_id):
 
         db.session.add(solicitud)
 
-        # Marcar la mascota como "en proceso"
-        mascota.marcar_en_proceso()
-
-        db.session.commit()
+        # Marcar la mascota como "en proceso" (hace commit de ambos cambios).
+        # La restricción única protege de dos envíos simultáneos.
+        try:
+            mascota.marcar_en_proceso()
+        except IntegrityError:
+            db.session.rollback()
+            flash('Ya has enviado una solicitud para esta mascota.', 'info')
+            return redirect(url_for('solicitudes.mis_solicitudes'))
 
         flash(f'¡Solicitud enviada con éxito para {mascota.nombre}! Revisaremos tu solicitud pronto.', 'success')
         return redirect(url_for('solicitudes.mis_solicitudes'))
@@ -173,10 +178,19 @@ def admin_revisar(solicitud_id):
     solicitud = Solicitud.query.get_or_404(solicitud_id)
 
     if request.method == 'POST':
+        # Una solicitud ya resuelta no se puede volver a aprobar o rechazar
+        if not solicitud.esta_pendiente():
+            flash('Esta solicitud ya ha sido revisada.', 'warning')
+            return redirect(url_for('solicitudes.admin_lista'))
+
         accion = request.form.get('accion')
         comentarios = request.form.get('comentarios', '')
 
         if accion == 'aprobar':
+            # Evita dos adopciones de la misma mascota
+            if solicitud.mascota.estado == 'adoptado':
+                flash(f'{solicitud.mascota.nombre} ya ha sido adoptado.', 'warning')
+                return redirect(url_for('solicitudes.admin_lista'))
             solicitud.aprobar(current_user.id, comentarios)
             flash(f'Solicitud aprobada. {solicitud.usuario.nombre} ha adoptado a {solicitud.mascota.nombre}.', 'success')
         elif accion == 'rechazar':

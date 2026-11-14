@@ -4,12 +4,31 @@ Endpoints de solicitudes para la API.
 
 from flask import request, g
 from flask_restx import Namespace, Resource, fields
+from sqlalchemy.exc import IntegrityError
 
 from app import db
 from app.models import Solicitud, Mascota
 from app.routes.api.auth import jwt_required
 
 ns = Namespace("solicitudes", description="Solicitudes")
+
+# Límites del cuestionario recibido por la API
+CUESTIONARIO_MAX_CAMPOS = 30
+CUESTIONARIO_MAX_LONGITUD = 2000
+
+
+def cuestionario_valido(cuestionario):
+    """El cuestionario debe ser un objeto plano con valores simples y acotados."""
+    if not isinstance(cuestionario, dict) or not 0 < len(cuestionario) <= CUESTIONARIO_MAX_CAMPOS:
+        return False
+    for clave, valor in cuestionario.items():
+        if len(clave) > 100:
+            return False
+        if valor is not None and not isinstance(valor, (str, bool, int, float)):
+            return False
+        if isinstance(valor, str) and len(valor) > CUESTIONARIO_MAX_LONGITUD:
+            return False
+    return True
 
 # Modelos para Swagger
 solicitud_model = ns.model('Solicitudes', {
@@ -45,13 +64,16 @@ class CrearSolicitud (Resource):
     @jwt_required
     @ns.expect(create_solicitud_model)
     @ns.response(201, 'Solicitud creada exitosamente', solicitud_model)
+    @ns.response(409, 'Solicitud duplicada')
     def post(self):
         data = request.get_json()
 
-        if not data or not data.get('mascota_id') or not data.get('cuestionario'):
+        mascota_id = data.get('mascota_id') if isinstance(data, dict) else None
+        if not isinstance(mascota_id, int) or isinstance(mascota_id, bool) \
+                or not cuestionario_valido(data.get('cuestionario')):
             return {'error': 'Datos inválidos'}, 400
-        
-        mascota = Mascota.query.get(data['mascota_id'])
+
+        mascota = db.session.get(Mascota, mascota_id)
         if not mascota:
             return {'error': 'Mascota no encontrada'}, 404
         
@@ -60,11 +82,17 @@ class CrearSolicitud (Resource):
         
         solicitud = Solicitud(
             usuario_id=g.current_user.id,
-            mascota_id=data['mascota_id'],
+            mascota_id=mascota.id,
             cuestionario=data['cuestionario']
         )
         db.session.add(solicitud)
-        db.session.commit()
+        # Igual que en la web: la mascota deja de aceptar más solicitudes
+        mascota.estado = 'en_proceso'
+        try:
+            db.session.commit()
+        except IntegrityError:
+            db.session.rollback()
+            return {'error': 'Ya has enviado una solicitud para esta mascota'}, 409
         return solicitud.to_dict(), 201
         
     

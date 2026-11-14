@@ -100,9 +100,10 @@ def registro():
             flash('¡Registro exitoso! Ya puedes iniciar sesión.', 'success')
             return redirect(url_for('auth.login'))
         
-        except Exception as e:
+        except Exception:
             db.session.rollback()
-            flash(f'Error al crear usuario: {str(e)}', 'danger')
+            current_app.logger.exception('Error al crear usuario')
+            flash('No se pudo crear el usuario. Inténtalo de nuevo.', 'danger')
             return render_template('auth/registro.html')
     
     # GET: Mostrar formulario

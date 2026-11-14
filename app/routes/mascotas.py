@@ -7,7 +7,7 @@ Este módulo maneja:
 - Panel de administración con CRUD completo (solo admin)
 """
 
-from flask import Blueprint, render_template, redirect, url_for, flash, request
+from flask import Blueprint, render_template, redirect, url_for, flash, request, current_app
 from flask_login import login_required, current_user
 from app import db
 from app.models import Mascota
@@ -227,9 +227,10 @@ def admin_nueva():
             db.session.commit()
             flash(f'Mascota "{nombre}" creada exitosamente.', 'success')
             return redirect(url_for('mascotas.admin_lista'))
-        except Exception as e:
+        except Exception:
             db.session.rollback()
-            flash(f'Error al crear la mascota: {str(e)}', 'danger')
+            current_app.logger.exception('Error al crear la mascota')
+            flash('No se pudo crear la mascota. Inténtalo de nuevo.', 'danger')
             return render_template('mascotas/admin/form.html', mascota=None)
 
     # GET: Mostrar formulario vacío
@@ -325,9 +326,10 @@ def admin_editar(mascota_id):
             db.session.commit()
             flash(f'Mascota "{nombre}" actualizada exitosamente.', 'success')
             return redirect(url_for('mascotas.admin_lista'))
-        except Exception as e:
+        except Exception:
             db.session.rollback()
-            flash(f'Error al actualizar la mascota: {str(e)}', 'danger')
+            current_app.logger.exception('Error al actualizar la mascota')
+            flash('No se pudo actualizar la mascota. Inténtalo de nuevo.', 'danger')
             return render_template('mascotas/admin/form.html', mascota=mascota)
 
     # GET: Mostrar formulario con datos actuales
@@ -362,8 +364,9 @@ def admin_eliminar(mascota_id):
         db.session.delete(mascota)
         db.session.commit()
         flash(f'Mascota "{nombre}" eliminada exitosamente.', 'success')
-    except Exception as e:
+    except Exception:
         db.session.rollback()
-        flash(f'Error al eliminar la mascota: {str(e)}', 'danger')
+        current_app.logger.exception('Error al eliminar la mascota')
+        flash('No se pudo eliminar la mascota. Inténtalo de nuevo.', 'danger')
 
     return redirect(url_for('mascotas.admin_lista'))
