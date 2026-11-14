@@ -6,6 +6,7 @@ Representa las entidades: Usuario, Mascota, Solicitud.
 from datetime import UTC, datetime
 
 from flask_login import UserMixin
+from sqlalchemy.dialects.postgresql import JSONB
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from app import db
@@ -54,17 +55,26 @@ class Usuario(UserMixin, db.Model):
 
     # Atributos de la tabla
     id = db.Column(db.Integer, primary_key=True)
-    email = db.Column(db.String(120), unique=True, nullable=False, index=True)
+    email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=True)
     nombre = db.Column(db.String(100), nullable=False)
     apellidos = db.Column(db.String(150))
     telefono = db.Column(db.String(20))
     direccion = db.Column(db.Text)
-    rol = db.Column(db.String(20), nullable=False, default='adoptante', index=True)
-    fecha_registro = db.Column(db.DateTime, nullable=False, default=utcnow)
-    activo = db.Column(db.Boolean, nullable=False, default=True)
+    rol = db.Column(db.String(20), nullable=False, default='adoptante', server_default='adoptante')
+    fecha_registro = db.Column(db.DateTime, nullable=False, default=utcnow, server_default=db.func.now())
+    activo = db.Column(db.Boolean, nullable=False, default=True, server_default=db.true())
     oauth_provider = db.Column(db.String(20), nullable=True)
     oauth_id = db.Column(db.String(100), nullable=True, unique=True)
+
+    # Restricciones e índices con los mismos nombres que el esquema SQL original,
+    # para que las bases de datos creadas con él coincidan con la migración inicial
+    __table_args__ = (
+        db.CheckConstraint("rol IN ('adoptante', 'admin')", name='usuarios_rol_check'),
+        db.Index('idx_usuarios_email', 'email'),
+        db.Index('idx_usuarios_rol', 'rol'),
+        {'comment': 'Usuarios del sistema (adoptantes y administradores)'},
+    )
 
     # Relaciones
     solicitudes = db.relationship(
@@ -189,17 +199,27 @@ class Mascota(db.Model):
     # Atributos de la tabla
     id = db.Column(db.Integer, primary_key=True)
     nombre = db.Column(db.String(100), nullable=False)
-    especie = db.Column(db.String(50), nullable=False, index=True)
+    especie = db.Column(db.String(50), nullable=False)
     raza = db.Column(db.String(100))
     edad_aprox = db.Column(db.Integer)
     sexo = db.Column(db.String(10))
     tamano = db.Column(db.String(20))
     descripcion = db.Column(db.Text)
-    estado = db.Column(db.String(20), nullable=False, default='disponible', index=True)
+    estado = db.Column(db.String(20), nullable=False, default='disponible', server_default='disponible')
     foto_url = db.Column(db.String(255))
-    fecha_ingreso = db.Column(db.DateTime, nullable=False, default=utcnow)
-    vacunado = db.Column(db.Boolean, nullable=False, default=False)
-    esterilizado = db.Column(db.Boolean, nullable=False, default=False)
+    fecha_ingreso = db.Column(db.DateTime, nullable=False, default=utcnow, server_default=db.func.now())
+    vacunado = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
+    esterilizado = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
+
+    __table_args__ = (
+        db.CheckConstraint('edad_aprox >= 0', name='mascotas_edad_aprox_check'),
+        db.CheckConstraint("sexo IN ('Macho', 'Hembra', 'Desconocido')", name='mascotas_sexo_check'),
+        db.CheckConstraint("tamano IN ('Pequeño', 'Mediano', 'Grande')", name='mascotas_tamano_check'),
+        db.CheckConstraint("estado IN ('disponible', 'en_proceso', 'adoptado')", name='mascotas_estado_check'),
+        db.Index('idx_mascotas_estado', 'estado'),
+        db.Index('idx_mascotas_especie', 'especie'),
+        {'comment': 'Mascotas disponibles para adopción'},
+    )
 
     # Relaciones
     solicitudes = db.relationship(
@@ -306,11 +326,15 @@ class Solicitud(db.Model):
 
     # Atributos de la tabla
     id = db.Column(db.Integer, primary_key=True)
-    usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False, index=True)
-    mascota_id = db.Column(db.Integer, db.ForeignKey('mascotas.id'), nullable=False, index=True)
-    fecha_solicitud = db.Column(db.DateTime, nullable=False, default=utcnow)
-    estado = db.Column(db.String(20), nullable=False, default='pendiente', index=True)
-    cuestionario_json = db.Column(db.JSON)
+    usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id', ondelete='CASCADE'), nullable=False)
+    mascota_id = db.Column(db.Integer, db.ForeignKey('mascotas.id', ondelete='CASCADE'), nullable=False)
+    fecha_solicitud = db.Column(db.DateTime, nullable=False, default=utcnow, server_default=db.func.now())
+    estado = db.Column(db.String(20), nullable=False, default='pendiente', server_default='pendiente')
+    # JSONB en PostgreSQL (como el esquema original); JSON en SQLite para los tests
+    cuestionario_json = db.Column(
+        db.JSON().with_variant(JSONB(), 'postgresql'),
+        comment='Respuestas del formulario de adopción en formato JSON',
+    )
     comentarios_admin = db.Column(db.Text)
     fecha_revision = db.Column(db.DateTime)
     revisado_por = db.Column(db.Integer, db.ForeignKey('usuarios.id'))
@@ -318,6 +342,11 @@ class Solicitud(db.Model):
     # Constraint: Un usuario no puede solicitar la misma mascota dos veces
     __table_args__ = (
         db.UniqueConstraint('usuario_id', 'mascota_id', name='unique_usuario_mascota'),
+        db.CheckConstraint("estado IN ('pendiente', 'aprobada', 'rechazada')", name='solicitudes_estado_check'),
+        db.Index('idx_solicitudes_usuario', 'usuario_id'),
+        db.Index('idx_solicitudes_mascota', 'mascota_id'),
+        db.Index('idx_solicitudes_estado', 'estado'),
+        {'comment': 'Solicitudes de adopción realizadas por usuarios'},
     )
 
     def __init__(self, usuario_id, mascota_id, cuestionario=None):
