@@ -127,3 +127,6 @@ class TestLimiteIntentos:
         ]
         assert codigos[:5] == [401] * 5
         assert codigos[5] == 429
+
+        bloqueada = client_con_limite.post('/api/auth/login', json={'email': 'a@test.com', 'password': 'mala'})
+        assert bloqueada.get_json() == {'error': 'Demasiadas peticiones, inténtalo más tarde'}
