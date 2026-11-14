@@ -34,4 +34,4 @@ jobs:
           FLASK_ENV: testing
           SECRET_KEY: test-secret-key
         run: |
-          python -m pytest --cov=app --cov-report=term-missing
+          python -m pytest --cov=app --cov-branch --cov-report=term-missing --cov-fail-under=95
