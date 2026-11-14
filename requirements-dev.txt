@@ -1,0 +1,9 @@
+# Dependencias de desarrollo y CI (la imagen de producción solo instala requirements.txt)
+-r requirements.txt
+
+# Testing
+pytest==9.2.0
+pytest-cov==7.1.0
+
+# Lint
+ruff==0.17.5

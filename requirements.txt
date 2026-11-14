@@ -13,17 +13,15 @@ psycopg[binary]==3.3.9
 Flask-Login==0.6.3
 Flask-WTF==1.3.0
 Flask-Limiter==4.1.1
+# Almacenamiento compartido del límite de intentos con varios workers
+# (RATELIMIT_STORAGE_URI=redis://...)
+redis==8.1.0
 
 # Email
 Flask-Mail==0.10.0
 
 # Environment variables
 python-dotenv==1.2.4
-
-# Testing
-pytest==9.2.0
-pytest-cov==7.1.0
-ruff==0.17.5
 
 # Production server
 gunicorn==27.0.1

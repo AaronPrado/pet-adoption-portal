@@ -60,7 +60,7 @@ Requisitos: Python 3.12, Docker y Docker Compose.
 git clone https://github.com/AaronPrado/pet-adoption-portal.git
 cd pet-adoption-portal
 python -m venv venv && source venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
 cp .env.example .env
 docker compose up -d
 flask --app run db upgrade
