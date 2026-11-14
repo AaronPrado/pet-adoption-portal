@@ -25,6 +25,8 @@ from flask_mail import Mail
 from flask_migrate import Migrate
 from flask_sqlalchemy import SQLAlchemy
 from flask_wtf.csrf import CSRFProtect
+from sqlalchemy import text
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from config import config
 
@@ -74,6 +76,14 @@ def create_app(config_name='default'):
     # Cargar configuración desde config.py
     app.config.from_object(config[config_name])
     config[config_name].init_app(app)
+
+    # Detrás de un proxy inverso (balanceador, Nginx, plataforma PaaS) la IP
+    # del cliente y el esquema https llegan en cabeceras X-Forwarded-*. Solo se
+    # confía en ellas si se indica cuántos proxies hay delante: si no, un
+    # cliente podría falsearlas para saltarse el límite de intentos de login.
+    proxies = app.config['TRUSTED_PROXIES']
+    if proxies:
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=proxies, x_proto=proxies, x_host=proxies)
 
     # Inicializar extensiones con la app
     db.init_app(app)
@@ -163,6 +173,17 @@ def create_app(config_name='default'):
         # 302 normal: el navegador no sigue un Location con estado 413
         return redirect(request.url)
 
+
+    # Comprobación de salud para el orquestador o el balanceador
+    @app.route('/health')
+    @limiter.exempt
+    def health():
+        try:
+            db.session.execute(text('SELECT 1'))
+        except Exception:
+            app.logger.exception('Health check: la base de datos no responde')
+            return {'status': 'error', 'database': 'unreachable'}, 503
+        return {'status': 'ok'}, 200
 
     # Ruta de inicio
     @app.route('/')

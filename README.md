@@ -60,7 +60,7 @@ Requisitos: Python 3.12, Docker y Docker Compose.
 git clone https://github.com/AaronPrado/pet-adoption-portal.git
 cd pet-adoption-portal
 python -m venv venv && source venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
 cp .env.example .env
 docker compose up -d
 flask --app run db upgrade
@@ -115,6 +115,12 @@ con OAuth 2.0 y `http://localhost:5000/auth/google/callback` como URI de redirec
 
 **AWS S3:** bucket con acceso público de lectura y usuario IAM con permisos
 `PutObject`, `GetObject` y `DeleteObject`.
+
+## Despliegue
+
+La app incluye `Dockerfile`, `Procfile` y `gunicorn.conf.py`. Las variables
+de entorno de producción, el proxy inverso y los pasos del primer despliegue
+están en [docs/DESPLIEGUE.md](docs/DESPLIEGUE.md).
 
 ## Tests
 
