@@ -68,6 +68,15 @@ python run.py
 
 Disponible en <http://localhost:5000>.
 
+Docker Compose carga `scripts_bd/02_seed.sql` con datos de prueba la primera
+vez que crea la base de datos. Sus usuarios (incluido un administrador) tienen
+la contraseña `password123`, así que el seed es solo para desarrollo local.
+En cualquier otro entorno crea el administrador con:
+
+```bash
+flask --app run crear-admin
+```
+
 ### Variables de entorno
 
 Crea un `.env` en la raíz (ver `.env.example`):

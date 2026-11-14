@@ -1,5 +1,9 @@
 -- Script de datos de prueba para el portal de adopciones
--- Las contraseñas son hashes de ejemplo. Se deben regenerar al crear usuarios reales.
+--
+-- SOLO PARA DESARROLLO LOCAL. Vacía las tablas y crea usuarios con una
+-- contraseña conocida (incluido un administrador). No lo ejecutes en una
+-- base de datos accesible desde fuera: para crear el administrador de un
+-- entorno real usa `flask crear-admin`.
 
 TRUNCATE TABLE solicitudes, mascotas, usuarios RESTART IDENTITY CASCADE;
 
