@@ -64,3 +64,17 @@ def test_driver_postgresql_instalado():
 
     engine = create_engine('postgresql://usuario:clave@localhost:5432/bd')
     assert engine.dialect.driver == 'psycopg'
+
+
+def test_postgresql_con_timeouts(config_produccion, monkeypatch):
+    """Con PostgreSQL se configuran timeouts para no colgar peticiones."""
+    monkeypatch.setattr(config_produccion, 'SQLALCHEMY_DATABASE_URI', 'postgresql://u:c@localhost/bd')
+
+    opciones = create_app('production').config['SQLALCHEMY_ENGINE_OPTIONS']
+
+    assert opciones['pool_pre_ping'] is True
+    assert opciones['connect_args'] == {'connect_timeout': 5, 'tcp_user_timeout': 5000}
+
+
+def test_sqlite_sin_opciones_de_postgresql(app):
+    assert 'connect_args' not in app.config.get('SQLALCHEMY_ENGINE_OPTIONS', {})

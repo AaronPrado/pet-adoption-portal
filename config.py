@@ -51,6 +51,13 @@ class Config:
     RATELIMIT_STORAGE_URI = os.environ.get('RATELIMIT_STORAGE_URI') or 'memory://'
     RATELIMIT_LOGIN = '5 per minute'
 
+    # Número de proxies inversos delante de la app (0 = acceso directo).
+    # Ver docs/DESPLIEGUE.md
+    TRUSTED_PROXIES = int(os.environ.get('TRUSTED_PROXIES') or 0)
+
+    # Segundos de espera al conectar con PostgreSQL
+    DB_CONNECT_TIMEOUT = int(os.environ.get('DB_CONNECT_TIMEOUT') or 5)
+
     # Documentación Swagger de la API (/api/docs)
     API_DOCS_ENABLED = True
 
@@ -83,8 +90,19 @@ class Config:
 
     @classmethod
     def init_app(cls, app):
-        """Hook para validaciones específicas de cada entorno."""
-        pass
+        """Ajustes comunes a todos los entornos según la configuración cargada."""
+        uri = app.config.get('SQLALCHEMY_DATABASE_URI') or ''
+        if uri.startswith('postgresql'):
+            # Sin timeouts, una base de datos inaccesible deja colgadas las
+            # peticiones (y /health) hasta que el sistema corta la conexión TCP
+            opciones = dict(app.config.get('SQLALCHEMY_ENGINE_OPTIONS') or {})
+            opciones.setdefault('pool_pre_ping', True)
+            opciones.setdefault('connect_args', {
+                'connect_timeout': cls.DB_CONNECT_TIMEOUT,
+                # ms sin respuesta a datos enviados antes de dar la conexión por perdida
+                'tcp_user_timeout': cls.DB_CONNECT_TIMEOUT * 1000,
+            })
+            app.config['SQLALCHEMY_ENGINE_OPTIONS'] = opciones
 
 
 class DevelopmentConfig(Config):
