@@ -7,9 +7,7 @@ Tests incluidos:
 - Endpoints de solicitudes (crear, listar)
 """
 
-import pytest
 import json
-from app.models import Usuario, Mascota, Solicitud
 
 
 class TestAuthAPI:

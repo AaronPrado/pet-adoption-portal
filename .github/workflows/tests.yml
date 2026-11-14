@@ -29,9 +29,11 @@ jobs:
           pip install pip-audit
           pip-audit -r requirements.txt
 
+      - name: Lint
+        run: ruff check .
+
       - name: Run tests
         env:
           FLASK_ENV: testing
-          SECRET_KEY: test-secret-key
         run: |
           python -m pytest --cov=app --cov-branch --cov-report=term-missing --cov-fail-under=95

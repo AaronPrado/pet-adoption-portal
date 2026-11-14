@@ -16,15 +16,16 @@ Uso:
     app.run()
 """
 
-from flask import Flask, render_template, request, abort, flash, redirect
-from flask_sqlalchemy import SQLAlchemy
-from flask_mail import Mail
-from flask_login import LoginManager
-from flask_wtf.csrf import CSRFProtect
+from authlib.integrations.flask_client import OAuth
+from flask import Flask, abort, flash, redirect, render_template, request
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+from flask_login import LoginManager
+from flask_mail import Mail
+from flask_sqlalchemy import SQLAlchemy
+from flask_wtf.csrf import CSRFProtect
+
 from config import config
-from authlib.integrations.flask_client import OAuth
 
 # Inicializar extensiones (sin vincular a app todavía)
 db = SQLAlchemy()

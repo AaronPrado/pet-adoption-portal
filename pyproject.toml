@@ -1,0 +1,13 @@
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+# E/W: pycodestyle, F: pyflakes, I: orden de imports, B: bugbear,
+# UP: sintaxis moderna, DTZ: fechas sin zona horaria, SIM: simplificaciones
+select = ["E", "F", "W", "I", "B", "UP", "DTZ", "SIM"]
+# Un if/else de varias líneas se lee mejor que un ternario largo
+ignore = ["SIM108"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app", "config"]

@@ -9,7 +9,7 @@ import pytest
 from flask import g
 
 from app import create_app, db
-from app.models import Usuario, Mascota, Solicitud
+from app.models import Mascota, Solicitud, Usuario
 
 
 @pytest.fixture(scope='function')

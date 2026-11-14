@@ -2,12 +2,12 @@
 Endpoints de solicitudes para la API.
 """
 
-from flask import request, g
+from flask import g, request
 from flask_restx import Namespace, Resource, fields
 from sqlalchemy.exc import IntegrityError
 
 from app import db
-from app.models import Solicitud, Mascota
+from app.models import Mascota, Solicitud
 from app.routes.api.auth import jwt_required
 
 ns = Namespace("solicitudes", description="Solicitudes")
@@ -58,7 +58,7 @@ class MisSolicitudes(Resource):
         solicitudes = query.order_by(Solicitud.fecha_solicitud).all()
         return [s.to_dict() for s in solicitudes]
 
-    
+
 @ns.route("/")
 class CrearSolicitud (Resource):
     @jwt_required
@@ -76,10 +76,10 @@ class CrearSolicitud (Resource):
         mascota = db.session.get(Mascota, mascota_id)
         if not mascota:
             return {'error': 'Mascota no encontrada'}, 404
-        
+
         if mascota.estado != 'disponible':
             return {'error': 'Mascota no disponible'}, 400
-        
+
         solicitud = Solicitud(
             usuario_id=g.current_user.id,
             mascota_id=mascota.id,
@@ -94,5 +94,5 @@ class CrearSolicitud (Resource):
             db.session.rollback()
             return {'error': 'Ya has enviado una solicitud para esta mascota'}, 409
         return solicitud.to_dict(), 201
-        
-    
+
+

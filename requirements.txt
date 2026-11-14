@@ -20,6 +20,7 @@ python-dotenv==1.2.4
 # Testing
 pytest==9.2.0
 pytest-cov==7.1.0
+ruff==0.17.5
 
 # Production server
 gunicorn==27.0.1

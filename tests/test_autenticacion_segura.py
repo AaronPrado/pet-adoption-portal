@@ -7,8 +7,8 @@ import pytest
 
 from app import create_app, db, oauth
 from app.models import Usuario
-from app.routes.auth import es_redireccion_segura
 from app.routes.api.auth import generate_token
+from app.routes.auth import es_redireccion_segura
 from config import TestingConfig
 
 
