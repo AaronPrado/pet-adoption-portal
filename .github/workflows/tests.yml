@@ -37,3 +37,54 @@ jobs:
           FLASK_ENV: testing
         run: |
           python -m pytest --cov=app --cov-branch --cov-report=term-missing --cov-fail-under=95
+
+  migraciones:
+    # Aplica las migraciones y el seed sobre PostgreSQL real: los tests usan
+    # SQLite y no detectan problemas propios de PostgreSQL ni de su driver
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: admin
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: adopciones_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U admin -d adopciones_db"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      FLASK_ENV: development
+      DATABASE_URL: postgresql://admin:password@localhost:5432/adopciones_db
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Upgrade y check
+        run: |
+          flask --app run db upgrade
+          flask --app run db check
+
+      - name: Cargar seed
+        run: psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f scripts_bd/02_seed.sql
+
+      - name: Downgrade y upgrade
+        run: |
+          flask --app run db downgrade base
+          flask --app run db upgrade
