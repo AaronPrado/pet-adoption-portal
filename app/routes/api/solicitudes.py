@@ -2,7 +2,7 @@
 Endpoints de solicitudes para la API.
 """
 
-from flask import g, request
+from flask import g, request, url_for
 from flask_restx import Namespace, Resource, fields
 from sqlalchemy.exc import IntegrityError
 
@@ -93,6 +93,19 @@ class CrearSolicitud (Resource):
         except IntegrityError:
             db.session.rollback()
             return {'error': 'Ya has enviado una solicitud para esta mascota'}, 409
-        return solicitud.to_dict(), 201
+        ubicacion = url_for('api.solicitudes_solicitud_detail', id=solicitud.id)
+        return solicitud.to_dict(), 201, {'Location': ubicacion}
+
+
+@ns.route("/<int:id>")
+class SolicitudDetail(Resource):
+    @jwt_required
+    @ns.marshal_with(solicitud_model)
+    @ns.response(404, 'Solicitud no encontrada')
+    def get(self, id):
+        """Devuelve una solicitud del usuario actual."""
+        # 404 también para solicitudes de otros usuarios: no revela si existen
+        solicitud = Solicitud.query.filter_by(id=id, usuario_id=g.current_user.id).first_or_404()
+        return solicitud.to_dict()
 
 

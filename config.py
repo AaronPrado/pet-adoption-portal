@@ -61,6 +61,11 @@ class Config:
     # Documentación Swagger de la API (/api/docs)
     API_DOCS_ENABLED = True
 
+    # flask-restx: los errores solo llevan {"error": ...} (ver app/routes/api),
+    # sin la clave "message" ni sugerencias de rutas en los 404
+    ERROR_INCLUDE_MESSAGE = False
+    RESTX_ERROR_404_HELP = False
+
     # SQLAlchemy: Desactivar tracking de modificaciones (ahorra memoria)
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
