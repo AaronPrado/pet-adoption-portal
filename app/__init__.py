@@ -22,6 +22,7 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_login import LoginManager
 from flask_mail import Mail
+from flask_migrate import Migrate
 from flask_sqlalchemy import SQLAlchemy
 from flask_wtf.csrf import CSRFProtect
 
@@ -29,6 +30,7 @@ from config import config
 
 # Inicializar extensiones (sin vincular a app todavía)
 db = SQLAlchemy()
+migrate = Migrate()
 mail = Mail()
 login_manager = LoginManager()
 oauth = OAuth()
@@ -75,6 +77,7 @@ def create_app(config_name='default'):
 
     # Inicializar extensiones con la app
     db.init_app(app)
+    migrate.init_app(app, db)
     mail.init_app(app)
     csrf.init_app(app)
     limiter.init_app(app)
@@ -150,9 +153,8 @@ def create_app(config_name='default'):
     from app.cli import register_commands
     register_commands(app)
 
-    # Crear tablas en la base de datos si no existen
-    with app.app_context():
-        db.create_all()
+    # El esquema de la base de datos se gestiona con migraciones:
+    # flask --app run db upgrade
 
     # Error handler para archivos demasiado grandes
     @app.errorhandler(413)

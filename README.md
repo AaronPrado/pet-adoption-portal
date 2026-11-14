@@ -63,18 +63,35 @@ python -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
 docker compose up -d
+flask --app run db upgrade
 python run.py
 ```
 
 Disponible en <http://localhost:5000>.
 
-Docker Compose carga `scripts_bd/02_seed.sql` con datos de prueba la primera
-vez que crea la base de datos. Sus usuarios (incluido un administrador) tienen
-la contraseña `password123`, así que el seed es solo para desarrollo local.
-En cualquier otro entorno crea el administrador con:
+`flask db upgrade` crea o actualiza las tablas con las migraciones de
+`migrations/`. Para cargar datos de prueba:
+
+```bash
+docker compose exec -T postgres psql -U admin -d adopciones_db < scripts_bd/02_seed.sql
+```
+
+Los usuarios del seed (incluido un administrador) tienen la contraseña
+`password123`, así que es solo para desarrollo local. En cualquier otro entorno
+crea el administrador con:
 
 ```bash
 flask --app run crear-admin
+```
+
+Si tu base de datos local se creó con el antiguo `scripts_bd/01_schema.sql`,
+ya tiene el esquema de la primera migración: márcala como migrada una vez con
+`flask --app run db stamp 0001`.
+
+Para cambiar el esquema, modifica `app/models.py` y genera la migración:
+
+```bash
+flask --app run db migrate -m "descripción del cambio"
 ```
 
 ### Variables de entorno

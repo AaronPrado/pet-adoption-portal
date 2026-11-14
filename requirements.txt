@@ -4,6 +4,7 @@ Werkzeug==3.1.9
 
 # Database
 Flask-SQLAlchemy==3.1.1
+Flask-Migrate==4.1.0
 # SQLAlchemy 2.1 usa psycopg (v3) para las URLs postgresql://
 SQLAlchemy==2.1.8
 psycopg[binary]==3.3.9
