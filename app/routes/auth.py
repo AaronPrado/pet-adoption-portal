@@ -5,11 +5,34 @@ Este módulo maneja todas las rutas relacionadas con la autenticación
 de usuarios en el sistema.
 """
 
-from flask import Blueprint, render_template, redirect, url_for, flash, request
+from urllib.parse import urlparse
+
+from authlib.integrations.base_client.errors import OAuthError
+from flask import Blueprint, render_template, redirect, url_for, flash, request, current_app
 from flask_login import login_user, logout_user, login_required, current_user
-from werkzeug.security import check_password_hash
-from app import db, oauth
+from app import db, oauth, limiter
 from app.models import Usuario
+
+# Longitud mínima de contraseña en el registro
+PASSWORD_MIN_LENGTH = 8
+
+
+def limite_login():
+    """Límite de intentos de login, leído de la configuración."""
+    return current_app.config['RATELIMIT_LOGIN']
+
+
+def es_redireccion_segura(destino):
+    """
+    Comprueba que `destino` es una ruta relativa de este sitio.
+
+    Rechaza URLs absolutas y las que el navegador interpreta como otro
+    dominio aunque empiecen por '/' (//evil.com, /\\evil.com).
+    """
+    if not destino or '\\' in destino or not destino.startswith('/') or destino.startswith('//'):
+        return False
+    partes = urlparse(destino)
+    return not partes.scheme and not partes.netloc
 
 
 # Crear blueprint
@@ -50,8 +73,8 @@ def registro():
             flash('Las contraseñas no coinciden.', 'danger')
             return render_template('auth/registro.html')
         
-        if len(password) < 6:
-            flash('La contraseña debe tener al menos 6 caracteres.', 'danger')
+        if len(password) < PASSWORD_MIN_LENGTH:
+            flash(f'La contraseña debe tener al menos {PASSWORD_MIN_LENGTH} caracteres.', 'danger')
             return render_template('auth/registro.html')
         
         # Verificar si el email ya existe
@@ -87,6 +110,7 @@ def registro():
 
 
 @bp.route('/login', methods=['GET', 'POST'])
+@limiter.limit(limite_login, methods=['POST'])
 def login():
     """
     Ruta de inicio de sesión.
@@ -130,7 +154,7 @@ def login():
         
         # Redirigir a la página que intentaba acceder o al inicio
         next_page = request.args.get('next')
-        if next_page and next_page.startswith('/'):
+        if es_redireccion_segura(next_page):
             return redirect(next_page)
         else:
             return redirect(url_for('index'))
@@ -164,21 +188,37 @@ def google_login():
 @bp.route('/google/callback')
 def google_callback():
     """Callback de Google OAuth"""
-    token = oauth.google.authorize_access_token()
+    try:
+        token = oauth.google.authorize_access_token()
+    except OAuthError:
+        # El usuario canceló el consentimiento o el state no coincide
+        flash('No se pudo completar el inicio de sesión con Google.', 'danger')
+        return redirect(url_for('auth.login'))
+
     user_info = token.get('userinfo')
 
-    if not user_info:
+    if not user_info or not user_info.get('email'):
         flash('Error al obtener información de Google', 'danger')
         return redirect(url_for('auth.login'))
 
-    # Buscar usuario existente por oauth_id o email
-    usuario = Usuario.query.filter(
-        (Usuario.oauth_id == user_info['sub']) |
-        (Usuario.email == user_info['email'])
-    ).first()
+    # Solo se confía en el email si Google lo ha verificado: se usa para
+    # enlazar la cuenta de Google con una cuenta local existente
+    if not user_info.get('email_verified'):
+        flash('Tu email de Google no está verificado.', 'danger')
+        return redirect(url_for('auth.login'))
+
+    email = user_info['email'].strip().lower()
+
+    # Buscar primero por la identidad de Google y después por email
+    usuario = Usuario.query.filter_by(oauth_id=user_info['sub']).first() or \
+        Usuario.query.filter_by(email=email).first()
 
     if usuario:
-        # Usuario existente - actualizar oauth_id si no lo tiene
+        if not usuario.activo:
+            flash('Tu cuenta ha sido desactivada. Contacta al administrador.', 'warning')
+            return redirect(url_for('auth.login'))
+
+        # Usuario existente - enlazar con Google si aún no lo está
         if not usuario.oauth_id:
             usuario.oauth_id = user_info['sub']
             usuario.oauth_provider = 'google'
@@ -186,8 +226,8 @@ def google_callback():
     else:
         # Crear nuevo usuario
         usuario = Usuario(
-            email=user_info['email'],
-            nombre=user_info.get('given_name', user_info['email'].split('@')[0]),
+            email=email,
+            nombre=user_info.get('given_name', email.split('@')[0]),
             apellidos=user_info.get('family_name', ''),
             oauth_provider='google',
             oauth_id=user_info['sub']
