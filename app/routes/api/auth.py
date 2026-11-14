@@ -10,7 +10,9 @@ import jwt
 from flask import request, current_app, g
 from flask_restx import Namespace, Resource, fields
 
+from app import db, limiter
 from app.models import Usuario
+from app.routes.auth import limite_login
 
 # Namespace para auth
 ns = Namespace('auth', description='Autenticación')
@@ -61,12 +63,15 @@ def jwt_required(f):
                 current_app.config['JWT_SECRET_KEY'],
                 algorithms=['HS256']
             )
-            g.current_user = Usuario.query.get(payload['user_id'])
+            g.current_user = db.session.get(Usuario, payload['user_id'])
             if not g.current_user:
                 return {'error': 'Usuario no encontrado'}, 401
+            # Desactivar una cuenta invalida también sus tokens
+            if not g.current_user.activo:
+                return {'error': 'Cuenta desactivada'}, 401
         except jwt.ExpiredSignatureError:
             return {'error': 'Token expirado'}, 401
-        except jwt.InvalidTokenError:
+        except (jwt.InvalidTokenError, KeyError):
             return {'error': 'Token inválido'}, 401
         
         return f(*args, **kwargs)
@@ -78,6 +83,8 @@ class Login(Resource):
     @ns.expect(login_model)
     @ns.response(200, 'Login exitoso', token_response)
     @ns.response(401, 'Credenciales inválidas', error_response)
+    @ns.response(429, 'Demasiados intentos')
+    @limiter.limit(limite_login)
     def post(self):
         """Autenticación de usuario, devuelve JWT."""
         data = request.get_json()
@@ -85,7 +92,8 @@ class Login(Resource):
         if not data or not data.get('email') or not data.get('password'):
             return {'error': 'Email y password son requeridos'}, 400
         
-        usuario = Usuario.query.filter_by(email=data['email']).first()
+        email = str(data['email']).strip().lower()
+        usuario = Usuario.query.filter_by(email=email).first()
         
         if not usuario or not usuario.password_hash:
             return {'error': 'Credenciales inválidas'}, 401

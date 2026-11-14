@@ -43,7 +43,12 @@ class Config:
 
     # JWT (API REST)
     JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY')
-    JWT_EXPIRATION_HOURS = 24
+    JWT_EXPIRATION_HOURS = int(os.environ.get('JWT_EXPIRATION_HOURS') or 24)
+
+    # Límite de peticiones (Flask-Limiter). En memoria vale para un solo
+    # proceso; con varios workers usar Redis (p. ej. redis://localhost:6379)
+    RATELIMIT_STORAGE_URI = os.environ.get('RATELIMIT_STORAGE_URI') or 'memory://'
+    RATELIMIT_LOGIN = '5 per minute'
 
     # Documentación Swagger de la API (/api/docs)
     API_DOCS_ENABLED = True
@@ -178,6 +183,9 @@ class TestingConfig(Config):
 
     # Desactivar CSRF para tests
     WTF_CSRF_ENABLED = False
+
+    # Sin límite de peticiones salvo en los tests que lo activan
+    RATELIMIT_ENABLED = False
 
     # No mostrar queries SQL en tests (ruido en output)
     SQLALCHEMY_ECHO = False

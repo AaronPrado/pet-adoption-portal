@@ -112,6 +112,14 @@ class Usuario(UserMixin, db.Model):
         """
         return check_password_hash(self.password_hash, password)
 
+    @property
+    def is_active(self):
+        """
+        Flask-Login consulta esta propiedad: login_user() rechaza cuentas
+        inactivas. Sustituye a la de UserMixin, que siempre devuelve True.
+        """
+        return bool(self.activo)
+
     def is_admin(self):
         """
         Comprueba si el usuario es administrador.

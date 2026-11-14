@@ -21,6 +21,8 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_mail import Mail
 from flask_login import LoginManager
 from flask_wtf.csrf import CSRFProtect
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from config import config
 from authlib.integrations.flask_client import OAuth
 
@@ -30,6 +32,7 @@ mail = Mail()
 login_manager = LoginManager()
 oauth = OAuth()
 csrf = CSRFProtect()
+limiter = Limiter(key_func=get_remote_address)
 
 
 # Content Security Policy: solo scripts propios y de jsDelivr (Bootstrap).
@@ -73,6 +76,7 @@ def create_app(config_name='default'):
     db.init_app(app)
     mail.init_app(app)
     csrf.init_app(app)
+    limiter.init_app(app)
 
     # Configurar Flask-Login
     login_manager.init_app(app)
@@ -105,7 +109,11 @@ def create_app(config_name='default'):
         Returns:
             Usuario: Instancia del usuario o None
         """
-        return models.Usuario.query.get(int(user_id))
+        usuario = db.session.get(models.Usuario, int(user_id))
+        # Una cuenta desactivada pierde también las sesiones ya abiertas
+        if usuario is None or not usuario.activo:
+            return None
+        return usuario
 
     # Registrar blueprints (rutas)
     from app.routes import auth, mascotas, solicitudes
