@@ -11,8 +11,8 @@ from config import ProductionConfig
 @pytest.fixture
 def config_produccion(monkeypatch):
     """Configura ProductionConfig con valores válidos (BD SQLite en memoria)."""
-    monkeypatch.setattr(ProductionConfig, 'SECRET_KEY', 'clave-prod')
-    monkeypatch.setattr(ProductionConfig, 'JWT_SECRET_KEY', 'clave-jwt-prod')
+    monkeypatch.setattr(ProductionConfig, 'SECRET_KEY', 's' * 32)
+    monkeypatch.setattr(ProductionConfig, 'JWT_SECRET_KEY', 'j' * 32)
     monkeypatch.setattr(ProductionConfig, 'SQLALCHEMY_DATABASE_URI', 'sqlite:///:memory:')
     return ProductionConfig
 
@@ -23,6 +23,15 @@ def test_produccion_exige_variables(config_produccion, monkeypatch, variable):
     monkeypatch.setattr(config_produccion, variable, None)
 
     with pytest.raises(RuntimeError, match=variable):
+        create_app('production')
+
+
+@pytest.mark.parametrize('variable', ['SECRET_KEY', 'JWT_SECRET_KEY'])
+def test_produccion_exige_claves_largas(config_produccion, monkeypatch, variable):
+    """Una clave de menos de 32 bytes se rechaza al arrancar."""
+    monkeypatch.setattr(config_produccion, variable, 'x' * 31)
+
+    with pytest.raises(RuntimeError, match=f'{variable} debe tener al menos 32 bytes'):
         create_app('production')
 
 
