@@ -8,9 +8,10 @@ Este módulo maneja:
 - Aprobación/rechazo de solicitudes (solo admin)
 """
 
-from flask import Blueprint, flash, redirect, render_template, request, url_for
+from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import joinedload
 
 from app import db
 from app.decorators import admin_required
@@ -100,7 +101,8 @@ def mis_solicitudes():
     Muestra todas las solicitudes creadas por el usuario
     con su estado actual (pendiente, aprobada, rechazada).
     """
-    solicitudes = Solicitud.query.filter_by(usuario_id=current_user.id)\
+    solicitudes = Solicitud.query.options(joinedload(Solicitud.mascota))\
+        .filter_by(usuario_id=current_user.id)\
         .order_by(Solicitud.fecha_solicitud.desc())\
         .all()
 
@@ -147,17 +149,24 @@ def admin_lista():
     estado_filtro = request.args.get('estado', '')
 
     # Query base
-    query = Solicitud.query
+    # Cargar mascota y usuario en la misma consulta: la plantilla los muestra
+    # en cada fila y, si no, se hacían dos consultas más por solicitud
+    query = Solicitud.query.options(joinedload(Solicitud.mascota), joinedload(Solicitud.usuario))
 
     # Aplicar filtro de estado si existe
     if estado_filtro:
         query = query.filter_by(estado=estado_filtro)
 
     # Ordenar por fecha (más recientes primero)
-    solicitudes = query.order_by(Solicitud.fecha_solicitud.desc()).all()
+    pagina = query.order_by(Solicitud.fecha_solicitud.desc()).paginate(
+        page=request.args.get('page', 1, type=int),
+        per_page=current_app.config['ADMIN_POR_PAGINA'],
+        error_out=False,
+    )
 
     return render_template('solicitudes/admin/lista.html',
-                         solicitudes=solicitudes,
+                         solicitudes=pagina.items,
+                         pagina=pagina,
                          estado_filtro=estado_filtro)
 
 

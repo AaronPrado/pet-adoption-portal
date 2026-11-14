@@ -75,6 +75,10 @@ class Config:
     MAIL_PASSWORD = os.environ.get('MAIL_PASSWORD')
     MAIL_DEFAULT_SENDER = os.environ.get('MAIL_DEFAULT_SENDER') or 'noreply@aaronpradoadopciones.com'
 
+    # Paginación de listados web
+    CATALOGO_POR_PAGINA = 12
+    ADMIN_POR_PAGINA = 20
+
     # Upload de archivos: Extensiones permitidas para fotos
     ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
 

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from 'macros/paginacion.html' import paginacion %}
 
 {% block title %}Catálogo de Mascotas - Portal de Adopción{% endblock %}
 
@@ -93,6 +94,7 @@
         </div>
         {% endfor %}
     </div>
+    {{ paginacion(pagina, 'mascotas.catalogo') }}
 {% else %}
     <div class="alert alert-info" role="alert">
         <h4 class="alert-heading">No hay mascotas disponibles</h4>
