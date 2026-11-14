@@ -52,3 +52,15 @@ def test_produccion_oculta_swagger(config_produccion):
 def test_desarrollo_publica_swagger(client):
     """En testing/desarrollo Swagger sigue disponible."""
     assert client.get('/api/docs').status_code == 200
+
+
+def test_driver_postgresql_instalado():
+    """Las URLs postgresql:// de DATABASE_URL deben poder crear un engine.
+
+    SQLAlchemy 2.1 cambió el driver por defecto de psycopg2 a psycopg (v3);
+    create_engine importa el driver aunque no llegue a conectar.
+    """
+    from sqlalchemy import create_engine
+
+    engine = create_engine('postgresql://usuario:clave@localhost:5432/bd')
+    assert engine.dialect.driver == 'psycopg'
