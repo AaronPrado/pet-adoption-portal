@@ -12,7 +12,7 @@ from flask_login import login_required, current_user
 from app import db
 from app.models import Mascota
 from app.decorators import admin_required
-from app.s3 import upload_to_s3, delete_from_s3
+from app.s3 import upload_to_s3, delete_from_s3, es_url_imagen_valida
 
 
 # Crear blueprint
@@ -194,6 +194,9 @@ def admin_nueva():
                 return redirect(request.url)
         else:
             foto_url = request.form.get('foto_url', '').strip() or None
+            if foto_url and not es_url_imagen_valida(foto_url):
+                flash('La URL de la foto debe empezar por https://', 'danger')
+                return render_template('mascotas/admin/form.html', mascota=None)
         # Convertir edad a entero
         try:
             edad_aprox = int(edad_aprox) if edad_aprox else None
@@ -288,6 +291,9 @@ def admin_editar(mascota_id):
             delete_from_s3(mascota.foto_url)
         else:
             foto_url = request.form.get('foto_url', '').strip() or None
+            if foto_url and not es_url_imagen_valida(foto_url):
+                flash('La URL de la foto debe empezar por https://', 'danger')
+                return render_template('mascotas/admin/form.html', mascota=mascota)
             # Si cambió la URL, borrar la antigua de S3
             if foto_url != mascota.foto_url:
                 delete_from_s3(mascota.foto_url)
