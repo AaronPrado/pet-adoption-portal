@@ -83,3 +83,12 @@ class TestDelete:
         s3.delete_from_s3(url)
         assert cliente_s3.borrados == []
 
+
+def test_url_manual_debe_ser_https(client, auth_headers_admin):
+    response = client.post('/mascotas/admin/nueva', data={
+        'nombre': 'Rocky',
+        'especie': 'Perro',
+        'descripcion': 'Perro tranquilo y cariñoso',
+        'foto_url': 'javascript:alert(1)'
+    })
+    assert 'debe empezar por https://' in response.data.decode()
