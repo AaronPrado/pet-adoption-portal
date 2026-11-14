@@ -4,6 +4,10 @@
 -- contraseña conocida (incluido un administrador). No lo ejecutes en una
 -- base de datos accesible desde fuera: para crear el administrador de un
 -- entorno real usa `flask crear-admin`.
+--
+-- Requiere las tablas creadas con las migraciones (flask --app run db upgrade).
+-- Para cargarlo en el PostgreSQL de Docker Compose:
+--   docker compose exec -T postgres psql -U admin -d adopciones_db < scripts_bd/02_seed.sql
 
 TRUNCATE TABLE solicitudes, mascotas, usuarios RESTART IDENTITY CASCADE;
 

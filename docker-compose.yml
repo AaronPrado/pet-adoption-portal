@@ -28,11 +28,9 @@ services:
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
-      # Persistir datos de PostgreSQL
+      # Persistir datos de PostgreSQL. Las tablas se crean con las migraciones
+      # (flask --app run db upgrade), no al iniciar el contenedor
       - postgres_data:/var/lib/postgresql/data
-      # Script de inicialización (se ejecuta solo la primera vez)
-      - ./scripts_bd/01_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
-      - ./scripts_bd/02_seed.sql:/docker-entrypoint-initdb.d/02_seed.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U admin -d adopciones_db"]
       interval: 10s

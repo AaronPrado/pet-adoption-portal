@@ -11,3 +11,7 @@ ignore = ["SIM108"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["app", "config"]
+
+[tool.ruff.lint.per-file-ignores]
+# Las migraciones las genera Alembic con líneas largas
+"migrations/versions/*.py" = ["E501"]
