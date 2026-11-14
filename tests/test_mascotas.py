@@ -73,11 +73,15 @@ class TestCatalogo:
 
     def test_catalogo_filtro_edad_maxima(self, client, mascota_disponible):
         """Test: Filtro por edad máxima funciona correctamente."""
-        response = client.get('/mascotas/catalogo?edad_max=5')
+        # El formulario del catálogo envía el parámetro "edad"
+        response = client.get('/mascotas/catalogo?edad=5')
 
         assert response.status_code == 200
         # Cerbero tiene 3 años
         assert 'Cerbero' in response.data.decode()
+
+        response = client.get('/mascotas/catalogo?edad=2')
+        assert 'Cerbero' not in response.data.decode()
 
 
 class TestDetalle:
