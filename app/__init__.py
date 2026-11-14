@@ -16,7 +16,7 @@ Uso:
     app.run()
 """
 
-from flask import Flask, render_template, request, abort
+from flask import Flask, render_template, request, abort, flash, redirect
 from flask_sqlalchemy import SQLAlchemy
 from flask_mail import Mail
 from flask_login import LoginManager
@@ -153,7 +153,8 @@ def create_app(config_name='default'):
     @app.errorhandler(413)
     def file_too_large(e):
         flash('El archivo es demasiado grande. Máximo 5MB.', 'danger')
-        return redirect(request.url), 413
+        # 302 normal: el navegador no sigue un Location con estado 413
+        return redirect(request.url)
 
 
     # Ruta de inicio
