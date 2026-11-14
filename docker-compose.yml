@@ -8,8 +8,9 @@
 # Acceso:
 #   PostgreSQL: localhost:5432
 #   Adminer: http://localhost:8080
-
-version: '3.8'
+#
+# Los puertos se publican solo en 127.0.0.1: las credenciales son de
+# desarrollo y no deben quedar accesibles desde la red local.
 
 services:
   # PostgreSQL 15 - Base de datos principal
@@ -25,7 +26,7 @@ services:
       # Configuración de PostgreSQL
       POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=es_ES.UTF-8"
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       # Persistir datos de PostgreSQL
       - postgres_data:/var/lib/postgresql/data
@@ -40,11 +41,11 @@ services:
 
   # Adminer - Gestor web de bases de datos
   adminer:
-    image: adminer:latest
+    image: adminer:5.4.1
     container_name: adopciones_adminer
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     environment:
       ADMINER_DEFAULT_SERVER: postgres
       ADMINER_DESIGN: nette
