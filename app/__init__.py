@@ -16,7 +16,7 @@ Uso:
     app.run()
 """
 
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, abort
 from flask_sqlalchemy import SQLAlchemy
 from flask_mail import Mail
 from flask_login import LoginManager
@@ -50,6 +50,7 @@ def create_app(config_name='default'):
 
     # Cargar configuración desde config.py
     app.config.from_object(config[config_name])
+    config[config_name].init_app(app)
 
     # Inicializar extensiones con la app
     db.init_app(app)
@@ -95,6 +96,13 @@ def create_app(config_name='default'):
     app.register_blueprint(mascotas.bp)
     app.register_blueprint(solicitudes.bp)
     app.register_blueprint(api_bp)
+
+    # Desactivar Swagger cuando la configuración lo indique (producción)
+    if not app.config['API_DOCS_ENABLED']:
+        @app.before_request
+        def ocultar_docs_api():
+            if request.endpoint in ('api.doc', 'api.specs'):
+                abort(404)
 
     # Crear tablas en la base de datos si no existen
     with app.app_context():
