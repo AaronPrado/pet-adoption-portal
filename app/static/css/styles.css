@@ -13,6 +13,9 @@
     --color-dark: #023047;
     --color-light: #f1f8fb;
     --color-white: #ffffff;
+    /* Variante oscura de primary: contraste 4.9:1 con texto blanco (WCAG AA) */
+    --color-primary-dark: #1a7a94;
+    --color-primary-darker: #145f73;
 }
 
 body {
@@ -30,25 +33,28 @@ body {
     padding: 20px 40px;
 }
 
+/* Texto oscuro sobre el azul claro: el blanco solo daba 1.8:1 de contraste */
 .navbar-brand {
     font-weight: bold;
     font-size: 1.5rem;
-    color: var(--color-white) !important;
+    color: var(--color-dark) !important;
 }
 
 .nav-link {
-    color: var(--color-white) !important;
+    color: var(--color-dark) !important;
     font-weight: bold;
     margin-left: 20px;
 }
 
-.nav-link:hover {
-    color: var(--color-dark) !important;
+.nav-link:hover,
+.nav-link[aria-current="page"] {
+    text-decoration: underline;
+    text-underline-offset: 4px;
 }
 
 /* Botones */
 .btn-primary {
-    background-color: var(--color-primary) !important;
+    background-color: var(--color-primary-dark) !important;
     border: none !important;
     border-radius: 5px;
     padding: 15px 30px;
@@ -56,7 +62,29 @@ body {
 }
 
 .btn-primary:hover {
-    background-color: #1a7a94 !important;
+    background-color: var(--color-primary-darker) !important;
+}
+
+/* Foco visible en todos los elementos interactivos */
+a:focus-visible,
+button:focus-visible,
+.btn:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+    outline: 3px solid var(--color-dark);
+    outline-offset: 2px;
+}
+
+.salto-contenido {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    z-index: 2000;
+    padding: 8px 16px;
+    background: var(--color-white);
+    color: var(--color-dark);
+    font-weight: bold;
 }
 
 .btn-light {
@@ -167,7 +195,7 @@ footer {
 }
 
 .btn-group .btn-primary:hover {
-    background-color: var(--color-primary) !important;
+    background-color: var(--color-primary-dark) !important;
 }
 
 /* Centrar texto verticalmente en botones de filtro */
@@ -180,8 +208,8 @@ footer {
 
 /* Hover para botones de acciones */
 table .btn-group .btn-outline-dark:hover {
-    background-color: var(--color-primary) !important;
-    border-color: var(--color-primary) !important;
+    background-color: var(--color-primary-dark) !important;
+    border-color: var(--color-primary-dark) !important;
     color: white !important;
 }
 
@@ -202,7 +230,7 @@ table thead th a {
 }
 
 table thead th a:hover {
-    color: var(--color-primary) !important;
+    color: var(--color-primary-dark) !important;
 }
 
 /* Botones del formulario */
