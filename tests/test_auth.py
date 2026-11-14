@@ -129,7 +129,7 @@ class TestLogout:
 
     def test_logout_exitoso(self, client, auth_headers_adoptante):
         """Test: Logout cierra sesión correctamente."""
-        response = client.get('/auth/logout', follow_redirects=True)
+        response = client.post('/auth/logout', follow_redirects=True)
 
         assert response.status_code == 200
         # Después del logout debería redirigir al inicio o login
@@ -138,7 +138,7 @@ class TestLogout:
 
     def test_logout_sin_autenticar(self, client):
         """Test: Logout sin estar autenticado redirige al login."""
-        response = client.get('/auth/logout', follow_redirects=True)
+        response = client.post('/auth/logout', follow_redirects=True)
 
         assert response.status_code == 200
 

@@ -23,6 +23,7 @@
                 </div>
 
                 <form method="POST">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <!-- Información de Vivienda -->
                     <h5 class="mt-4 mb-3">Información de Vivienda</h5>
 

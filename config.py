@@ -68,6 +68,13 @@ class Config:
     # Upload de archivos: Tamaño máximo de archivo (5MB en bytes)
     MAX_CONTENT_LENGTH = 5 * 1024 * 1024  # 5 MB
 
+    # Cookies: no se envían en peticiones POST desde otros sitios (CSRF)
+    # ni son accesibles desde JavaScript
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SAMESITE = 'Lax'
+    REMEMBER_COOKIE_HTTPONLY = True
+    REMEMBER_COOKIE_SAMESITE = 'Lax'
+
     @classmethod
     def init_app(cls, app):
         """Hook para validaciones específicas de cada entorno."""
@@ -118,6 +125,10 @@ class ProductionConfig(Config):
 
     # En producción no mostrar queries SQL
     SQLALCHEMY_ECHO = False
+
+    # Cookies solo por HTTPS
+    SESSION_COOKIE_SECURE = True
+    REMEMBER_COOKIE_SECURE = True
 
     # No publicar la documentación interactiva de la API
     API_DOCS_ENABLED = False

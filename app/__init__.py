@@ -20,6 +20,7 @@ from flask import Flask, render_template, request, abort
 from flask_sqlalchemy import SQLAlchemy
 from flask_mail import Mail
 from flask_login import LoginManager
+from flask_wtf.csrf import CSRFProtect
 from config import config
 from authlib.integrations.flask_client import OAuth
 
@@ -28,6 +29,22 @@ db = SQLAlchemy()
 mail = Mail()
 login_manager = LoginManager()
 oauth = OAuth()
+csrf = CSRFProtect()
+
+
+# Content Security Policy: solo scripts propios y de jsDelivr (Bootstrap).
+# 'unsafe-inline' en estilos se mantiene por los atributos style de las plantillas.
+CSP = (
+    "default-src 'self'; "
+    "script-src 'self' https://cdn.jsdelivr.net; "
+    "style-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; "
+    "img-src 'self' https: data:; "
+    "font-src 'self' https://cdn.jsdelivr.net; "
+    "object-src 'none'; "
+    "base-uri 'self'; "
+    "form-action 'self'; "
+    "frame-ancestors 'none'"
+)
 
 
 def create_app(config_name='default'):
@@ -55,6 +72,7 @@ def create_app(config_name='default'):
     # Inicializar extensiones con la app
     db.init_app(app)
     mail.init_app(app)
+    csrf.init_app(app)
 
     # Configurar Flask-Login
     login_manager.init_app(app)
@@ -96,6 +114,21 @@ def create_app(config_name='default'):
     app.register_blueprint(mascotas.bp)
     app.register_blueprint(solicitudes.bp)
     app.register_blueprint(api_bp)
+
+    # La API se autentica con JWT en la cabecera Authorization (no con cookies),
+    # por lo que no necesita token CSRF
+    csrf.exempt(api_bp)
+
+    # Cabeceras de seguridad en todas las respuestas
+    @app.after_request
+    def cabeceras_seguridad(response):
+        response.headers.setdefault('X-Content-Type-Options', 'nosniff')
+        response.headers.setdefault('X-Frame-Options', 'DENY')
+        response.headers.setdefault('Referrer-Policy', 'strict-origin-when-cross-origin')
+        # Swagger UI usa scripts inline, así que no se le aplica la CSP
+        if request.endpoint != 'api.doc':
+            response.headers.setdefault('Content-Security-Policy', CSP)
+        return response
 
     # Desactivar Swagger cuando la configuración lo indique (producción)
     if not app.config['API_DOCS_ENABLED']:
