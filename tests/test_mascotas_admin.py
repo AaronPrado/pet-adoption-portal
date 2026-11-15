@@ -4,6 +4,7 @@ y de los filtros del catálogo que no cubre test_mascotas.py.
 """
 
 import io
+from html.parser import HTMLParser
 
 import pytest
 from sqlalchemy.exc import SQLAlchemyError
@@ -46,6 +47,55 @@ def commit_falla(monkeypatch):
             raise SQLAlchemyError('fallo simulado')
         monkeypatch.setattr(db.session, 'commit', fallar)
     return activar
+
+
+class _CamposFormulario(HTMLParser):
+    """Recoge lo que enviaría el navegador: inputs con valor, textareas y opciones seleccionadas."""
+
+    def __init__(self):
+        super().__init__()
+        self.datos = {}
+        self._textarea = None
+        self._select = None
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        nombre = attrs.get('name')
+        if tag == 'input' and nombre and attrs.get('type') not in ('file', 'checkbox', 'hidden'):
+            self.datos[nombre] = attrs.get('value') or ''
+        elif tag == 'textarea' and nombre:
+            self._textarea = nombre
+            self.datos[nombre] = ''
+        elif tag == 'select' and nombre:
+            self._select = nombre
+            self.datos.setdefault(nombre, '')
+        elif tag == 'option' and self._select and 'selected' in attrs:
+            self.datos[self._select] = attrs.get('value') or ''
+
+    def handle_endtag(self, tag):
+        if tag == 'textarea':
+            self._textarea = None
+        elif tag == 'select':
+            self._select = None
+
+    def handle_data(self, data):
+        if self._textarea:
+            self.datos[self._textarea] += data
+
+
+def campos_del_formulario(html):
+    parser = _CamposFormulario()
+    parser.feed(html)
+    return parser.datos
+
+
+@pytest.fixture
+def mascota_sin_opcionales(app):
+    """Mascota con raza, edad, sexo, tamaño y foto a NULL (p. ej., creada con S3 sin configurar)."""
+    mascota = Mascota(nombre='Sinraza', especie='Gato', descripcion='Gato sin datos opcionales')
+    db.session.add(mascota)
+    db.session.commit()
+    return mascota
 
 
 VALIDACIONES = [
@@ -149,6 +199,38 @@ class TestEditarMascota:
     def test_get_muestra_datos_actuales(self, client, auth_headers_admin, mascota_disponible):
         response = client.get(self.url(mascota_disponible))
         assert 'value="Cerbero"' in response.data.decode()
+
+    def test_get_con_opcionales_nulos_no_muestra_none(self, client, auth_headers_admin, mascota_sin_opcionales):
+        """Regresión P-08: los campos a NULL no deben mostrarse como «None»."""
+        html = client.get(self.url(mascota_sin_opcionales)).data.decode()
+
+        assert 'None' not in html
+        campos = campos_del_formulario(html)
+        assert campos['raza'] == ''
+        assert campos['foto_url'] == ''
+        assert campos['edad_aprox'] == ''
+
+    @pytest.mark.parametrize('vaciar_foto', [False, True], ids=['tal_cual', 'vaciando_foto'])
+    def test_guardar_sin_cambios_con_opcionales_nulos(self, client, auth_headers_admin, mascota_sin_opcionales,
+                                                      vaciar_foto):
+        """Regresión P-08: reenviar el formulario guarda (302) y deja los opcionales a NULL, no «None»."""
+        datos = campos_del_formulario(client.get(self.url(mascota_sin_opcionales)).data.decode())
+        if vaciar_foto:
+            datos['foto_url'] = ''
+        response = client.post(self.url(mascota_sin_opcionales), data=datos)
+
+        assert response.status_code == 302
+        db.session.refresh(mascota_sin_opcionales)
+        assert mascota_sin_opcionales.raza is None
+        assert mascota_sin_opcionales.foto_url is None
+        assert mascota_sin_opcionales.edad_aprox is None
+
+    def test_get_muestra_edad_cero(self, client, auth_headers_admin, mascota_sin_opcionales):
+        mascota_sin_opcionales.edad_aprox = 0
+        db.session.commit()
+
+        campos = campos_del_formulario(client.get(self.url(mascota_sin_opcionales)).data.decode())
+        assert campos['edad_aprox'] == '0'
 
     def test_nueva_foto_borra_la_anterior(self, client, auth_headers_admin, mascota_disponible, s3_falso):
         foto_anterior = mascota_disponible.foto_url
