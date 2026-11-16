@@ -76,6 +76,7 @@ def catalogo():
     return render_template('mascotas/catalogo.html',
                          mascotas=pagina.items,
                          pagina=pagina,
+                         pendientes=adopciones.pendientes_por_mascota([m.id for m in pagina.items]),
                          especies_disponibles=especies_disponibles,
                          especie_filtro=especie_filtro,
                          tamano_filtro=tamano_filtro,
@@ -95,7 +96,8 @@ def detalle(mascota_id):
         mascota_id (int): ID de la mascota
     """
     mascota = db.get_or_404(Mascota, mascota_id)
-    return render_template('mascotas/detalle.html', mascota=mascota)
+    pendientes = adopciones.pendientes_por_mascota([mascota.id]).get(mascota.id, 0)
+    return render_template('mascotas/detalle.html', mascota=mascota, pendientes=pendientes)
 
 
 # ==================== RUTAS DE ADMINISTRACIÓN ====================

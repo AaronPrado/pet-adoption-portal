@@ -188,6 +188,9 @@ solo `app/adopciones.py`, que usan las rutas web y la API:
   (`puede_volver_a_disponible`); una adopción del portal no se deshace.
   La lista del panel solo filtra por `disponible` y `adoptado`; cualquier
   otro valor de `?estado=` se ignora.
+- «Tiene solicitudes en curso» (catálogo, detalle y formulario admin) se
+  deriva de `pendientes_por_mascota(ids)`: una sola consulta agregada
+  (`GROUP BY mascota_id`) para toda la página, sin N+1.
 
 ---
 
