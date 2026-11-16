@@ -244,8 +244,13 @@ def _validar_mascota(valores, foto):
     errores = {}
     if len(valores['nombre']) < 2:
         errores['nombre'] = 'El nombre debe tener al menos 2 caracteres.'
-    if len(valores['especie']) < 2:
+    # Se valida la especie tal como la guardará el modelo: su validador lanza
+    # ValueError si queda vacía o no cabe (p. ej. solo invisibles, o «ß» → «Ss»)
+    especie = Mascota.normalizar_especie(valores['especie'])
+    if len(especie) < 2:
         errores['especie'] = 'La especie es obligatoria.'
+    elif len(especie) > Mascota.LONGITUD_ESPECIE:
+        errores['especie'] = f'La especie no puede superar {Mascota.LONGITUD_ESPECIE} caracteres.'
     if len(valores['descripcion']) < 10:
         errores['descripcion'] = 'La descripción debe tener al menos 10 caracteres.'
 
@@ -271,7 +276,7 @@ def _validar_mascota(valores, foto):
 
     datos = {
         'nombre': valores['nombre'],
-        'especie': valores['especie'],
+        'especie': especie,
         'raza': valores['raza'] or None,
         'edad_aprox': edad,
         'sexo': valores['sexo'] or None,

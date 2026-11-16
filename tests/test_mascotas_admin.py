@@ -103,6 +103,11 @@ VALIDACIONES = [
     ({'nombre': 'R'}, 'nombre', 'El nombre debe tener al menos 2 caracteres.'),
     ({'nombre': '   '}, 'nombre', 'El nombre debe tener al menos 2 caracteres.'),
     ({'especie': ''}, 'especie', 'La especie es obligatoria.'),
+    # Se valida la especie ya normalizada (Mascota.normalizar_especie): el
+    # validador del modelo lanzaría ValueError y acabaría en un 500
+    ({'especie': '​​'}, 'especie', 'La especie es obligatoria.'),
+    ({'especie': 'P​'}, 'especie', 'La especie es obligatoria.'),
+    ({'especie': 'ß' * 50}, 'especie', 'La especie no puede superar 50 caracteres.'),
     ({'descripcion': 'Corta'}, 'descripcion', 'La descripción debe tener al menos 10 caracteres.'),
     ({'edad_aprox': '31'}, 'edad_aprox', 'La edad debe estar entre 0 y 30 años.'),
     ({'edad_aprox': '-1'}, 'edad_aprox', 'La edad debe estar entre 0 y 30 años.'),
@@ -231,6 +236,12 @@ class TestCrearMascota:
 
         assert response.status_code == 302
         assert Mascota.query.one().foto_url == s3_falso['url']
+
+    def test_guarda_la_especie_normalizada(self, client, auth_headers_admin):
+        response = client.post('/mascotas/admin/nueva', data=datos_mascota(especie='  gATO​  común '))
+
+        assert response.status_code == 302
+        assert Mascota.query.one().especie == 'Gato común'
 
     def test_get_sin_errores_ni_valores(self, client, auth_headers_admin):
         html = client.get('/mascotas/admin/nueva').data.decode()
