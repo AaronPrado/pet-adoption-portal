@@ -186,3 +186,29 @@ class TestLimiteIntentos:
 
         bloqueada = client_con_limite.post('/api/auth/login', json={'email': 'a@test.com', 'password': 'mala'})
         assert bloqueada.get_json() == {'error': 'Demasiadas peticiones, inténtalo más tarde'}
+
+    def test_registro_bloquea_tras_10_intentos(self, client_con_limite):
+        """El registro inicia sesión: se limita para no crear cuentas en masa."""
+        # Los intentos fallidos también cuentan (si no, el registro correcto
+        # dejaría la sesión iniciada y los siguientes no llegarían al formulario)
+        codigos = [
+            client_con_limite.post('/auth/registro', data={
+                'email': f'masivo{i}@test.com', 'nombre': 'M', 'password': 'password123',
+                'password_confirm': 'otra'}).status_code
+            for i in range(10)
+        ]
+        bloqueado = client_con_limite.post('/auth/registro', data={
+            'email': 'masivo@test.com', 'nombre': 'M', 'password': 'password123',
+            'password_confirm': 'password123'})
+
+        assert codigos == [400] * 10
+        assert bloqueado.status_code == 429
+        assert Usuario.query.filter_by(email='masivo@test.com').count() == 0
+
+    def test_registro_get_no_cuenta_para_el_limite(self, client_con_limite):
+        for _ in range(11):
+            client_con_limite.get('/auth/registro')
+        respuesta = client_con_limite.post('/auth/registro', data={
+            'email': 'uno@test.com', 'nombre': 'U', 'password': 'password123',
+            'password_confirm': 'password123'})
+        assert respuesta.status_code == 302

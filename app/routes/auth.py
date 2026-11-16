@@ -23,6 +23,11 @@ def limite_login():
     return current_app.config['RATELIMIT_LOGIN']
 
 
+def limite_registro():
+    """Límite de registros, leído de la configuración (el registro inicia sesión)."""
+    return current_app.config['RATELIMIT_REGISTRO']
+
+
 def es_redireccion_segura(destino):
     """
     Comprueba que `destino` es una ruta relativa de este sitio.
@@ -97,6 +102,7 @@ def validar_registro(valores, password, password_confirm):
 
 
 @bp.route('/registro', methods=['GET', 'POST'])
+@limiter.limit(limite_registro, methods=['POST'])
 def registro():
     """
     Ruta de registro de nuevos usuarios.
