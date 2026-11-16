@@ -119,6 +119,57 @@ def test_alta_de_mascota_con_error_conserva_lo_escrito(page, errores_js):
     expect(page.get_by_text('Mascota "Lur" creada exitosamente.')).to_be_visible()
 
 
+def test_foto_demasiado_grande_no_se_envia(page, errores_js):
+    """El servidor no puede conservar los datos de un 413: el navegador lo evita antes."""
+    iniciar_sesion(page, *ADMIN)
+
+    page.goto('/mascotas/admin/nueva')
+    page.get_by_label('Nombre').fill('Bolt')
+    foto = page.get_by_label('Foto de la mascota')
+    # Justo por debajo de 5 MB: con el resto del formulario la petición daría 413
+    foto.set_input_files({'name': 'grande.png', 'mimeType': 'image/png',
+                          'buffer': b'0' * (5 * 1024 * 1024 - 1024)})
+
+    mensaje = 'La foto ocupa más de 5 MB. Elige otra más pequeña o quita el archivo para usar una URL.'
+    assert foto.evaluate('campo => campo.validationMessage') == mensaje
+    expect(page.locator('#foto-error')).to_have_text(mensaje)
+    expect(foto).to_have_attribute('aria-invalid', 'true')
+    expect(foto).to_have_attribute('aria-describedby', 'foto-error')
+    page.get_by_role('button', name='Crear Mascota').click()
+    expect(page).to_have_url(re.compile(r'/mascotas/admin/nueva$'))
+    expect(page.get_by_label('Nombre')).to_have_value('Bolt')
+
+    # Quitar el archivo (para usar una URL) borra el aviso y sus marcas
+    foto.set_input_files([])
+    assert foto.evaluate('campo => campo.validationMessage') == ''
+    expect(page.locator('#foto-error')).to_have_count(0)
+    expect(foto).not_to_have_attribute('aria-invalid', 'true')
+    expect(foto).not_to_have_attribute('aria-describedby', re.compile('.'))
+
+
+def test_elegir_otra_foto_quita_el_error_del_servidor(page, errores_js):
+    """Tras un 400 con foto rechazada se avisa de volver a elegirla; al elegirla, el error se va."""
+    iniciar_sesion(page, *ADMIN)
+
+    page.goto('/mascotas/admin/nueva')
+    page.get_by_label('Nombre').fill('Kira')
+    page.get_by_label('Especie').fill('Perro')
+    page.get_by_label('Descripción').fill('Perra activa que adora correr')
+    foto = page.get_by_label('Foto de la mascota')
+    foto.set_input_files({'name': 'kira.png', 'mimeType': 'image/png', 'buffer': b'no es una imagen'})
+    page.get_by_role('button', name='Crear Mascota').click()
+
+    expect(page.locator('#foto-error')).to_have_text('Formato de imagen no permitido')
+    expect(page.locator('#foto-aviso')).to_be_visible()
+    expect(foto).to_have_attribute('aria-describedby', 'foto-error foto-aviso')
+    expect(page.get_by_label('Nombre')).to_have_value('Kira')
+
+    foto.set_input_files({'name': 'otra.png', 'mimeType': 'image/png', 'buffer': b'0' * 10})
+    expect(page.locator('#foto-error')).to_have_count(0)
+    expect(foto).to_have_attribute('aria-describedby', 'foto-aviso')
+    expect(foto).not_to_have_attribute('aria-invalid', 'true')
+
+
 def test_cerrar_sesion_desde_el_menu(page, errores_js):
     iniciar_sesion(page, *ADOPTANTE)
 

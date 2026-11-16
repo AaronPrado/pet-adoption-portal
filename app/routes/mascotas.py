@@ -31,6 +31,9 @@ CASILLAS_MASCOTA = ('vacunado', 'esterilizado')
 EDAD_MINIMA = 0
 EDAD_MAXIMA = 30
 
+# Margen para el resto de campos del formulario dentro de MAX_CONTENT_LENGTH
+MARGEN_PETICION_FOTO = 64 * 1024
+
 
 @bp.route('/')
 @bp.route('/catalogo')
@@ -287,12 +290,17 @@ def _contexto_formulario(valores, errores):
 
     `foto_descartada` avisa de que hay que volver a elegir la foto: el
     navegador no puede conservar un archivo al volver a pintar el formulario.
+    `max_bytes_foto` deja margen bajo MAX_CONTENT_LENGTH, que limita la
+    petición entera y no solo el archivo.
     """
     foto = request.files.get('foto')
+    limite = current_app.config['MAX_CONTENT_LENGTH']
     return {
         'valores': valores,
         'errores': errores or {},
         'foto_descartada': bool(foto and foto.filename),
+        'max_bytes_foto': limite - MARGEN_PETICION_FOTO,
+        'max_mb_foto': limite // (1024 * 1024),
     }
 
 

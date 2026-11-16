@@ -98,6 +98,8 @@
                         <div class="col-12 mb-3">
                             <label for="foto" class="form-label">Foto de la mascota</label>
                             <input type="file" class="form-control{% if errores.foto %} is-invalid{% endif %}" id="foto" name="foto" accept="image/*"
+                                data-max-bytes="{{ max_bytes_foto }}"
+                                data-mensaje-tamano="La foto ocupa más de {{ max_mb_foto }} MB. Elige otra más pequeña o quita el archivo para usar una URL."
                                 {%- set describe_foto = (['foto-error'] if errores.foto else []) + (['foto-aviso'] if foto_descartada else []) %}
                                 {%- if errores.foto %} aria-invalid="true"{% endif %}
                                 {%- if describe_foto %} aria-describedby="{{ describe_foto|join(' ') }}"{% endif %}>

@@ -658,3 +658,26 @@ class TestListaSinEnProceso:
 
         assert 'Cerbero' in html
         assert 'badge bg-secondary">Adoptado' not in html
+
+
+class TestLimiteDeFotoEnElNavegador:
+    """app.js usa data-max-bytes para no enviar fotos que acabarían en 413."""
+
+    @pytest.fixture
+    def urls(self, mascota_disponible):
+        return ['/mascotas/admin/nueva', f'/mascotas/admin/editar/{mascota_disponible.id}']
+
+    def test_formulario_incluye_limite_con_margen(self, app, client, auth_headers_admin, urls):
+        esperado = app.config['MAX_CONTENT_LENGTH'] - 64 * 1024
+        for url in urls:
+            html = client.get(url).data.decode()
+            assert re.search(rf'name="foto"[^>]*data-max-bytes="{esperado}"', html), url
+            assert ('data-mensaje-tamano="La foto ocupa más de 5 MB. Elige otra más pequeña '
+                    'o quita el archivo para usar una URL."') in html
+
+    def test_limite_sigue_a_la_configuracion(self, app, client, auth_headers_admin, urls):
+        app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024
+        html = client.get(urls[0]).data.decode()
+
+        assert f'data-max-bytes="{2 * 1024 * 1024 - 64 * 1024}"' in html
+        assert 'La foto ocupa más de 2 MB.' in html
