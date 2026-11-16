@@ -297,6 +297,8 @@ excepción: se comporta como antes (flask-restx da su propio JSON en sus rutas).
 
 El token CSRF no caduca por tiempo (`WTF_CSRF_TIME_LIMIT = None`): dura lo que
 la sesión, para que quien tarde en rellenar el cuestionario no pierda el envío.
+Por eso se renueva al iniciar sesión (formulario, registro y Google) y al
+cerrarla (`renovar_token_csrf()` en `app/routes/auth.py`).
 
 ---
 
@@ -374,7 +376,7 @@ producción):
 
 | Capa | Medida |
 |------|--------|
-| Formularios | Token CSRF (Flask-WTF) en todos los POST, válido mientras dure la sesión; logout por POST |
+| Formularios | Token CSRF (Flask-WTF) en todos los POST, válido mientras dure la sesión y renovado al iniciarla y cerrarla; logout por POST |
 | Sesión | Cookies `HttpOnly` y `SameSite=Lax`; `Secure` en producción |
 | Login y registro | Login: 5 intentos por minuto por IP; registro: 10 por hora por IP (Flask-Limiter). Contraseñas de 8+ caracteres con hash scrypt |
 | Google OAuth | Solo emails verificados por Google; las cuentas desactivadas no entran |
