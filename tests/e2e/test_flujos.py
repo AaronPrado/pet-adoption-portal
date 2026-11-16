@@ -92,6 +92,33 @@ def test_admin_crea_y_borra_mascota(page, errores_js):
     expect(page.get_by_text('Mascota "Rex" eliminada exitosamente.')).to_be_visible()
 
 
+def test_alta_de_mascota_con_error_conserva_lo_escrito(page, errores_js):
+    """Regresión P-02: el servidor rechaza la descripción y el formulario sigue relleno."""
+    iniciar_sesion(page, *ADMIN)
+
+    page.goto('/mascotas/admin/nueva')
+    page.get_by_label('Nombre').fill('Lur')
+    page.get_by_label('Especie').fill('Gato')
+    page.get_by_label('Raza').fill('Europeo')
+    page.get_by_label('Sexo').select_option('Hembra')
+    page.get_by_label('Descripción').fill('Corta')
+    page.get_by_label('Vacunado').check()
+    page.get_by_role('button', name='Crear Mascota').click()
+
+    descripcion = page.get_by_label('Descripción')
+    expect(descripcion).to_have_attribute('aria-invalid', 'true')
+    expect(page.locator('#descripcion-error')).to_have_text('La descripción debe tener al menos 10 caracteres.')
+    expect(descripcion).to_have_value('Corta')
+    expect(page.get_by_label('Nombre')).to_have_value('Lur')
+    expect(page.get_by_label('Raza')).to_have_value('Europeo')
+    expect(page.get_by_label('Sexo')).to_have_value('Hembra')
+    expect(page.get_by_label('Vacunado')).to_be_checked()
+
+    descripcion.fill('Gata tímida pero muy cariñosa')
+    page.get_by_role('button', name='Crear Mascota').click()
+    expect(page.get_by_text('Mascota "Lur" creada exitosamente.')).to_be_visible()
+
+
 def test_cerrar_sesion_desde_el_menu(page, errores_js):
     iniciar_sesion(page, *ADOPTANTE)
 

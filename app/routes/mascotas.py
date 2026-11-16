@@ -14,6 +14,7 @@ from app import adopciones, db
 from app.adopciones import consulta_mascota_bloqueada
 from app.decorators import admin_required
 from app.models import Mascota
+from app.routes.auth import MENSAJE_REVISAR
 from app.s3 import delete_from_s3, es_url_imagen_valida, upload_to_s3
 
 # Crear blueprint
@@ -21,6 +22,14 @@ bp = Blueprint('mascotas', __name__, url_prefix='/mascotas')
 
 # Estados por los que se puede filtrar la lista del panel admin
 ESTADOS_FILTRABLES = ('disponible', 'adoptado')
+
+# Campos del formulario de mascota del panel admin
+CAMPOS_TEXTO_MASCOTA = ('nombre', 'especie', 'raza', 'edad_aprox', 'sexo', 'tamano', 'descripcion', 'foto_url')
+CASILLAS_MASCOTA = ('vacunado', 'esterilizado')
+
+# Rango de edad aproximada admitido (años)
+EDAD_MINIMA = 0
+EDAD_MAXIMA = 30
 
 
 @bp.route('/')
@@ -178,91 +187,133 @@ def admin_nueva():
     Solo accesible para administradores.
     """
     if request.method == 'POST':
-        # Obtener datos del formulario
-        nombre = request.form.get('nombre', '').strip()
-        especie = request.form.get('especie', '').strip()
-        raza = request.form.get('raza', '').strip()
-        edad_aprox = request.form.get('edad_aprox', '')
-        sexo = request.form.get('sexo', '').strip()
-        tamano = request.form.get('tamano', '').strip()
-        descripcion = request.form.get('descripcion', '').strip()
-        vacunado = request.form.get('vacunado') == 'on'
-        esterilizado = request.form.get('esterilizado') == 'on'
+        valores = _leer_formulario_mascota()
+        errores, datos = _validar_mascota(valores, request.files.get('foto'))
+        if errores:
+            flash(MENSAJE_REVISAR, 'danger')
+            return _formulario_nueva(valores, errores, 400)
 
-        # Validaciones básicas
-        if not nombre or len(nombre) < 2:
-            flash('El nombre debe tener al menos 2 caracteres.', 'danger')
-            return render_template('mascotas/admin/form.html', mascota=None)
-
-        if not especie or len(especie) < 2:
-            flash('La especie es obligatoria.', 'danger')
-            return render_template('mascotas/admin/form.html', mascota=None)
-
-        if not descripcion or len(descripcion) < 10:
-            flash('La descripción debe tener al menos 10 caracteres.', 'danger')
-            return render_template('mascotas/admin/form.html', mascota=None)
-
-        # Manejar foto: prioridad archivo > URL
-        foto_url = None
-        foto = request.files.get('foto')
-        if foto and foto.filename:
-            foto_url = upload_to_s3(foto)
-            if not foto_url:
-                flash('Formato de imagen no permitido', 'danger')
-                return redirect(request.url)
-        else:
-            foto_url = request.form.get('foto_url', '').strip() or None
-            if foto_url and not es_url_imagen_valida(foto_url):
-                flash('La URL de la foto debe empezar por https://', 'danger')
-                return render_template('mascotas/admin/form.html', mascota=None)
-        # Convertir edad a entero
-        try:
-            edad_aprox = int(edad_aprox) if edad_aprox else None
-            if edad_aprox is not None and (edad_aprox < 0 or edad_aprox > 30):
-                flash('La edad debe estar entre 0 y 30 años.', 'danger')
-                return render_template('mascotas/admin/form.html', mascota=None)
-        except ValueError:
-            flash('La edad debe ser un número válido.', 'danger')
-            return render_template('mascotas/admin/form.html', mascota=None)
-
-        # Crear nueva mascota
-        nueva_mascota = Mascota(
-            nombre=nombre,
-            especie=especie,
-            descripcion=descripcion,
-            raza=raza if raza else None,
-            edad_aprox=edad_aprox,
-            sexo=sexo if sexo else None,
-            tamano=tamano if tamano else None,
-            foto_url=foto_url if foto_url else None,
-            vacunado=vacunado,
-            esterilizado=esterilizado,
-            estado='disponible'
-        )
-
+        nueva_mascota = Mascota(**datos, estado='disponible')
         try:
             db.session.add(nueva_mascota)
             db.session.commit()
-            flash(f'Mascota "{nombre}" creada exitosamente.', 'success')
+            flash(f'Mascota "{nueva_mascota.nombre}" creada exitosamente.', 'success')
             return redirect(url_for('mascotas.admin_lista'))
         except Exception:
             db.session.rollback()
             current_app.logger.exception('Error al crear la mascota')
             flash('No se pudo crear la mascota. Inténtalo de nuevo.', 'danger')
-            return render_template('mascotas/admin/form.html', mascota=None)
+            return _formulario_nueva(valores)
 
     # GET: Mostrar formulario vacío
-    return render_template('mascotas/admin/form.html', mascota=None)
+    return _formulario_nueva()
 
 
-def _formulario_edicion(mascota):
-    """Formulario de edición con las acciones de estado que permite la regla de adopción."""
+def _leer_formulario_mascota():
+    """Valores enviados en el formulario de mascota (texto sin espacios alrededor)."""
+    valores = {campo: request.form.get(campo, '').strip() for campo in CAMPOS_TEXTO_MASCOTA}
+    valores.update({campo: request.form.get(campo) == 'on' for campo in CASILLAS_MASCOTA})
+    return valores
+
+
+def _valores_de_mascota(mascota):
+    """Valores del formulario a partir de la mascota guardada (los campos NULL, vacíos)."""
+    valores = {campo: getattr(mascota, campo) or '' for campo in CAMPOS_TEXTO_MASCOTA}
+    valores['edad_aprox'] = '' if mascota.edad_aprox is None else str(mascota.edad_aprox)
+    valores.update({campo: bool(getattr(mascota, campo)) for campo in CASILLAS_MASCOTA})
+    return valores
+
+
+def _validar_mascota(valores, foto):
+    """
+    Valida el formulario de mascota.
+
+    La foto subida tiene prioridad sobre la URL, que entonces no se valida.
+    Si todo lo demás es válido, sube la foto: su formato se comprueba al
+    subirla, así que no queda ninguna subida huérfana por un error en otro
+    campo.
+
+    Returns:
+        tuple: (errores, datos). `errores` es un dict campo → mensaje (el
+        contrato `valores`/`errores`); `datos`, los atributos de la mascota,
+        solo válidos si no hay errores.
+    """
+    errores = {}
+    if len(valores['nombre']) < 2:
+        errores['nombre'] = 'El nombre debe tener al menos 2 caracteres.'
+    if len(valores['especie']) < 2:
+        errores['especie'] = 'La especie es obligatoria.'
+    if len(valores['descripcion']) < 10:
+        errores['descripcion'] = 'La descripción debe tener al menos 10 caracteres.'
+
+    edad = None
+    if valores['edad_aprox']:
+        try:
+            edad = int(valores['edad_aprox'])
+        except ValueError:
+            errores['edad_aprox'] = 'La edad debe ser un número válido.'
+        else:
+            if not EDAD_MINIMA <= edad <= EDAD_MAXIMA:
+                errores['edad_aprox'] = f'La edad debe estar entre {EDAD_MINIMA} y {EDAD_MAXIMA} años.'
+
+    hay_archivo = bool(foto and foto.filename)
+    foto_url = valores['foto_url'] or None
+    if not hay_archivo and foto_url and not es_url_imagen_valida(foto_url):
+        errores['foto_url'] = 'La URL de la foto debe empezar por https://'
+
+    if not errores and hay_archivo:
+        foto_url = upload_to_s3(foto)
+        if not foto_url:
+            errores['foto'] = 'Formato de imagen no permitido'
+
+    datos = {
+        'nombre': valores['nombre'],
+        'especie': valores['especie'],
+        'raza': valores['raza'] or None,
+        'edad_aprox': edad,
+        'sexo': valores['sexo'] or None,
+        'tamano': valores['tamano'] or None,
+        'descripcion': valores['descripcion'],
+        'foto_url': foto_url,
+        'vacunado': valores['vacunado'],
+        'esterilizado': valores['esterilizado'],
+    }
+    return errores, datos
+
+
+def _contexto_formulario(valores, errores):
+    """
+    Contexto común del formulario de mascota.
+
+    `foto_descartada` avisa de que hay que volver a elegir la foto: el
+    navegador no puede conservar un archivo al volver a pintar el formulario.
+    """
+    foto = request.files.get('foto')
+    return {
+        'valores': valores,
+        'errores': errores or {},
+        'foto_descartada': bool(foto and foto.filename),
+    }
+
+
+def _formulario_nueva(valores=None, errores=None, codigo=200):
+    """Formulario de alta con los valores enviados y los errores por campo."""
+    return render_template('mascotas/admin/form.html', mascota=None,
+                           **_contexto_formulario(valores or {}, errores)), codigo
+
+
+def _formulario_edicion(mascota, valores=None, errores=None, codigo=200):
+    """
+    Formulario de edición con las acciones de estado que permite la regla de
+    adopción. Los valores enviados tienen prioridad sobre los guardados.
+    """
     return render_template(
         'mascotas/admin/form.html',
         mascota=mascota,
+        **_contexto_formulario(valores or _valores_de_mascota(mascota), errores),
         pendientes=adopciones.pendientes_por_mascota([mascota.id]).get(mascota.id, 0),
         puede_volver_a_disponible=adopciones.puede_volver_a_disponible(mascota),
-    )
+    ), codigo
 
 
 @bp.route('/admin/editar/<int:mascota_id>', methods=['GET', 'POST'])
@@ -285,79 +336,28 @@ def admin_editar(mascota_id):
     mascota = db.get_or_404(Mascota, mascota_id)
 
     if request.method == 'POST':
-        # Obtener datos del formulario
-        nombre = request.form.get('nombre', '').strip()
-        especie = request.form.get('especie', '').strip()
-        raza = request.form.get('raza', '').strip()
-        edad_aprox = request.form.get('edad_aprox', '')
-        sexo = request.form.get('sexo', '').strip()
-        tamano = request.form.get('tamano', '').strip()
-        descripcion = request.form.get('descripcion', '').strip()
-        vacunado = request.form.get('vacunado') == 'on'
-        esterilizado = request.form.get('esterilizado') == 'on'
+        valores = _leer_formulario_mascota()
+        errores, datos = _validar_mascota(valores, request.files.get('foto'))
+        if errores:
+            flash(MENSAJE_REVISAR, 'danger')
+            return _formulario_edicion(mascota, valores, errores, 400)
 
-        # Validaciones básicas
-        if not nombre or len(nombre) < 2:
-            flash('El nombre debe tener al menos 2 caracteres.', 'danger')
-            return _formulario_edicion(mascota)
-
-        if not especie or len(especie) < 2:
-            flash('La especie es obligatoria.', 'danger')
-            return _formulario_edicion(mascota)
-
-        if not descripcion or len(descripcion) < 10:
-            flash('La descripción debe tener al menos 10 caracteres.', 'danger')
-            return _formulario_edicion(mascota)
-
-        # Manejar foto: prioridad archivo > URL
-        foto_url = None
-        foto = request.files.get('foto')
-        if foto and foto.filename:
-            foto_url = upload_to_s3(foto)
-            if not foto_url:
-                flash('Formato de imagen no permitido', 'danger')
-                return redirect(request.url)
+        # Una foto nueva (subida o URL distinta) sustituye a la anterior en S3
+        if datos['foto_url'] != mascota.foto_url:
             delete_from_s3(mascota.foto_url)
-        else:
-            foto_url = request.form.get('foto_url', '').strip() or None
-            if foto_url and not es_url_imagen_valida(foto_url):
-                flash('La URL de la foto debe empezar por https://', 'danger')
-                return _formulario_edicion(mascota)
-            # Si cambió la URL, borrar la antigua de S3
-            if foto_url != mascota.foto_url:
-                delete_from_s3(mascota.foto_url)
 
-        # Convertir edad a entero
-        try:
-            edad_aprox = int(edad_aprox) if edad_aprox else None
-            if edad_aprox is not None and (edad_aprox < 0 or edad_aprox > 30):
-                flash('La edad debe estar entre 0 y 30 años.', 'danger')
-                return _formulario_edicion(mascota)
-        except ValueError:
-            flash('La edad debe ser un número válido.', 'danger')
-            return _formulario_edicion(mascota)
-
-        # Actualizar datos
-        mascota.nombre = nombre
-        mascota.especie = especie
-        mascota.raza = raza if raza else None
-        mascota.edad_aprox = edad_aprox
-        mascota.sexo = sexo if sexo else None
-        mascota.tamano = tamano if tamano else None
-        mascota.descripcion = descripcion
-        mascota.foto_url = foto_url if foto_url else None
-        mascota.vacunado = vacunado
-        mascota.esterilizado = esterilizado
+        for atributo, valor in datos.items():
+            setattr(mascota, atributo, valor)
 
         try:
             db.session.commit()
-            flash(f'Mascota "{nombre}" actualizada exitosamente.', 'success')
+            flash(f'Mascota "{datos["nombre"]}" actualizada exitosamente.', 'success')
             return redirect(url_for('mascotas.admin_lista'))
         except Exception:
             db.session.rollback()
             current_app.logger.exception('Error al actualizar la mascota')
             flash('No se pudo actualizar la mascota. Inténtalo de nuevo.', 'danger')
-            return _formulario_edicion(mascota)
+            return _formulario_edicion(mascota, valores)
 
     # GET: Mostrar formulario con datos actuales
     return _formulario_edicion(mascota)

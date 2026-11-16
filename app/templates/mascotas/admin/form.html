@@ -25,30 +25,36 @@
                         <!-- Nombre -->
                         <div class="col-md-4 mb-3">
                             <label for="nombre" class="form-label">Nombre *</label>
-                            <input type="text" class="form-control" id="nombre" name="nombre"
-                                value="{{ mascota.nombre if mascota else '' }}" placeholder="Ej: Max" required>
+                            <input type="text" class="form-control{% if errores.nombre %} is-invalid{% endif %}" id="nombre" name="nombre"
+                                value="{{ valores.nombre or '' }}" placeholder="Ej: Max" required
+                                {%- if errores.nombre %} aria-invalid="true" aria-describedby="nombre-error"{% endif %}>
+                            {% if errores.nombre %}<div id="nombre-error" class="invalid-feedback">{{ errores.nombre }}</div>{% endif %}
                         </div>
 
                         <!-- Especie -->
                         <div class="col-md-4 mb-3">
                             <label for="especie" class="form-label">Especie *</label>
-                            <input type="text" class="form-control" id="especie" name="especie"
-                                value="{{ mascota.especie if mascota else '' }}" placeholder="Ej: Perro, Gato" required>
+                            <input type="text" class="form-control{% if errores.especie %} is-invalid{% endif %}" id="especie" name="especie"
+                                value="{{ valores.especie or '' }}" placeholder="Ej: Perro, Gato" required
+                                {%- if errores.especie %} aria-invalid="true" aria-describedby="especie-error"{% endif %}>
+                            {% if errores.especie %}<div id="especie-error" class="invalid-feedback">{{ errores.especie }}</div>{% endif %}
                         </div>
 
                         <!-- Raza -->
                         <div class="col-md-4 mb-3">
                             <label for="raza" class="form-label">Raza</label>
                             <input type="text" class="form-control" id="raza" name="raza"
-                                value="{{ mascota.raza or '' }}" placeholder="Ej: Labrador, Mestizo">
+                                value="{{ valores.raza or '' }}" placeholder="Ej: Labrador, Mestizo">
                         </div>
 
                         <!-- Edad -->
                         <div class="col-md-4 mb-3">
                             <label for="edad_aprox" class="form-label">Edad Aproximada (años)</label>
-                            <input type="number" class="form-control" id="edad_aprox" name="edad_aprox"
-                                value="{{ mascota.edad_aprox if mascota and mascota.edad_aprox is not none else '' }}" placeholder="Ej: 3" min="0"
-                                max="30">
+                            <input type="number" class="form-control{% if errores.edad_aprox %} is-invalid{% endif %}" id="edad_aprox" name="edad_aprox"
+                                value="{{ valores.edad_aprox or '' }}" placeholder="Ej: 3" min="0"
+                                max="30"
+                                {%- if errores.edad_aprox %} aria-invalid="true" aria-describedby="edad_aprox-error"{% endif %}>
+                            {% if errores.edad_aprox %}<div id="edad_aprox-error" class="invalid-feedback">{{ errores.edad_aprox }}</div>{% endif %}
                         </div>
 
                         <!-- Sexo -->
@@ -56,9 +62,9 @@
                             <label for="sexo" class="form-label">Sexo</label>
                             <select class="form-select" id="sexo" name="sexo">
                                 <option value="">Sin especificar</option>
-                                <option value="Macho" {% if mascota and mascota.sexo=='Macho' %}selected{% endif %}>
+                                <option value="Macho" {% if valores.sexo=='Macho' %}selected{% endif %}>
                                     Macho</option>
-                                <option value="Hembra" {% if mascota and mascota.sexo=='Hembra' %}selected{% endif %}>
+                                <option value="Hembra" {% if valores.sexo=='Hembra' %}selected{% endif %}>
                                     Hembra</option>
                             </select>
                         </div>
@@ -68,11 +74,11 @@
                             <label for="tamano" class="form-label">Tamaño</label>
                             <select class="form-select" id="tamano" name="tamano">
                                 <option value="">Sin especificar</option>
-                                <option value="Pequeño" {% if mascota and mascota.tamano=='Pequeño' %}selected{% endif
+                                <option value="Pequeño" {% if valores.tamano=='Pequeño' %}selected{% endif
                                     %}>Pequeño</option>
-                                <option value="Mediano" {% if mascota and mascota.tamano=='Mediano' %}selected{% endif
+                                <option value="Mediano" {% if valores.tamano=='Mediano' %}selected{% endif
                                     %}>Mediano</option>
-                                <option value="Grande" {% if mascota and mascota.tamano=='Grande' %}selected{% endif %}>
+                                <option value="Grande" {% if valores.tamano=='Grande' %}selected{% endif %}>
                                     Grande</option>
                             </select>
                         </div>
@@ -80,23 +86,32 @@
                         <!-- Descripción -->
                         <div class="col-12 mb-3">
                             <label for="descripcion" class="form-label">Descripción *</label>
-                            <textarea class="form-control" id="descripcion" name="descripcion" rows="4"
+                            <textarea class="form-control{% if errores.descripcion %} is-invalid{% endif %}" id="descripcion" name="descripcion" rows="4"
                                 placeholder="Cuéntanos sobre su personalidad, historia, etc."
-                                required>{{ mascota.descripcion if mascota else '' }}</textarea>
-                            <small class="text-muted">Mínimo 10 caracteres</small>
+                                required
+                                {%- if errores.descripcion %} aria-invalid="true" aria-describedby="descripcion-error descripcion-ayuda"{% endif %}>{{ valores.descripcion or '' }}</textarea>
+                            {% if errores.descripcion %}<div id="descripcion-error" class="invalid-feedback">{{ errores.descripcion }}</div>{% endif %}
+                            <small id="descripcion-ayuda" class="text-muted">Mínimo 10 caracteres</small>
                         </div>
 
                         <!-- Foto -->
                         <div class="col-12 mb-3">
                             <label for="foto" class="form-label">Foto de la mascota</label>
-                            <input type="file" class="form-control" id="foto" name="foto" accept="image/*">
+                            <input type="file" class="form-control{% if errores.foto %} is-invalid{% endif %}" id="foto" name="foto" accept="image/*"
+                                {%- set describe_foto = (['foto-error'] if errores.foto else []) + (['foto-aviso'] if foto_descartada else []) %}
+                                {%- if errores.foto %} aria-invalid="true"{% endif %}
+                                {%- if describe_foto %} aria-describedby="{{ describe_foto|join(' ') }}"{% endif %}>
+                            {% if errores.foto %}<div id="foto-error" class="invalid-feedback">{{ errores.foto }}</div>{% endif %}
+                            {% if foto_descartada %}<div id="foto-aviso" class="form-text">Vuelve a seleccionar la foto: el navegador no la conserva al mostrar el formulario de nuevo.</div>{% endif %}
 
                             <div class="mt-2">
                                 <label for="foto_url" class="form-label text-muted">O proporciona una URL
                                     externa:</label>
-                                <input type="url" class="form-control" id="foto_url" name="foto_url"
-                                    value="{{ mascota.foto_url or '' }}"
-                                    placeholder="https://ejemplo.com/foto.jpg">
+                                <input type="url" class="form-control{% if errores.foto_url %} is-invalid{% endif %}" id="foto_url" name="foto_url"
+                                    value="{{ valores.foto_url or '' }}"
+                                    placeholder="https://ejemplo.com/foto.jpg"
+                                    {%- if errores.foto_url %} aria-invalid="true" aria-describedby="foto_url-error"{% endif %}>
+                                {% if errores.foto_url %}<div id="foto_url-error" class="invalid-feedback">{{ errores.foto_url }}</div>{% endif %}
                             </div>
 
                             {% if mascota and mascota.foto_url %}
@@ -112,7 +127,7 @@
                         <div class="col-md-6 mb-3">
                             <div class="form-check">
                                 <input class="form-check-input" type="checkbox" id="vacunado" name="vacunado" {% if
-                                    mascota and mascota.vacunado %}checked{% endif %}>
+                                    valores.vacunado %}checked{% endif %}>
                                 <label class="form-check-label" for="vacunado">
                                     Vacunado
                                 </label>
@@ -123,7 +138,7 @@
                         <div class="col-md-6 mb-3">
                             <div class="form-check">
                                 <input class="form-check-input" type="checkbox" id="esterilizado" name="esterilizado" {%
-                                    if mascota and mascota.esterilizado %}checked{% endif %}>
+                                    if valores.esterilizado %}checked{% endif %}>
                                 <label class="form-check-label" for="esterilizado">
                                     Esterilizado
                                 </label>

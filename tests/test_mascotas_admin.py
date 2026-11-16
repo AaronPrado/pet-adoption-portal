@@ -4,6 +4,7 @@ y de los filtros del catálogo que no cubre test_mascotas.py.
 """
 
 import io
+import re
 from html.parser import HTMLParser
 
 import pytest
@@ -99,14 +100,59 @@ def mascota_sin_opcionales(app):
 
 
 VALIDACIONES = [
-    ({'nombre': 'R'}, 'El nombre debe tener al menos 2 caracteres.'),
-    ({'especie': ''}, 'La especie es obligatoria.'),
-    ({'descripcion': 'Corta'}, 'La descripción debe tener al menos 10 caracteres.'),
-    ({'edad_aprox': '31'}, 'La edad debe estar entre 0 y 30 años.'),
-    ({'edad_aprox': '-1'}, 'La edad debe estar entre 0 y 30 años.'),
-    ({'edad_aprox': 'abc'}, 'La edad debe ser un número válido.'),
-    ({'foto_url': 'http://inseguro.com/foto.jpg'}, 'La URL de la foto debe empezar por https://'),
+    ({'nombre': 'R'}, 'nombre', 'El nombre debe tener al menos 2 caracteres.'),
+    ({'nombre': '   '}, 'nombre', 'El nombre debe tener al menos 2 caracteres.'),
+    ({'especie': ''}, 'especie', 'La especie es obligatoria.'),
+    ({'descripcion': 'Corta'}, 'descripcion', 'La descripción debe tener al menos 10 caracteres.'),
+    ({'edad_aprox': '31'}, 'edad_aprox', 'La edad debe estar entre 0 y 30 años.'),
+    ({'edad_aprox': '-1'}, 'edad_aprox', 'La edad debe estar entre 0 y 30 años.'),
+    ({'edad_aprox': 'abc'}, 'edad_aprox', 'La edad debe ser un número válido.'),
+    ({'foto_url': 'http://inseguro.com/foto.jpg'}, 'foto_url', 'La URL de la foto debe empezar por https://'),
 ]
+
+# Ficha completa distinta de la de mascota_disponible, para comprobar que tras
+# un error se vuelve a mostrar lo enviado y no lo guardado
+FICHA_ENVIADA = {
+    'nombre': 'Rocky',
+    'especie': 'Gato',
+    'raza': 'Siamés',
+    'edad_aprox': '7',
+    'sexo': 'Hembra',
+    'tamano': 'Pequeño',
+    'descripcion': 'Gata tranquila que busca un hogar',
+    'foto_url': 'https://ejemplo.com/rocky.jpg',
+    'vacunado': 'on',
+    'esterilizado': 'on',
+}
+
+CASILLAS = ('vacunado', 'esterilizado')
+
+
+def casillas_marcadas(html):
+    """Nombres de los checkbox marcados en el HTML."""
+    return set(re.findall(r'<input[^>]*type="checkbox"[^>]*name="(\w+)"[^>]*\bchecked\b', html))
+
+
+def campos_invalidos(html):
+    """Campos marcados como no válidos → ids de los elementos que los describen."""
+    return dict(re.findall(r'name="(\w+)"[^>]*aria-invalid="true" aria-describedby="([\w -]+)"', html))
+
+
+def assert_conserva(html, enviados):
+    """El formulario vuelve a mostrar los valores enviados (sin espacios alrededor)."""
+    campos = campos_del_formulario(html)
+    for nombre, valor in enviados.items():
+        if nombre not in CASILLAS:
+            assert campos[nombre] == valor.strip(), nombre
+    assert casillas_marcadas(html) == {c for c in CASILLAS if c in enviados}
+
+
+def assert_error_en_campo(html, campo, mensaje):
+    """El error aparece junto a su campo y el campo apunta a él."""
+    assert f'<div id="{campo}-error" class="invalid-feedback">{mensaje}</div>' in html
+    invalidos = campos_invalidos(html)
+    assert list(invalidos) == [campo]
+    assert f'{campo}-error' in invalidos[campo].split()
 
 
 class TestCatalogo:
@@ -144,13 +190,76 @@ class TestAdminLista:
 
 class TestCrearMascota:
 
-    @pytest.mark.parametrize('cambios, mensaje', VALIDACIONES)
-    def test_datos_invalidos_no_crean_mascota(self, client, auth_headers_admin, cambios, mensaje):
-        response = client.post('/mascotas/admin/nueva', data=datos_mascota(**cambios))
+    @pytest.mark.parametrize('cambios, campo, mensaje', VALIDACIONES)
+    def test_datos_invalidos_no_crean_mascota(self, client, auth_headers_admin, cambios, campo, mensaje):
+        """Regresión P-02: cada validación responde 400 con el error junto a su campo y lo escrito."""
+        enviados = {**FICHA_ENVIADA, **cambios}
+        response = client.post('/mascotas/admin/nueva', data=enviados)
 
-        assert response.status_code == 200
-        assert mensaje in response.data.decode()
+        html = response.data.decode()
+        assert response.status_code == 400
+        assert_error_en_campo(html, campo, mensaje)
+        assert_conserva(html, enviados)
         assert Mascota.query.count() == 0
+
+    def test_conserva_casillas_desmarcadas_y_opcionales_vacios(self, client, auth_headers_admin):
+        enviados = datos_mascota(nombre='R', raza='', sexo='', tamano='', foto_url='')
+        html = client.post('/mascotas/admin/nueva', data=enviados).data.decode()
+
+        assert_conserva(html, enviados)
+
+    def test_muestra_todos_los_errores_a_la_vez(self, client, auth_headers_admin):
+        response = client.post('/mascotas/admin/nueva',
+                               data=datos_mascota(nombre='R', especie='', edad_aprox='abc'))
+
+        html = response.data.decode()
+        assert response.status_code == 400
+        assert set(campos_invalidos(html)) == {'nombre', 'especie', 'edad_aprox'}
+        assert 'Revisa los campos marcados.' in html
+
+    def test_con_errores_no_sube_la_foto(self, client, auth_headers_admin, s3_falso):
+        datos = datos_mascota(nombre='R', foto=(io.BytesIO(b'png'), 'rocky.png'))
+        response = client.post('/mascotas/admin/nueva', data=datos, content_type='multipart/form-data')
+
+        assert response.status_code == 400
+        assert s3_falso['subidas'] == []
+
+    def test_con_archivo_no_se_valida_la_url(self, client, auth_headers_admin, s3_falso):
+        """El archivo tiene prioridad sobre la URL: una URL no válida no impide subirlo."""
+        datos = datos_mascota(foto_url='http://inseguro.com/x.jpg', foto=(io.BytesIO(b'png'), 'rocky.png'))
+        response = client.post('/mascotas/admin/nueva', data=datos, content_type='multipart/form-data')
+
+        assert response.status_code == 302
+        assert Mascota.query.one().foto_url == s3_falso['url']
+
+    def test_get_sin_errores_ni_valores(self, client, auth_headers_admin):
+        html = client.get('/mascotas/admin/nueva').data.decode()
+
+        assert 'aria-invalid' not in html
+        assert 'is-invalid' not in html
+        assert set(campos_del_formulario(html).values()) == {''}
+        assert casillas_marcadas(html) == set()
+        assert 'foto-aviso' not in html
+
+    def test_error_con_archivo_pide_volver_a_elegirlo(self, client, auth_headers_admin, s3_falso):
+        """El navegador no conserva el archivo: se avisa junto al campo de foto."""
+        datos = datos_mascota(nombre='R', foto=(io.BytesIO(b'png'), 'rocky.png'))
+        html = client.post('/mascotas/admin/nueva', data=datos, content_type='multipart/form-data').data.decode()
+
+        assert '<div id="foto-aviso" class="form-text">Vuelve a seleccionar la foto' in html
+        assert re.search(r'name="foto"[^>]*aria-describedby="foto-aviso"', html)
+
+    def test_foto_rechazada_describe_error_y_aviso(self, client, auth_headers_admin, s3_falso):
+        s3_falso['url'] = None
+        datos = datos_mascota(foto=(io.BytesIO(b'x'), 'rocky.png'))
+        html = client.post('/mascotas/admin/nueva', data=datos, content_type='multipart/form-data').data.decode()
+
+        assert re.search(r'name="foto"[^>]*aria-invalid="true" aria-describedby="foto-error foto-aviso"', html)
+
+    def test_error_sin_archivo_no_avisa_de_la_foto(self, client, auth_headers_admin):
+        html = client.post('/mascotas/admin/nueva', data=datos_mascota(nombre='R')).data.decode()
+
+        assert 'foto-aviso' not in html
 
     def test_get_muestra_formulario(self, client, auth_headers_admin):
         response = client.get('/mascotas/admin/nueva')
@@ -165,22 +274,40 @@ class TestCrearMascota:
         assert s3_falso['subidas'] == ['rocky.png']
         assert Mascota.query.one().foto_url == s3_falso['url']
 
-    def test_foto_rechazada_vuelve_al_formulario(self, client, auth_headers_admin, s3_falso):
+    def test_foto_rechazada_conserva_los_datos(self, client, auth_headers_admin, s3_falso):
+        """Regresión P-02: una imagen no válida ya no redirige ni vacía el formulario."""
         s3_falso['url'] = None
-        datos = datos_mascota(foto=(io.BytesIO(b'no es imagen'), 'rocky.png'))
+        datos = {**FICHA_ENVIADA, 'foto': (io.BytesIO(b'no es imagen'), 'rocky.png')}
         response = client.post('/mascotas/admin/nueva', data=datos, content_type='multipart/form-data')
 
-        assert response.status_code == 302
-        assert response.headers['Location'].endswith('/mascotas/admin/nueva')
+        html = response.data.decode()
+        assert response.status_code == 400
+        assert_error_en_campo(html, 'foto', 'Formato de imagen no permitido')
+        assert_conserva(html, FICHA_ENVIADA)
         assert Mascota.query.count() == 0
+
+    @pytest.mark.parametrize('nombre, contenido', [
+        ('rocky.txt', b'\x89PNG\r\n\x1a\n'),
+        ('rocky.png', b'<html></html>'),
+    ], ids=['extension', 'contenido'])
+    def test_foto_no_valida_conserva_los_datos(self, client, auth_headers_admin, nombre, contenido):
+        """Con la validación real de app/s3.py, que rechaza antes de llamar a S3."""
+        datos = {**FICHA_ENVIADA, 'foto': (io.BytesIO(contenido), nombre)}
+        response = client.post('/mascotas/admin/nueva', data=datos, content_type='multipart/form-data')
+
+        html = response.data.decode()
+        assert response.status_code == 400
+        assert_error_en_campo(html, 'foto', 'Formato de imagen no permitido')
+        assert_conserva(html, FICHA_ENVIADA)
 
     def test_error_de_base_de_datos_muestra_mensaje_generico(self, client, auth_headers_admin, commit_falla):
         commit_falla()
-        response = client.post('/mascotas/admin/nueva', data=datos_mascota())
+        response = client.post('/mascotas/admin/nueva', data=FICHA_ENVIADA)
 
         html = response.data.decode()
         assert 'No se pudo crear la mascota' in html
         assert 'fallo simulado' not in html
+        assert_conserva(html, FICHA_ENVIADA)
 
 
 class TestEditarMascota:
@@ -188,13 +315,44 @@ class TestEditarMascota:
     def url(self, mascota):
         return f'/mascotas/admin/editar/{mascota.id}'
 
-    @pytest.mark.parametrize('cambios, mensaje', VALIDACIONES)
-    def test_datos_invalidos_no_modifican(self, client, auth_headers_admin, mascota_disponible, cambios, mensaje):
-        response = client.post(self.url(mascota_disponible), data=datos_mascota(**cambios))
+    @pytest.mark.parametrize('cambios, campo, mensaje', VALIDACIONES)
+    def test_datos_invalidos_no_modifican(self, client, auth_headers_admin, mascota_disponible,
+                                          cambios, campo, mensaje):
+        """Regresión P-02: tras un error se muestra lo enviado, no lo guardado, con 400."""
+        enviados = {**FICHA_ENVIADA, **cambios}
+        response = client.post(self.url(mascota_disponible), data=enviados)
 
-        assert mensaje in response.data.decode()
+        html = response.data.decode()
+        assert response.status_code == 400
+        assert_error_en_campo(html, campo, mensaje)
+        assert_conserva(html, enviados)
         db.session.refresh(mascota_disponible)
         assert mascota_disponible.nombre == 'Cerbero'
+
+    def test_error_mantiene_las_acciones_de_estado(self, client, auth_headers_admin, mascota_disponible):
+        html = client.post(self.url(mascota_disponible), data=datos_mascota(nombre='R')).data.decode()
+
+        assert f'/mascotas/admin/adoptada-fuera/{mascota_disponible.id}' in html
+
+    def test_casillas_desmarcadas_con_error_siguen_desmarcadas(self, client, auth_headers_admin,
+                                                             mascota_disponible):
+        mascota_disponible.vacunado = True
+        mascota_disponible.esterilizado = True
+        db.session.commit()
+
+        html = client.post(self.url(mascota_disponible), data=datos_mascota(nombre='R')).data.decode()
+
+        assert casillas_marcadas(html) == set()
+
+    def test_get_marca_las_casillas_guardadas(self, client, auth_headers_admin, mascota_disponible):
+        mascota_disponible.vacunado = True
+        mascota_disponible.esterilizado = False
+        db.session.commit()
+
+        html = client.get(self.url(mascota_disponible)).data.decode()
+
+        assert casillas_marcadas(html) == {'vacunado'}
+        assert 'aria-invalid' not in html
 
     def test_get_muestra_datos_actuales(self, client, auth_headers_admin, mascota_disponible):
         response = client.get(self.url(mascota_disponible))
@@ -242,14 +400,20 @@ class TestEditarMascota:
         assert s3_falso['borrados'] == [foto_anterior]
 
     def test_foto_rechazada_conserva_la_anterior(self, client, auth_headers_admin, mascota_disponible, s3_falso):
+        """Regresión P-02: no redirige; muestra lo editado y no toca la foto guardada."""
         foto_anterior = mascota_disponible.foto_url
         s3_falso['url'] = None
-        datos = datos_mascota(foto=(io.BytesIO(b'x'), 'nueva.png'))
+        enviados = {**FICHA_ENVIADA, 'foto_url': foto_anterior}
+        datos = {**enviados, 'foto': (io.BytesIO(b'x'), 'nueva.png')}
         response = client.post(self.url(mascota_disponible), data=datos, content_type='multipart/form-data')
 
-        assert response.status_code == 302
+        html = response.data.decode()
+        assert response.status_code == 400
+        assert_error_en_campo(html, 'foto', 'Formato de imagen no permitido')
+        assert_conserva(html, enviados)
         db.session.refresh(mascota_disponible)
         assert mascota_disponible.foto_url == foto_anterior
+        assert mascota_disponible.nombre == 'Cerbero'
         assert s3_falso['borrados'] == []
 
     def test_cambiar_url_borra_la_foto_anterior(self, client, auth_headers_admin, mascota_disponible, s3_falso):
@@ -289,10 +453,12 @@ class TestEditarMascota:
     def test_error_de_base_de_datos_muestra_mensaje_generico(self, client, auth_headers_admin,
                                                             mascota_disponible, s3_falso, commit_falla):
         commit_falla()
-        response = client.post(self.url(mascota_disponible),
-                               data=datos_mascota(foto_url=mascota_disponible.foto_url))
+        enviados = {**FICHA_ENVIADA, 'foto_url': mascota_disponible.foto_url}
+        response = client.post(self.url(mascota_disponible), data=enviados)
 
-        assert 'No se pudo actualizar la mascota' in response.data.decode()
+        html = response.data.decode()
+        assert 'No se pudo actualizar la mascota' in html
+        assert_conserva(html, enviados)
 
 
 class TestEliminarMascota:
