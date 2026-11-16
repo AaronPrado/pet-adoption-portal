@@ -95,8 +95,9 @@ docker compose exec -T postgres psql -U admin -d adopciones_db < scripts_bd/02_s
 ```
 
 Crea mascotas, solicitudes y usuarios con la contraseña `password123`, entre
-ellos el administrador `admin@refugio.com`. Es solo para desarrollo local: en
-cualquier otro entorno crea el administrador con
+ellos el administrador `admin@refugio.com`. Sus cuestionarios y estados siguen
+las reglas de la app, y `tests/test_seed.py` lo comprueba. Es solo para
+desarrollo local: en cualquier otro entorno crea el administrador con
 
 ```bash
 flask --app run crear-admin
