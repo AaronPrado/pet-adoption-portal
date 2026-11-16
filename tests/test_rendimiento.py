@@ -68,6 +68,39 @@ class TestNMasUno:
 
         assert consultas_en(client, '/solicitudes/mis-solicitudes') == con_1
 
+    @pytest.mark.parametrize('ruta', ['/solicitudes/admin/revisar/{}', '/solicitudes/detalle/{}'])
+    def test_revision_y_detalle_no_crecen_con_las_pendientes(self, client, auth_headers_admin,
+                                                            solicitud_pendiente, ruta):
+        """Las otras pendientes de la mascota se cuentan con una consulta agregada."""
+        url = ruta.format(solicitud_pendiente.id)
+        mascota_id = solicitud_pendiente.mascota_id
+
+        def otras(n, prefijo):
+            for i in range(n):
+                usuario = Usuario(email=f'{prefijo}{i}@test.com', nombre=f'Usuario {i}', password='password123')
+                db.session.add(usuario)
+                db.session.flush()
+                db.session.add(Solicitud(usuario_id=usuario.id, mascota_id=mascota_id))
+            db.session.commit()
+            db.session.expunge_all()
+
+        otras(1, 'a')
+        con_1 = consultas_en(client, url)
+        otras(5, 'b')
+
+        assert consultas_en(client, url) == con_1
+        # Usuario de la sesión, solicitud con mascota y solicitante, pendientes y revisor
+        assert con_1 <= 4
+
+    def test_revision_de_una_resuelta(self, client, auth_headers_admin, solicitud_pendiente, usuario_admin):
+        solicitud_pendiente.registrar_revision('aprobada', usuario_admin.id)
+        db.session.commit()
+        url = f'/solicitudes/admin/revisar/{solicitud_pendiente.id}'
+        db.session.expunge_all()
+
+        # Sin recuento de pendientes; el revisor sí se carga
+        assert consultas_en(client, url) <= 3
+
     def test_catalogo_cuenta_pendientes_con_una_consulta(self, client):
         crear_solicitudes(1)
         con_1 = consultas_en(client, '/mascotas/catalogo')

@@ -279,12 +279,13 @@ app/
 │   ├── auth/            # login.html, registro.html
 │   ├── mascotas/        # catalogo.html, detalle.html
 │   │   └── admin/       # lista.html, form.html
-│   └── solicitudes/     # nueva.html, mis_solicitudes.html, detalle.html
+│   └── solicitudes/     # nueva.html, mis_solicitudes.html, detalle.html,
+│       │                # _respuestas.html (respuestas legibles, parcial)
 │       └── admin/       # lista.html, revisar.html
 │
 └── static/
     ├── css/styles.css
-    └── js/app.js        # Confirmación de borrado y límite de tamaño de la foto (sin JavaScript inline)
+    └── js/app.js        # Confirmaciones `data-confirmar` y límite de tamaño de la foto (sin JavaScript inline)
 
 config.py                # Configuración por entornos
 migrations/              # Migraciones de Alembic
@@ -402,6 +403,47 @@ es una cadena o contiene NUL) y `demasiado largo`.
 El cuestionario se valida antes de buscar la mascota, así que un
 cuestionario inválido da 400 aunque la mascota no exista. La respuesta 201
 devuelve el cuestionario limpio.
+
+**Respuestas legibles (P-10).** El detalle de la solicitud y la revisión del
+admin incluyen el parcial `solicitudes/_respuestas.html`, que recorre
+`cuestionario.SECCIONES` (las preguntas de `PREGUNTAS` agrupadas por su
+atributo `seccion`, en su orden) y muestra cada respuesta con el filtro Jinja
+`respuesta_legible(respuestas, campo)`, registrado en `app/__init__.py`:
+
+- Las opciones salen con su etiqueta («8+» → «Más de 8 horas») y los
+  sí/no guardados como booleano, con la de su opción («Se compromete»).
+- Lo que falta (o está vacío) sale como «Sin respuesta».
+- Un valor que no está en la lista se muestra tal cual, y los datos que no
+  son un dict no dan error. Las claves antiguas que no son preguntas no se
+  muestran.
+
+### Revisión de solicitudes (P-06)
+
+`POST /solicitudes/admin/revisar/<id>` (web, solo admin) recibe:
+
+| Campo | Uso |
+|-------|-----|
+| `accion` | `aprobar` o `rechazar`; otro valor o ninguno → 400 «Acción no válida.» |
+| `comentarios` | Mensaje opcional al aprobar (vacío se guarda como `NULL`) |
+| `motivo` | Obligatorio al rechazar; lo ve el solicitante |
+
+- Los textos se recortan y admiten hasta 2000 caracteres
+  (`cuestionario.LONGITUD_MAXIMA`; los `<textarea>` llevan `maxlength`).
+- Un rechazo sin motivo o un texto demasiado largo responde 400 y vuelve a
+  pintar la revisión con el contrato `valores`/`errores`: lo escrito
+  (recortado a 2001 caracteres), `aria-invalid`, `aria-describedby` con el
+  error y la pista, y `autofocus` en el campo.
+- Aprobar y rechazar son dos formularios, cada uno con `aria-labelledby` a su
+  título. El de aprobar lleva `data-confirmar` (`app/static/js/app.js`) con
+  sus efectos: la mascota pasa a «Adoptada» y cuántas pendientes se
+  rechazarán (`adopciones.pendientes_por_mascota`, sin contar esta). El
+  mismo aviso se ve en la página.
+- Una solicitud ya resuelta se muestra sin formulario: estado, fecha, quién
+  la revisó y el «Mensaje del refugio». Un POST sobre ella avisa «Esta
+  solicitud ya ha sido revisada.» y vuelve a la revisión.
+
+Hasta B1.4 el rechazo usaba el campo `comentarios`; es un formulario web
+interno, así que la API no cambia.
 
 ### Paginación y filtros
 

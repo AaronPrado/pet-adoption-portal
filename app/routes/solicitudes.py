@@ -18,6 +18,12 @@ from app.models import Mascota, Solicitud
 
 # Mensaje general cuando el cuestionario tiene errores en sus campos
 MENSAJE_REVISAR = 'Revisa los campos marcados.'
+MENSAJE_ACCION_NO_VALIDA = 'Acción no válida.'
+MENSAJE_MOTIVO = 'Escribe el motivo del rechazo: el solicitante lo verá.'
+
+# Tope del mensaje al aprobar y del motivo al rechazar (el mismo que las respuestas)
+LONGITUD_MAXIMA = cuestionario.LONGITUD_MAXIMA
+MENSAJE_LARGO = f'El texto no puede superar los {LONGITUD_MAXIMA} caracteres.'
 
 # Crear blueprint
 bp = Blueprint('solicitudes', __name__, url_prefix='/solicitudes')
@@ -128,7 +134,7 @@ def detalle(solicitud_id):
         flash('No tienes permiso para ver esta solicitud.', 'danger')
         return redirect(url_for('solicitudes.mis_solicitudes'))
 
-    return render_template('solicitudes/detalle.html', solicitud=solicitud)
+    return render_template('solicitudes/detalle.html', solicitud=solicitud, secciones=cuestionario.SECCIONES)
 
 
 # Rutas de ADMINISTRACIÓN
@@ -177,35 +183,90 @@ def admin_revisar(solicitud_id):
     """
     Revisar y aprobar/rechazar una solicitud.
 
-    Muestra el detalle completo y permite al admin
-    aprobar o rechazar con comentarios.
+    Muestra el detalle completo y permite al admin aprobar (con un mensaje
+    opcional y confirmación) o rechazar (con motivo obligatorio). Una
+    solicitud ya resuelta se muestra con su estado, sin formulario.
     Solo accesible para administradores.
+
+    Responde 400 ante una acción desconocida, un rechazo sin motivo o un
+    texto de más de `LONGITUD_MAXIMA` caracteres; en estos dos casos
+    conserva lo escrito (recortado) y marca el campo.
 
     Args:
         solicitud_id (int): ID de la solicitud
     """
 
-    solicitud = db.get_or_404(Solicitud, solicitud_id)
+    solicitud = db.get_or_404(Solicitud, solicitud_id, options=[
+        joinedload(Solicitud.mascota), joinedload(Solicitud.usuario)])
 
-    if request.method == 'POST':
-        accion = request.form.get('accion')
-        comentarios = request.form.get('comentarios', '')
+    if request.method == 'GET':
+        return mostrar_revision(solicitud)
 
-        # Aprobar adopta la mascota y rechaza las demás pendientes; rechazar
-        # solo cambia esta solicitud (app.adopciones)
-        try:
-            if accion == 'aprobar':
-                adopciones.aprobar(solicitud, current_user.id, comentarios)
-                flash(f'Solicitud aprobada. {solicitud.usuario.nombre} ha adoptado a {solicitud.mascota.nombre}. '
-                      'Las demás solicitudes pendientes se han rechazado.', 'success')
-            elif accion == 'rechazar':
-                adopciones.rechazar(solicitud, current_user.id, comentarios)
-                flash('Solicitud rechazada.', 'info')
-        except (adopciones.MascotaNoEncontrada, adopciones.SolicitudNoEncontrada):
-            abort(404)
-        except (adopciones.MascotaYaAdoptada, adopciones.SolicitudYaRevisada) as error:
-            flash(error.mensaje, 'warning')
+    accion = request.form.get('accion')
+    if accion not in ('aprobar', 'rechazar'):
+        flash(MENSAJE_ACCION_NO_VALIDA, 'danger')
+        return mostrar_revision(solicitud, codigo=400)
 
-        return redirect(url_for('solicitudes.admin_lista'))
+    # Una resuelta ya no tiene formulario: se avisa antes de validar el motivo
+    # (app.adopciones lo vuelve a comprobar con la fila bloqueada)
+    if not solicitud.esta_pendiente():
+        flash(adopciones.SolicitudYaRevisada.mensaje, 'warning')
+        return redirect(url_for('solicitudes.admin_revisar', solicitud_id=solicitud.id))
 
-    return render_template('solicitudes/admin/revisar.html', solicitud=solicitud)
+    valores = {campo: request.form.get(campo, '') for campo in ('comentarios', 'motivo')}
+    errores = validar_decision(accion, valores)
+    if errores:
+        flash(MENSAJE_REVISAR, 'danger')
+        # Como en el cuestionario, se repinta como mucho un carácter de más
+        repintar = {campo: valor[:LONGITUD_MAXIMA + 1] for campo, valor in valores.items()}
+        return mostrar_revision(solicitud, repintar, errores, 400)
+
+    # Aprobar adopta la mascota y rechaza las demás pendientes; rechazar
+    # solo cambia esta solicitud (app.adopciones)
+    try:
+        if accion == 'aprobar':
+            adopciones.aprobar(solicitud, current_user.id, valores['comentarios'].strip() or None)
+            flash(f'Solicitud aprobada. {solicitud.usuario.nombre} ha adoptado a {solicitud.mascota.nombre}. '
+                  'Las demás solicitudes pendientes se han rechazado.', 'success')
+        else:
+            adopciones.rechazar(solicitud, current_user.id, valores['motivo'].strip())
+            flash('Solicitud rechazada.', 'info')
+    except (adopciones.MascotaNoEncontrada, adopciones.SolicitudNoEncontrada):
+        abort(404)
+    except (adopciones.MascotaYaAdoptada, adopciones.SolicitudYaRevisada) as error:
+        flash(error.mensaje, 'warning')
+        return redirect(url_for('solicitudes.admin_revisar', solicitud_id=solicitud.id))
+
+    return redirect(url_for('solicitudes.admin_lista'))
+
+
+def validar_decision(accion, valores):
+    """
+    Errores del texto que acompaña a la decisión (contrato `errores`).
+
+    Aprobar admite un mensaje opcional (`comentarios`); rechazar exige un
+    motivo (`motivo`). Ninguno puede superar `LONGITUD_MAXIMA` caracteres.
+    """
+    campo = 'motivo' if accion == 'rechazar' else 'comentarios'
+    texto = valores[campo].strip()
+    if campo == 'motivo' and not texto:
+        return {campo: MENSAJE_MOTIVO}
+    if len(texto) > LONGITUD_MAXIMA:
+        return {campo: MENSAJE_LARGO}
+    return {}
+
+
+def mostrar_revision(solicitud, valores=None, errores=None, codigo=200):
+    """
+    Renderiza la revisión con el contrato `valores`/`errores`.
+
+    `otras_pendientes` son las pendientes que se rechazarán al aprobar esta
+    (sale en la confirmación de «Aprobar»).
+    """
+    otras = 0
+    if solicitud.esta_pendiente():
+        otras = adopciones.pendientes_por_mascota([solicitud.mascota_id]).get(solicitud.mascota_id, 1) - 1
+    return render_template('solicitudes/admin/revisar.html', solicitud=solicitud,
+                           secciones=cuestionario.SECCIONES, otras_pendientes=otras,
+                           longitud_maxima=LONGITUD_MAXIMA, valores=valores or {},
+                           errores=errores or {}), codigo

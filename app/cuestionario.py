@@ -12,7 +12,7 @@ Formato guardado (sin cambios respecto a los datos existentes):
 - Lo que no se contesta se guarda como `None`, nunca como False.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 # Longitud máxima de las respuestas de texto
 LONGITUD_MAXIMA = 2000
@@ -25,6 +25,9 @@ MENSAJE_TEXTO = 'La respuesta no es un texto válido.'
 MENSAJE_LARGO = f'La respuesta no puede superar los {LONGITUD_MAXIMA} caracteres.'
 MENSAJE_DETALLES = 'Si tienes otras mascotas, cuéntanos cuáles.'
 
+# Lo que se muestra en lugar de una respuesta que falta
+SIN_RESPUESTA = 'Sin respuesta'
+
 
 @dataclass(frozen=True)
 class Pregunta:
@@ -36,44 +39,96 @@ class Pregunta:
         opciones: pares (value, etiqueta) o None si la respuesta es libre.
         obligatoria: si debe contestarse siempre.
         si_no: si la respuesta es sí/no y se guarda como booleano.
+        seccion: grupo en el que se muestra la respuesta (obligatorio, por nombre).
     """
     texto: str
     opciones: tuple | None = None
     obligatoria: bool = True
     si_no: bool = False
+    seccion: str = field(kw_only=True)
 
     def etiqueta(self, valor):
         """Etiqueta legible de un `value` («8+» → «Más de 8 horas»), o None."""
         return dict(self.opciones or ()).get(valor)
 
 
+# Secciones en las que se muestran las respuestas, en este orden
+VIVIENDA = 'Vivienda'
+EXPERIENCIA = 'Experiencia'
+COMPROMISOS = 'Motivación y compromisos'
+
 PREGUNTAS = {
     'vivienda_tipo': Pregunta('Tipo de vivienda', (
-        ('casa', 'Casa'), ('apartamento', 'Apartamento'), ('finca', 'Finca/Campo'))),
+        ('casa', 'Casa'), ('apartamento', 'Apartamento'), ('finca', 'Finca/Campo')), seccion=VIVIENDA),
     'vivienda_propia': Pregunta('¿Es vivienda propia o alquilada?', (
-        ('propia', 'Propia'), ('alquilada', 'Alquilada'))),
-    'tiene_jardin': Pregunta('¿Tiene jardín o patio?', SI_NO, si_no=True),
-    'tiene_mascotas': Pregunta('¿Tiene otras mascotas actualmente?', SI_NO, si_no=True),
-    'mascotas_detalles': Pregunta('Otras mascotas (especie, edad, vacunadas)', obligatoria=False),
-    'experiencia_previa': Pregunta('¿Tienes experiencia previa con mascotas?'),
+        ('propia', 'Propia'), ('alquilada', 'Alquilada')), seccion=VIVIENDA),
+    'tiene_jardin': Pregunta('¿Tiene jardín o patio?', SI_NO, si_no=True, seccion=VIVIENDA),
+    'tiene_mascotas': Pregunta('¿Tiene otras mascotas actualmente?', SI_NO, si_no=True, seccion=VIVIENDA),
+    'mascotas_detalles': Pregunta('Otras mascotas (especie, edad, vacunadas)', obligatoria=False,
+                                  seccion=VIVIENDA),
+    'experiencia_previa': Pregunta('¿Tienes experiencia previa con mascotas?', seccion=EXPERIENCIA),
     'horas_solo': Pregunta('¿Cuántas horas al día estaría solo/a?', (
-        ('0-4', '0-4 horas'), ('4-8', '4-8 horas'), ('8+', 'Más de 8 horas'))),
+        ('0-4', '0-4 horas'), ('4-8', '4-8 horas'), ('8+', 'Más de 8 horas')), seccion=EXPERIENCIA),
     'emergencia_veterinaria': Pregunta('¿Cómo actuarías ante una emergencia veterinaria?', (
         ('veterinario', 'Llevaría inmediatamente al veterinario'),
         ('consulta', 'Consultaría online primero'),
-        ('espera', 'Esperaría a ver evolución'))),
-    'motivo_adopcion': Pregunta('¿Por qué quieres adoptar?'),
+        ('espera', 'Esperaría a ver evolución')), seccion=EXPERIENCIA),
+    'motivo_adopcion': Pregunta('¿Por qué quieres adoptar?', seccion=COMPROMISOS),
     'compromiso_gastos': Pregunta('Compromiso de cubrir gastos veterinarios y cuidados', (
-        ('si', 'Se compromete'), ('no', 'No puede garantizarlo')), si_no=True),
+        ('si', 'Se compromete'), ('no', 'No puede garantizarlo')), si_no=True, seccion=COMPROMISOS),
     'compromiso_tiempo': Pregunta('Compromiso de dedicar tiempo diario', (
-        ('si', 'Se compromete'), ('no', 'No puede garantizarlo')), si_no=True),
-    'referencias': Pregunta('Referencias personales o veterinarias', obligatoria=False),
+        ('si', 'Se compromete'), ('no', 'No puede garantizarlo')), si_no=True, seccion=COMPROMISOS),
+    'referencias': Pregunta('Referencias personales o veterinarias', obligatoria=False, seccion=COMPROMISOS),
 }
+
+
+def _agrupar_por_seccion(preguntas):
+    """((sección, ((campo, pregunta), ...)), ...) en el orden de `preguntas`."""
+    secciones = {}
+    for campo, pregunta in preguntas.items():
+        secciones.setdefault(pregunta.seccion, []).append((campo, pregunta))
+    return tuple((titulo, tuple(campos)) for titulo, campos in secciones.items())
+
+
+# Las preguntas agrupadas para mostrar las respuestas (solicitudes/_respuestas.html)
+SECCIONES = _agrupar_por_seccion(PREGUNTAS)
 
 
 def claves_desconocidas(datos):
     """Claves de `datos` que no son preguntas del cuestionario, ordenadas."""
     return sorted(str(clave) for clave in datos if clave not in PREGUNTAS)
+
+
+def respuesta_legible(respuestas, campo):
+    """
+    Texto legible de una respuesta guardada (filtro Jinja `respuesta_legible`).
+
+    Las opciones se muestran con su etiqueta («8+» → «Más de 8 horas») y los
+    booleanos de sí/no con la de su opción. Un valor que no es de la lista
+    (cuestionarios antiguos) se muestra tal cual, sin error.
+
+    Las plantillas solo preguntan por las claves de `PREGUNTAS`: las claves
+    antiguas que no son preguntas no se muestran, y esas preguntas salen como
+    `SIN_RESPUESTA` (el seed se corrige en B2.6).
+
+    Args:
+        respuestas: `cuestionario_json` de la solicitud (puede no ser un dict).
+        campo: clave de la pregunta.
+
+    Returns:
+        str: la etiqueta, el texto o `SIN_RESPUESTA` si falta.
+    """
+    valor = respuestas.get(campo) if isinstance(respuestas, dict) else None
+    if valor is None or (isinstance(valor, str) and not valor.strip()):
+        return SIN_RESPUESTA
+    pregunta = PREGUNTAS.get(campo)
+    if isinstance(valor, bool):
+        if pregunta is not None and pregunta.si_no:
+            return pregunta.etiqueta('si' if valor else 'no')
+        return 'Sí' if valor else 'No'
+    if pregunta is not None and isinstance(valor, str):
+        return pregunta.etiqueta(valor) or valor
+    return str(valor)
 
 
 def _validar_respuesta(pregunta, valor):

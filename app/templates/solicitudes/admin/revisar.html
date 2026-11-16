@@ -1,5 +1,14 @@
 {% extends "base.html" %}
 
+{# Contrato `valores`/`errores`: marca el campo inválido, enlaza su error y su
+   pista (`<campo>-ayuda`) y le da el foco al repintar #}
+{% macro atributos(campo) %}
+  {%- if errores[campo] %} aria-invalid="true" aria-describedby="{{ campo }}-error {{ campo }}-ayuda" autofocus
+  {%- else %} aria-describedby="{{ campo }}-ayuda"{% endif %}
+{%- endmacro %}
+{% macro clase_invalida(campo) %}{% if errores[campo] %} is-invalid{% endif %}{% endmacro %}
+{% macro error(campo) %}{% if errores[campo] %}<div id="{{ campo }}-error" class="invalid-feedback d-block">{{ errores[campo] }}</div>{% endif %}{% endmacro %}
+
 {% block title %}Revisar Solicitud #{{ solicitud.id }}{% endblock %}
 
 {% block content %}
@@ -43,88 +52,85 @@
     <div class="col-md-8">
         <div class="card">
             <div class="card-body">
-                <h3 class="mb-4">Revisar Solicitud #{{ solicitud.id }}</h3>
+                <h3 class="mb-2">Revisar Solicitud #{{ solicitud.id }}</h3>
+                <p class="mb-4">
+                    {% if solicitud.estado == 'pendiente' %}
+                        <span class="badge bg-warning text-dark">Pendiente de revisión</span>
+                    {% elif solicitud.estado == 'aprobada' %}
+                        <span class="badge bg-success">Aprobada</span>
+                    {% else %}
+                        <span class="badge bg-danger">Rechazada</span>
+                    {% endif %}
+                </p>
 
                 <!-- Cuestionario respondido -->
                 <div class="mb-4">
                     <h5>Respuestas del Cuestionario</h5>
-
-                    <div class="mt-3">
-                        <h6 class="text-muted">Vivienda</h6>
-                        <ul class="list-unstyled">
-                            <li><strong>Tipo:</strong> {{ solicitud.cuestionario_json.vivienda_tipo|title }}</li>
-                            <li><strong>Propiedad:</strong> {{ solicitud.cuestionario_json.vivienda_propia|title }}</li>
-                            <li><strong>Jardín:</strong> {% if solicitud.cuestionario_json.tiene_jardin %}Sí{% else %}No{% endif %}</li>
-                            <li><strong>Otras mascotas:</strong> {% if solicitud.cuestionario_json.tiene_mascotas %}Sí{% else %}No{% endif %}</li>
-                            {% if solicitud.cuestionario_json.mascotas_detalles %}
-                            <li><strong>Detalles:</strong> {{ solicitud.cuestionario_json.mascotas_detalles }}</li>
-                            {% endif %}
-                        </ul>
-                    </div>
-
-                    <div class="mt-3">
-                        <h6 class="text-muted">Experiencia</h6>
-                        <ul class="list-unstyled">
-                            <li><strong>Experiencia previa:</strong><br>{{ solicitud.cuestionario_json.experiencia_previa }}</li>
-                            <li><strong>Horas solo/a:</strong> {{ solicitud.cuestionario_json.horas_solo }}</li>
-                            <li><strong>Emergencia veterinaria:</strong> {{ solicitud.cuestionario_json.emergencia_veterinaria }}</li>
-                        </ul>
-                    </div>
-
-                    <div class="mt-3">
-                        <h6 class="text-muted">Motivación</h6>
-                        <p>{{ solicitud.cuestionario_json.motivo_adopcion }}</p>
-                    </div>
-
-                    <div class="mt-3">
-                        <h6 class="text-muted">Compromisos</h6>
-                        <ul class="list-unstyled">
-                            <li>
-                                {% if solicitud.cuestionario_json.compromiso_gastos %}
-                                    ✓ Se compromete a cubrir gastos
-                                {% else %}
-                                    ✗ No garantiza cubrir gastos
-                                {% endif %}
-                            </li>
-                            <li>
-                                {% if solicitud.cuestionario_json.compromiso_tiempo %}
-                                    ✓ Se compromete a dedicar tiempo
-                                {% else %}
-                                    ✗ No garantiza dedicar tiempo
-                                {% endif %}
-                            </li>
-                        </ul>
-                    </div>
-
-                    {% if solicitud.cuestionario_json.referencias %}
-                    <div class="mt-3">
-                        <h6 class="text-muted">Referencias</h6>
-                        <p>{{ solicitud.cuestionario_json.referencias }}</p>
-                    </div>
-                    {% endif %}
+                    {% include 'solicitudes/_respuestas.html' %}
                 </div>
 
                 <hr>
 
-                <!-- Formulario de decisión -->
-                <form method="POST">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <div class="mb-3">
-                        <label for="comentarios" class="form-label">Comentarios para el solicitante</label>
-                        <textarea class="form-control" id="comentarios" name="comentarios" rows="4"
-                                  placeholder="Escribe un mensaje para el solicitante (opcional)"></textarea>
-                        <small class="text-muted">Este mensaje será visible para el solicitante</small>
-                    </div>
+                {% if solicitud.esta_pendiente() %}
+                {% set mascota = solicitud.mascota.nombre %}
+                {% if otras_pendientes == 0 %}
+                    {% set efecto_pendientes = 'No hay otras solicitudes pendientes.' %}
+                {% elif otras_pendientes == 1 %}
+                    {% set efecto_pendientes = 'Se rechazará automáticamente 1 solicitud pendiente.' %}
+                {% else %}
+                    {% set efecto_pendientes = 'Se rechazarán automáticamente ' ~ otras_pendientes ~ ' solicitudes pendientes.' %}
+                {% endif %}
 
-                    <div class="d-flex gap-2">
-                        <button type="submit" name="accion" value="aprobar" class="btn btn-success flex-grow-1">
-                            ✓ Aprobar Adopción
-                        </button>
-                        <button type="submit" name="accion" value="rechazar" class="btn btn-danger flex-grow-1">
-                            ✗ Rechazar Solicitud
-                        </button>
+                <!-- Aprobar: confirmación con sus efectos (app/static/js/app.js) -->
+                <h5 id="aprobar-titulo">Aprobar</h5>
+                <p class="text-muted">
+                    {{ mascota }} pasará a «Adoptada». {{ efecto_pendientes }} No se puede deshacer.
+                </p>
+                <form method="POST" class="mb-4" aria-labelledby="aprobar-titulo"
+                      data-confirmar="¿Aprobar la solicitud de {{ solicitud.usuario.nombre }} para {{ mascota }}? {{ mascota }} pasará a «Adoptada». {{ efecto_pendientes }} No se puede deshacer.">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="accion" value="aprobar">
+                    <div class="mb-3">
+                        <label for="comentarios" class="form-label">Mensaje para el solicitante (opcional)</label>
+                        <textarea class="form-control{{ clase_invalida('comentarios') }}" id="comentarios" name="comentarios" rows="3"
+                                  maxlength="{{ longitud_maxima }}"{{ atributos('comentarios') }}>{{ valores.comentarios or '' }}</textarea>
+                        {{ error('comentarios') }}
+                        <small id="comentarios-ayuda" class="text-muted">El solicitante verá este mensaje.</small>
                     </div>
+                    <button type="submit" class="btn btn-success">Aprobar solicitud</button>
                 </form>
+
+                <hr>
+
+                <!-- Rechazar: motivo obligatorio (contrato valores/errores) -->
+                <h5 id="rechazar-titulo">Rechazar</h5>
+                <form method="POST" aria-labelledby="rechazar-titulo">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="accion" value="rechazar">
+                    <div class="mb-3">
+                        <label for="motivo" class="form-label">Motivo del rechazo *</label>
+                        <textarea class="form-control{{ clase_invalida('motivo') }}" id="motivo" name="motivo" rows="3" required
+                                  maxlength="{{ longitud_maxima }}"{{ atributos('motivo') }}>{{ valores.motivo or '' }}</textarea>
+                        {{ error('motivo') }}
+                        <small id="motivo-ayuda" class="text-muted">El solicitante verá este motivo. No se puede deshacer.</small>
+                    </div>
+                    <button type="submit" class="btn btn-outline-danger">Rechazar solicitud</button>
+                </form>
+                {% else %}
+                <!-- Ya resuelta: solo el resultado -->
+                <h5>Resultado de la revisión</h5>
+                <p class="text-muted mb-2">
+                    {% if solicitud.estado == 'aprobada' %}Aprobada{% else %}Rechazada{% endif %}
+                    {% if solicitud.fecha_revision %} el {{ solicitud.fecha_revision.strftime('%d/%m/%Y a las %H:%M') }}{% endif %}
+                    {% if solicitud.revisor %} por {{ solicitud.revisor.nombre }}{% endif %}.
+                </p>
+                <h6>Mensaje del refugio</h6>
+                {% if solicitud.comentarios_admin %}
+                    <p class="mb-0">{{ solicitud.comentarios_admin }}</p>
+                {% else %}
+                    <p class="text-muted mb-0">Sin mensaje para el solicitante.</p>
+                {% endif %}
+                {% endif %}
             </div>
         </div>
     </div>

@@ -275,7 +275,7 @@ class TestRevisionAdmin:
 
     def test_solicitud_revisada_no_se_puede_cambiar(self, client, auth_headers_admin, solicitud_pendiente):
         url = f'/solicitudes/admin/revisar/{solicitud_pendiente.id}'
-        client.post(url, data={'accion': 'rechazar', 'comentarios': ''})
+        client.post(url, data={'accion': 'rechazar', 'motivo': 'No encaja'})
 
         response = client.post(url, data={'accion': 'aprobar', 'comentarios': ''}, follow_redirects=True)
 
@@ -286,7 +286,8 @@ class TestRevisionAdmin:
 
     def test_rechazar_por_la_web_deja_la_mascota_en_el_catalogo(self, client, auth_headers_admin,
                                                                 solicitud_pendiente):
-        client.post(f'/solicitudes/admin/revisar/{solicitud_pendiente.id}', data={'accion': 'rechazar'})
+        client.post(f'/solicitudes/admin/revisar/{solicitud_pendiente.id}',
+                    data={'accion': 'rechazar', 'motivo': 'No encaja'})
 
         assert 'Cerbero' in client.get('/mascotas/catalogo').data.decode()
 
@@ -319,7 +320,8 @@ class TestRevisionAdmin:
             raise error()
         monkeypatch.setattr(adopciones, operacion, fallar)
 
-        response = client.post(f'/solicitudes/admin/revisar/{solicitud_pendiente.id}', data={'accion': operacion})
+        response = client.post(f'/solicitudes/admin/revisar/{solicitud_pendiente.id}',
+                               data={'accion': operacion, 'motivo': 'No encaja'})
 
         assert response.status_code == 404
 
