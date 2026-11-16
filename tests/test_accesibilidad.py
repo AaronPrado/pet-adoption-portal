@@ -100,6 +100,13 @@ def test_paneles_admin(client, auth_headers_admin, solicitud_pendiente):
         assert problemas(client, url) == [], url
 
 
+def test_revision_de_una_resuelta(client, auth_headers_admin, solicitud_pendiente, usuario_admin):
+    solicitud_pendiente.registrar_revision('rechazada', usuario_admin.id, 'No encaja')
+    db.session.commit()
+
+    assert problemas(client, f'/solicitudes/admin/revisar/{solicitud_pendiente.id}') == []
+
+
 def test_botones_de_icono_nombran_el_elemento(client, auth_headers_admin, solicitud_pendiente):
     html = client.get('/mascotas/admin').data.decode()
     nombre = db.session.get(Solicitud, solicitud_pendiente.id).mascota.nombre

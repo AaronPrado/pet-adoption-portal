@@ -92,10 +92,10 @@
                 <h5 class="mt-4 mb-3">Respuestas del Cuestionario</h5>
                 {% include 'solicitudes/_respuestas.html' %}
 
-                <!-- Comentarios del admin -->
+                <!-- Mensaje del refugio -->
                 {% if solicitud.comentarios_admin %}
                 <div class="alert alert-info mt-4">
-                    <h6 class="alert-heading">Comentarios del Administrador</h6>
+                    <h6 class="alert-heading">Mensaje del refugio</h6>
                     <p class="mb-0">{{ solicitud.comentarios_admin }}</p>
                 </div>
                 {% endif %}

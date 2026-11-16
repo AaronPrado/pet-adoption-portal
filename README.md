@@ -44,7 +44,8 @@ por roles y API REST documentada.
 
 ### Solicitudes
 - Cuestionario de evaluación del adoptante
-- Revisión por el administrador: aprobar o rechazar con comentarios
+- Revisión por el administrador: aprobar (con confirmación y un mensaje
+  opcional) o rechazar con un motivo obligatorio, que ve el solicitante
 - Varias personas pueden solicitar la misma mascota a la vez; al aprobar una
   solicitud se rechazan automáticamente las demás
 - Una solicitud por usuario y mascota, y una sola adopción por mascota
