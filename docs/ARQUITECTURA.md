@@ -284,7 +284,7 @@ app/
 │
 └── static/
     ├── css/styles.css
-    └── js/app.js        # Confirmación de borrado (sin JavaScript inline)
+    └── js/app.js        # Confirmación de borrado y límite de tamaño de la foto (sin JavaScript inline)
 
 config.py                # Configuración por entornos
 migrations/              # Migraciones de Alembic
@@ -313,7 +313,7 @@ extiende `base.html` (`lang="es"`, navegación), con su código de estado, un
 | 404 | Ofrece «Ver mascotas disponibles» e «Ir al inicio» |
 | `CSRFError` (token ausente o no válido) | 400 «Tu sesión ha caducado». Ofrece «Volver al formulario» solo si el `Referer` es de este mismo host y una ruta local segura; si no, solo «Ir al inicio» |
 | 405 | Conserva la cabecera `Allow` |
-| 413 | Vuelve al formulario (302) con un aviso: el navegador no sigue un `Location` con estado 413 |
+| 413 | Vuelve al formulario (302) con un aviso: el navegador no sigue un `Location` con estado 413. El servidor no lee el cuerpo, así que no puede conservar lo escrito; por eso `app.js` rechaza antes de enviar los archivos que superan `data-max-bytes` (`MAX_CONTENT_LENGTH`) |
 | 429 | Añade `Retry-After` calculado con el límite superado (`limiter.current_limit`) y dice cuántos minutos esperar. No se activa `RATELIMIT_HEADERS_ENABLED` para no añadir cabeceras `X-RateLimit-*` a todas las respuestas |
 | 500 | Mensaje genérico, sin detalles, y «Ver mis solicitudes» al adoptante. Deshace la transacción. Flask ya registra las excepciones no controladas; el manejador solo registra un `abort(500)` explícito. Si la propia plantilla falla (p. ej. sin base de datos), responde una página mínima en español |
 
