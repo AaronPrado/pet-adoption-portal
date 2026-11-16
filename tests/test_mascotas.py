@@ -8,6 +8,8 @@ Tests incluidos:
 - Validaciones y permisos
 """
 
+import pytest
+
 from app import db
 from app.models import Mascota
 
@@ -55,6 +57,20 @@ class TestCatalogo:
         response = client.get('/mascotas/catalogo?especie=Gato')
         assert 'Michi' in response.data.decode()
         assert 'Cerbero' not in response.data.decode()
+
+    def test_catalogo_filtro_especie_una_opcion_por_especie(self, client, mascota_disponible):
+        """P-31: «perro» y « PERRO » se guardan como «Perro» y salen una sola vez en el filtro."""
+        for nombre, especie in (('Bobi', 'perro'), ('Rex', ' PERRO ')):
+            db.session.add(Mascota(nombre=nombre, especie=especie,
+                                   descripcion='Perro sociable y tranquilo', estado='disponible'))
+        db.session.commit()
+
+        html = client.get('/mascotas/catalogo').data.decode()
+        assert html.count('<option value="Perro"') == 1
+        assert 'value="perro"' not in html and 'value="PERRO"' not in html
+
+        html = client.get('/mascotas/catalogo?especie=Perro').data.decode()
+        assert all(nombre in html for nombre in ('Cerbero', 'Bobi', 'Rex'))
 
     def test_catalogo_filtro_tamano(self, client, mascota_disponible):
         """Test: Filtro por tamaño funciona correctamente."""
@@ -191,6 +207,16 @@ class TestCRUD:
         assert mascota.especie == 'Perro'
         assert mascota.estado == 'disponible'
 
+    def test_crear_mascota_normaliza_la_especie(self, client, auth_headers_admin):
+        """P-31: el alta por el panel guarda la especie normalizada."""
+        client.post('/mascotas/admin/nueva', data={
+            'nombre': 'Rocky',
+            'especie': '  pERRO ',
+            'descripcion': 'Perro guardián muy leal y protector',
+        })
+
+        assert Mascota.query.filter_by(nombre='Rocky').one().especie == 'Perro'
+
     def test_editar_mascota(self, client, auth_headers_admin, mascota_disponible):
         """Test: Admin puede editar mascota."""
         response = client.post(f'/mascotas/admin/editar/{mascota_disponible.id}', data={
@@ -213,6 +239,18 @@ class TestCRUD:
         db.session.refresh(mascota_disponible)
         assert mascota_disponible.nombre == 'Cerbero Editado'
         assert mascota_disponible.raza == 'Golden Retriever'
+
+    def test_editar_mascota_normaliza_la_especie(self, client, auth_headers_admin, mascota_disponible):
+        """P-31: la edición por el panel guarda la especie normalizada."""
+        client.post(f'/mascotas/admin/editar/{mascota_disponible.id}', data={
+            'nombre': mascota_disponible.nombre,
+            'especie': 'gATO',
+            'descripcion': mascota_disponible.descripcion,
+            'foto_url': mascota_disponible.foto_url,
+        })
+
+        db.session.refresh(mascota_disponible)
+        assert mascota_disponible.especie == 'Gato'
 
     def test_eliminar_mascota(self, client, auth_headers_admin, mascota_disponible):
         """Test: Admin puede eliminar mascota."""
@@ -244,6 +282,48 @@ class TestModelo:
         assert mascota.estado == 'disponible'
         assert mascota.vacunado is False
         assert mascota.esterilizado is False
+
+    @pytest.mark.parametrize(('entrada', 'esperada'), [
+        ('perro', 'Perro'),
+        (' PERRO ', 'Perro'),
+        ('gATO', 'Gato'),
+        ('ñandú', 'Ñandú'),
+        # Dos palabras: mayúscula solo al inicio y un único espacio entre ellas
+        ('  cobaya   DE indias ', 'Cobaya de indias'),
+        ('Conejo\tenano', 'Conejo enano'),
+        # Casos adversos: deben dar la misma opción en el filtro
+        ('n\u0303andu\u0301', 'Ñandú'),               # NFD: letra + tilde combinante
+        ('cobaya\xa0de\xa0indias', 'Cobaya de indias'),  # NBSP
+        ('pe\u200brro', 'Perro'),                       # U+200B, espacio de anchura cero
+        ('\tperro\n', 'Perro'),
+        ('gato\r\n\tmontés', 'Gato montés'),
+        ('ßpecies', 'Sspecies'),                         # «ß» en mayúscula es «Ss»
+        ('x' * 50, 'X' + 'x' * 49),                      # justo la longitud de la columna
+    ])
+    def test_especie_se_normaliza(self, app, entrada, esperada):
+        """P-31: la especie se guarda sin espacios sobrantes y con mayúscula inicial."""
+        mascota = Mascota(nombre='Test', especie=entrada, descripcion='Descripción test')
+        assert mascota.especie == esperada
+
+        mascota.especie = entrada
+        assert mascota.especie == esperada
+
+    @pytest.mark.parametrize('entrada', ['', '   ', '\t\n', '\u200b', '\xa0'])
+    def test_especie_vacia_no_se_admite(self, app, entrada):
+        """P-31: una especie vacía, solo con espacios o con invisibles se rechaza."""
+        with pytest.raises(ValueError, match='obligatoria'):
+            Mascota(nombre='Test', especie=entrada, descripcion='Descripción test')
+
+    @pytest.mark.parametrize('entrada', [None, 7, b'perro'])
+    def test_especie_que_no_es_texto_no_se_admite(self, app, entrada):
+        with pytest.raises(ValueError, match='texto'):
+            Mascota(nombre='Test', especie=entrada, descripcion='Descripción test')
+
+    @pytest.mark.parametrize('entrada', ['x' * 51, 'ß' * 50])
+    def test_especie_demasiado_larga_no_se_admite(self, app, entrada):
+        """Se rechaza en el modelo, no con un error de BD; «ß» * 50 pasa a 51 caracteres."""
+        with pytest.raises(ValueError, match='50 caracteres'):
+            Mascota(nombre='Test', especie=entrada, descripcion='Descripción test')
 
     def test_esta_disponible(self, app, mascota_disponible):
         """Test: Método esta_disponible() funciona."""

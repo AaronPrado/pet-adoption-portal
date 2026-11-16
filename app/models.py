@@ -3,10 +3,12 @@ Modelos de la base de datos usando SQLAlchemy.
 Representa las entidades: Usuario, Mascota, Solicitud.
 """
 
+import unicodedata
 from datetime import UTC, datetime
 
 from flask_login import UserMixin
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import validates
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from app import db
@@ -201,7 +203,10 @@ class Mascota(db.Model):
     # Atributos de la tabla
     id = db.Column(db.Integer, primary_key=True)
     nombre = db.Column(db.String(100), nullable=False)
-    especie = db.Column(db.String(50), nullable=False)
+    # Longitud de la columna especie; el validador la comprueba antes que la BD
+    LONGITUD_ESPECIE = 50
+
+    especie = db.Column(db.String(LONGITUD_ESPECIE), nullable=False)
     raza = db.Column(db.String(100))
     edad_aprox = db.Column(db.Integer)
     sexo = db.Column(db.String(10))
@@ -250,6 +255,37 @@ class Mascota(db.Model):
         for key, value in kwargs.items():
             if hasattr(self, key):
                 setattr(self, key, value)
+
+    @staticmethod
+    def normalizar_especie(especie):
+        """
+        Forma canónica de una especie, para que el filtro del catálogo no la duplique.
+
+        Compone los caracteres (NFC: «n» + tilde combinante pasa a «ñ»), quita los
+        invisibles de formato (categoría Unicode Cf, como U+200B), quita los
+        espacios de los extremos, deja un solo espacio entre palabras (también
+        tabuladores, saltos de línea y NBSP) y pone en mayúscula solo la primera
+        letra, como en español: « PERRO » → «Perro», «cobaya DE Indias» →
+        «Cobaya de indias».
+
+        La migración 0003 tiene una copia literal de esta función.
+        """
+        especie = unicodedata.normalize('NFC', especie)
+        especie = ''.join(c for c in especie if unicodedata.category(c) != 'Cf')
+        return ' '.join(especie.split()).capitalize()
+
+    @validates('especie')
+    def _validar_especie(self, _clave, especie):
+        """Normaliza la especie al asignarla; rechaza que no sea texto, quede vacía o no quepa."""
+        if not isinstance(especie, str):
+            raise ValueError('La especie debe ser un texto.')
+        normalizada = self.normalizar_especie(especie)
+        if not normalizada:
+            raise ValueError('La especie es obligatoria.')
+        # Mayúsculas como «ß» → «Ss» pueden alargarla
+        if len(normalizada) > self.LONGITUD_ESPECIE:
+            raise ValueError(f'La especie no puede superar {self.LONGITUD_ESPECIE} caracteres.')
+        return normalizada
 
     def esta_disponible(self):
         """
