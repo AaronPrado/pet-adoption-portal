@@ -243,3 +243,86 @@ class TestLoginConservaDatos:
         assert campo_con_error(html, 'password') == 'La contraseña es obligatoria.'
         assert campo_con_error(html, 'email') is None
         assert valor_de(html, 'email') == 'a@test.com'
+
+    def test_formulario_conserva_next(self, client):
+        html = client.get('/auth/login?next=/solicitudes/nueva/3').data.decode()
+
+        assert '<input type="hidden" name="next" value="/solicitudes/nueva/3">' in html
+        assert 'href="/auth/registro?next=/solicitudes/nueva/3"' in html
+        assert 'href="/auth/google?next=/solicitudes/nueva/3"' in html
+
+    def test_next_en_el_formulario_redirige(self, client, usuario_adoptante):
+        response = client.post('/auth/login', data={
+            'email': 'adoptante@test.com', 'password': 'password123', 'next': '/solicitudes/nueva/3'})
+        assert response.headers['Location'] == '/solicitudes/nueva/3'
+
+    def test_login_fallido_conserva_next(self, client, usuario_adoptante):
+        html = client.post('/auth/login', data={
+            'email': 'adoptante@test.com', 'password': 'mala', 'next': '/mascotas/2'}).data.decode()
+        assert '<input type="hidden" name="next" value="/mascotas/2">' in html
+
+    def test_sin_next_no_hay_campo_oculto(self, client):
+        assert 'name="next"' not in client.get('/auth/login').data.decode()
+
+
+def test_detalle_anonimo_enlaza_login_con_next(client, mascota_disponible):
+    """«Inicia sesión para adoptar» vuelve al cuestionario de esa mascota."""
+    html = client.get(f'/mascotas/{mascota_disponible.id}').data.decode()
+    assert f'href="/auth/login?next=/solicitudes/nueva/{mascota_disponible.id}"' in html
+
+
+class TestGoogleNext:
+    """P-07: el login con Google vuelve a `next`, guardado en la sesión."""
+
+    @pytest.fixture
+    def google(self, app, monkeypatch):
+        client = oauth.create_client('google')
+        monkeypatch.setattr(client, 'load_server_metadata', lambda: {
+            'authorization_endpoint': 'https://accounts.google.com/o/oauth2/v2/auth'
+        })
+        monkeypatch.setattr(client, 'authorize_access_token', lambda **kwargs: {'userinfo': {
+            'sub': 'g-next', 'email': 'next@gmail.com', 'email_verified': True}})
+        return client
+
+    def test_guarda_next_en_la_sesion_y_vuelve(self, client, google):
+        client.get('/auth/google?next=/solicitudes/nueva/4')
+        with client.session_transaction() as sesion:
+            assert sesion['next_google'] == '/solicitudes/nueva/4'
+
+        response = client.get('/auth/google/callback')
+
+        assert response.headers['Location'] == '/solicitudes/nueva/4'
+        with client.session_transaction() as sesion:
+            assert 'next_google' not in sesion
+
+    def test_sin_next_va_al_catalogo(self, client, google):
+        client.get('/auth/google')
+        assert client.get('/auth/google/callback').headers['Location'] == '/mascotas/catalogo'
+
+    def test_next_externo_no_se_guarda(self, client, google):
+        client.get('/auth/google?next=//evil.com')
+        with client.session_transaction() as sesion:
+            assert 'next_google' not in sesion
+        assert client.get('/auth/google/callback').headers['Location'] == '/mascotas/catalogo'
+
+    def test_nuevo_intento_sin_next_borra_el_anterior(self, client, google):
+        client.get('/auth/google?next=/mascotas/1')
+        client.get('/auth/google')
+        assert client.get('/auth/google/callback').headers['Location'] == '/mascotas/catalogo'
+
+    def test_next_manipulado_en_la_sesion_se_ignora(self, client, google):
+        with client.session_transaction() as sesion:
+            sesion['next_google'] = 'https://evil.com'
+        assert client.get('/auth/google/callback').headers['Location'] == '/mascotas/catalogo'
+
+    def test_fallo_vuelve_al_login_con_next(self, client, google, monkeypatch):
+        def fallar(**kwargs):
+            raise OAuthError(error='access_denied')
+        monkeypatch.setattr(google, 'authorize_access_token', fallar)
+        client.get('/auth/google?next=/mascotas/1')
+
+        response = client.get('/auth/google/callback')
+
+        assert response.headers['Location'] == '/auth/login?next=/mascotas/1'
+        with client.session_transaction() as sesion:
+            assert 'next_google' not in sesion

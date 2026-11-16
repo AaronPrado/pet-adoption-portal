@@ -3,6 +3,8 @@ Tests de endurecimiento de la autenticación: cuentas desactivadas,
 redirecciones tras el login, login con Google y límite de intentos.
 """
 
+import re
+
 import pytest
 
 from app import create_app, db, oauth
@@ -47,6 +49,43 @@ class TestRedireccionNext:
     def test_login_respeta_next_local(self, client, usuario_adoptante):
         response = login(client, next_url='/mascotas/')
         assert response.headers['Location'].endswith('/mascotas/')
+
+    @pytest.mark.parametrize('destino', NEXT_PELIGROSOS)
+    def test_login_ignora_next_peligroso_del_formulario(self, client, usuario_adoptante, destino):
+        response = client.post('/auth/login', data={
+            'email': 'adoptante@test.com', 'password': 'password123', 'next': destino})
+        assert response.status_code == 302
+        assert response.headers['Location'] == '/'
+
+    @pytest.mark.parametrize('url', ['/auth/login', '/auth/registro'])
+    @pytest.mark.parametrize('destino', NEXT_PELIGROSOS)
+    def test_formularios_no_conservan_next_peligroso(self, client, url, destino):
+        html = client.get(url, query_string={'next': destino}).data.decode()
+        assert 'name="next"' not in html
+        assert 'evil.com' not in html
+
+    @pytest.mark.parametrize('destino', NEXT_PELIGROSOS)
+    def test_google_no_guarda_next_peligroso(self, client, destino, monkeypatch):
+        google = oauth.create_client('google')
+        monkeypatch.setattr(google, 'load_server_metadata', lambda: {
+            'authorization_endpoint': 'https://accounts.google.com/o/oauth2/v2/auth'})
+        client.get('/auth/google', query_string={'next': destino})
+        with client.session_transaction() as sesion:
+            assert 'next_google' not in sesion
+
+    def test_next_del_formulario_con_csrf_activo(self, app, usuario_adoptante):
+        """Con CSRF activo, el `next` viaja en el formulario junto al token."""
+        app.config['WTF_CSRF_ENABLED'] = True
+        client = app.test_client()
+        html = client.get('/auth/login?next=/solicitudes/nueva/7').data.decode()
+        token = re.search(r'name="csrf_token" value="([^"]+)"', html).group(1)
+        next_oculto = re.search(r'name="next" value="([^"]+)"', html).group(1)
+
+        response = client.post('/auth/login', data={
+            'email': 'adoptante@test.com', 'password': 'password123',
+            'csrf_token': token, 'next': next_oculto})
+
+        assert response.headers['Location'] == '/solicitudes/nueva/7'
 
 
 class TestCuentaDesactivada:
