@@ -40,14 +40,14 @@
                         <div class="col-md-4 mb-3">
                             <label for="raza" class="form-label">Raza</label>
                             <input type="text" class="form-control" id="raza" name="raza"
-                                value="{{ mascota.raza if mascota else '' }}" placeholder="Ej: Labrador, Mestizo">
+                                value="{{ mascota.raza or '' }}" placeholder="Ej: Labrador, Mestizo">
                         </div>
 
                         <!-- Edad -->
                         <div class="col-md-4 mb-3">
                             <label for="edad_aprox" class="form-label">Edad Aproximada (años)</label>
                             <input type="number" class="form-control" id="edad_aprox" name="edad_aprox"
-                                value="{{ mascota.edad_aprox if mascota else '' }}" placeholder="Ej: 3" min="0"
+                                value="{{ mascota.edad_aprox if mascota and mascota.edad_aprox is not none else '' }}" placeholder="Ej: 3" min="0"
                                 max="30">
                         </div>
 
@@ -110,7 +110,7 @@
                                 <label for="foto_url" class="form-label text-muted">O proporciona una URL
                                     externa:</label>
                                 <input type="url" class="form-control" id="foto_url" name="foto_url"
-                                    value="{{ mascota.foto_url if mascota else '' }}"
+                                    value="{{ mascota.foto_url or '' }}"
                                     placeholder="https://ejemplo.com/foto.jpg">
                             </div>
 
