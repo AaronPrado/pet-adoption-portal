@@ -8,7 +8,7 @@ de usuarios en el sistema.
 from urllib.parse import urlparse
 
 from authlib.integrations.base_client.errors import OAuthError
-from flask import Blueprint, current_app, flash, redirect, render_template, request, session, url_for
+from flask import Blueprint, current_app, flash, g, redirect, render_template, request, session, url_for
 from flask_login import current_user, login_required, login_user, logout_user
 
 from app import db, limiter, oauth
@@ -44,6 +44,19 @@ def es_redireccion_segura(destino):
         return False
     partes = urlparse(destino)
     return not partes.scheme and not partes.netloc
+
+
+def renovar_token_csrf():
+    """
+    Descarta el token CSRF de la sesión para que se genere otro.
+
+    El token no caduca por tiempo (WTF_CSRF_TIME_LIMIT = None), así que se
+    renueva al iniciar y al cerrar sesión: un token obtenido antes (p. ej.
+    por quien fijó la sesión) deja de valer después.
+    """
+    campo = current_app.config.get('WTF_CSRF_FIELD_NAME', 'csrf_token')
+    session.pop(campo, None)
+    g.pop(campo, None)
 
 
 def next_seguro():
@@ -159,6 +172,7 @@ def registro():
             flash('No se pudo crear el usuario. Inténtalo de nuevo.', 'danger')
             return mostrar_formulario('auth/registro.html', valores, next_page=next_page)
 
+        renovar_token_csrf()
         login_user(nuevo_usuario)
         flash(f'¡Registro exitoso! Bienvenido, {nuevo_usuario.nombre}.', 'success')
         return redirigir_tras_login(next_page)
@@ -221,6 +235,7 @@ def login():
             return mostrar_formulario('auth/login.html', valores, next_page=next_page)
 
         # Login exitoso
+        renovar_token_csrf()
         login_user(usuario, remember=remember)
         flash(f'¡Bienvenido, {usuario.nombre}!', 'success')
 
@@ -242,6 +257,7 @@ def logout():
     Returns:
         Redirección a la página de inicio
     """
+    renovar_token_csrf()
     logout_user()
     flash('Has cerrado sesión correctamente.', 'info')
     return redirect(url_for('index'))
@@ -313,6 +329,7 @@ def google_callback():
         db.session.add(usuario)
         db.session.commit()
 
+    renovar_token_csrf()
     login_user(usuario)
     flash(f'Bienvenido, {usuario.nombre}!', 'success')
     return redirigir_tras_login(next_page, por_defecto='mascotas.catalogo')

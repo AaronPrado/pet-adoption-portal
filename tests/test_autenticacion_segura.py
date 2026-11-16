@@ -96,6 +96,50 @@ class TestRedireccionNext:
         assert response.headers['Location'] == '/solicitudes/nueva/7'
 
 
+def token_de(client, url='/auth/login'):
+    """Token CSRF del formulario de `url`."""
+    html = client.get(url).data.decode()
+    return re.search(r'name="csrf_token" value="([^"]+)"', html).group(1)
+
+
+class TestRenovacionTokenCsrf:
+    """El token dura la sesión, así que se renueva al iniciarla y al cerrarla."""
+
+    @pytest.fixture
+    def csrf_client(self, app, usuario_adoptante):
+        app.config['WTF_CSRF_ENABLED'] = True
+        return app.test_client()
+
+    def test_token_anterior_al_login_deja_de_valer(self, csrf_client):
+        antiguo = token_de(csrf_client)
+        csrf_client.post('/auth/login', data={
+            'email': 'adoptante@test.com', 'password': 'password123', 'csrf_token': antiguo})
+
+        assert csrf_client.post('/auth/logout', data={'csrf_token': antiguo}).status_code == 400
+        nuevo = token_de(csrf_client, '/mascotas/catalogo')
+        assert nuevo != antiguo
+        assert csrf_client.post('/auth/logout', data={'csrf_token': nuevo}).status_code == 302
+
+    def test_token_anterior_al_registro_deja_de_valer(self, csrf_client):
+        antiguo = token_de(csrf_client, '/auth/registro')
+        respuesta = csrf_client.post('/auth/registro', data={
+            'email': 'nuevo@test.com', 'nombre': 'N', 'password': 'password123',
+            'password_confirm': 'password123', 'csrf_token': antiguo})
+
+        assert respuesta.status_code == 302
+        assert csrf_client.post('/auth/logout', data={'csrf_token': antiguo}).status_code == 400
+
+    def test_token_de_la_sesion_cerrada_deja_de_valer(self, csrf_client):
+        csrf_client.post('/auth/login', data={
+            'email': 'adoptante@test.com', 'password': 'password123', 'csrf_token': token_de(csrf_client)})
+        de_la_sesion = token_de(csrf_client, '/mascotas/catalogo')
+        assert csrf_client.post('/auth/logout', data={'csrf_token': de_la_sesion}).status_code == 302
+
+        respuesta = csrf_client.post('/auth/login', data={
+            'email': 'adoptante@test.com', 'password': 'password123', 'csrf_token': de_la_sesion})
+        assert respuesta.status_code == 400
+
+
 class TestCuentaDesactivada:
 
     def test_desactivar_cierra_sesion_abierta(self, client, usuario_adoptante):
@@ -146,6 +190,17 @@ class TestGoogleOAuth:
         client.get('/auth/google/callback')
 
         assert client.get('/solicitudes/mis-solicitudes').status_code == 302
+
+    def test_login_con_google_renueva_el_token_csrf(self, app, usuario_adoptante, google_devuelve):
+        app.config['WTF_CSRF_ENABLED'] = True
+        client = app.test_client()
+        antiguo = token_de(client)
+        google_devuelve({'sub': 'g-4', 'email': 'adoptante@test.com', 'email_verified': True})
+
+        client.get('/auth/google/callback')
+
+        assert client.post('/auth/logout', data={'csrf_token': antiguo}).status_code == 400
+        assert client.post('/auth/logout', data={'csrf_token': token_de(client, '/')}).status_code == 302
 
     def test_email_verificado_enlaza_cuenta(self, client, usuario_adoptante, google_devuelve):
         google_devuelve({'sub': 'g-3', 'email': 'Adoptante@Test.com', 'email_verified': True})

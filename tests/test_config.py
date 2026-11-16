@@ -78,3 +78,9 @@ def test_postgresql_con_timeouts(config_produccion, monkeypatch):
 
 def test_sqlite_sin_opciones_de_postgresql(app):
     assert 'connect_args' not in app.config.get('SQLALCHEMY_ENGINE_OPTIONS', {})
+
+
+@pytest.mark.parametrize('nombre', ['development', 'production', 'testing'])
+def test_token_csrf_dura_lo_que_la_sesion(config_produccion, nombre):
+    """Sin límite de tiempo, quien tarda en rellenar el cuestionario no pierde el envío."""
+    assert create_app(nombre).config['WTF_CSRF_TIME_LIMIT'] is None

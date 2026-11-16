@@ -99,6 +99,12 @@ class Config:
     REMEMBER_COOKIE_HTTPONLY = True
     REMEMBER_COOKIE_SAMESITE = 'Lax'
 
+    # CSRF: el token caduca con la sesión, no a la hora (valor por defecto de
+    # Flask-WTF). El cuestionario de adopción es largo y quien tardaba más de
+    # una hora en enviarlo perdía las respuestas. El token sigue ligado a la
+    # sesión firmada, así que no se puede reutilizar en otra.
+    WTF_CSRF_TIME_LIMIT = None
+
     @classmethod
     def init_app(cls, app):
         """Ajustes comunes a todos los entornos según la configuración cargada."""
