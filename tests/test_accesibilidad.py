@@ -63,9 +63,9 @@ class Analizador(HTMLParser):
         return self.problemas
 
 
-def problemas(client, url):
+def problemas(client, url, codigo=200):
     response = client.get(url)
-    assert response.status_code == 200, url
+    assert response.status_code == codigo, url
     analizador = Analizador()
     analizador.feed(response.data.decode())
     return analizador.resultado()
@@ -111,3 +111,21 @@ def test_botones_de_icono_nombran_el_elemento(client, auth_headers_admin, solici
 def test_enlace_para_saltar_al_contenido(client):
     html = client.get('/').data.decode()
     assert 'href="#contenido"' in html and 'id="contenido"' in html
+
+
+@pytest.mark.parametrize('url, codigo', [('/no-existe', 404), ('/mascotas/99999', 404), ('/auth/logout', 405)])
+def test_paginas_de_error(client, url, codigo):
+    assert problemas(client, url, codigo) == []
+
+
+def test_pagina_de_error_con_sesion_iniciada(client, auth_headers_adoptante):
+    assert problemas(client, '/no-existe', 404) == []
+
+
+def test_pagina_de_sesion_caducada(app, client):
+    app.config['WTF_CSRF_ENABLED'] = True
+    response = client.post('/auth/login', data={}, headers={'Referer': 'http://localhost/auth/login'})
+    assert response.status_code == 400
+    analizador = Analizador()
+    analizador.feed(response.data.decode())
+    assert analizador.resultado() == []

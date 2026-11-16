@@ -17,7 +17,7 @@ Uso:
 """
 
 from authlib.integrations.flask_client import OAuth
-from flask import Flask, abort, flash, redirect, render_template, request
+from flask import Flask, abort, render_template, request
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_login import LoginManager
@@ -166,13 +166,9 @@ def create_app(config_name='default'):
     # El esquema de la base de datos se gestiona con migraciones:
     # flask --app run db upgrade
 
-    # Error handler para archivos demasiado grandes
-    @app.errorhandler(413)
-    def file_too_large(e):
-        flash('El archivo es demasiado grande. Máximo 5MB.', 'danger')
-        # 302 normal: el navegador no sigue un Location con estado 413
-        return redirect(request.url)
-
+    # Páginas de error de la web (la API conserva su formato JSON)
+    from app.errores import registrar_manejadores_errores
+    registrar_manejadores_errores(app)
 
     # Comprobación de salud para el orquestador o el balanceador
     @app.route('/health')

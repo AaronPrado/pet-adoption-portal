@@ -123,4 +123,16 @@ def test_formulario_sin_token_csrf_rechazado(page):
     page.get_by_label('Contraseña').fill(ADOPTANTE[1])
     page.get_by_role('button', name='Iniciar Sesión').click()
 
-    expect(page.get_by_text('The CSRF token is missing.')).to_be_visible()
+    expect(page.get_by_role('heading', name='Tu sesión ha caducado')).to_be_visible()
+    volver = page.get_by_role('link', name='Volver al formulario')
+    expect(volver).to_have_attribute('href', '/auth/login')
+    volver.click()
+    expect(page).to_have_url(re.compile(r'/auth/login$'))
+
+
+def test_pagina_404_con_salida(page, errores_js):
+    page.goto('/mascotas/99999')
+
+    expect(page.get_by_role('heading', name='No encontramos esta página')).to_be_visible()
+    page.get_by_role('link', name='Ver mascotas disponibles').click()
+    expect(page).to_have_url(re.compile(r'/mascotas/catalogo$'))

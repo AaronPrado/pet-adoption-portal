@@ -225,7 +225,8 @@ solo `app/adopciones.py`, que usan las rutas web y la API:
 app/
 ├── __init__.py          # Application Factory: extensiones (db, migrate, login,
 │                        # oauth, csrf, limiter), ProxyFix, blueprints,
-│                        # cabeceras de seguridad, /health y errores
+│                        # cabeceras de seguridad y /health
+├── errores.py           # Páginas de error de la web (la API queda fuera)
 ├── cli.py               # Comando flask crear-admin
 ├── models.py            # Modelos SQLAlchemy (Usuario, Mascota, Solicitud)
 ├── adopciones.py        # Regla de adopción: crear, aprobar y rechazar solicitudes
@@ -245,6 +246,8 @@ app/
 ├── templates/           # Plantillas Jinja2 (heredan de base.html)
 │   ├── base.html        # Navegación, avisos, salto al contenido
 │   ├── index.html
+│   ├── errores/
+│   │   └── error.html   # Página común de error (400, CSRF, 403, 404, 405, 429, 500)
 │   ├── macros/
 │   │   └── paginacion.html
 │   ├── auth/            # login.html, registro.html
@@ -269,6 +272,28 @@ Dockerfile, gunicorn.conf.py, Procfile   # Despliegue (docs/DESPLIEGUE.md)
 `FLASK_ENV` elige una (production si no se indica). Producción no arranca si
 faltan `SECRET_KEY`, `JWT_SECRET_KEY` o `DATABASE_URL`, o si alguna clave
 tiene menos de 32 bytes.
+
+### Páginas de error de la web
+
+`app/errores.py` registra los manejadores de 400, `CSRFError`, 403, 404, 405,
+413, 429 y 500. Salvo el 413, todos renderizan `errores/error.html`, que
+extiende `base.html` (`lang="es"`, navegación), con su código de estado, un
+`h1` en español y al menos una salida. 400, 403 y 404 se declaran en la tabla
+`ERRORES_SIMPLES`; el resto tiene lógica propia.
+
+| Error | Comportamiento |
+|-------|----------------|
+| 403 | Ofrece «Iniciar sesión» si el usuario es anónimo |
+| 404 | Ofrece «Ver mascotas disponibles» e «Ir al inicio» |
+| `CSRFError` (token ausente o no válido) | 400 «Tu sesión ha caducado». Ofrece «Volver al formulario» solo si el `Referer` es de este mismo host y una ruta local segura; si no, solo «Ir al inicio» |
+| 405 | Conserva la cabecera `Allow` |
+| 413 | Vuelve al formulario (302) con un aviso: el navegador no sigue un `Location` con estado 413 |
+| 429 | Añade `Retry-After` calculado con el límite superado (`limiter.current_limit`) y dice cuántos minutos esperar. No se activa `RATELIMIT_HEADERS_ENABLED` para no añadir cabeceras `X-RateLimit-*` a todas las respuestas |
+| 500 | Mensaje genérico, sin detalles, y «Ver mis solicitudes» al adoptante. Deshace la transacción. Flask ya registra las excepciones no controladas; el manejador solo registra un `abort(500)` explícito. Si la propia plantilla falla (p. ej. sin base de datos), responde una página mínima en español |
+
+Las rutas de `/api/` no pasan por estas páginas: el manejador devuelve la
+excepción tal cual y la API mantiene su formato `{"error": ...}`. El 413 es la
+excepción: se comporta como antes (flask-restx da su propio JSON en sus rutas).
 
 ---
 
