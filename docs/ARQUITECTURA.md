@@ -52,8 +52,7 @@
 │ - revisor: Usuario (relación N:1)                   │
 ├─────────────────────────────────────────────────────┤
 │ + __init__(usuario_id, mascota_id, cuestionario)    │
-│ + aprobar(admin_id, comentario) -> None             │
-│ + rechazar(admin_id, comentario) -> None            │
+│ + registrar_revision(estado, admin_id, comentario)  │
 │ + esta_pendiente() -> bool                          │
 │ + __repr__() -> str                                 │
 └─────────────────────────────────────────────────────┘
@@ -81,7 +80,6 @@
 ├─────────────────────────────────────────────────────┤
 │ + __init__(nombre, especie, descripcion)            │
 │ + esta_disponible() -> bool                         │
-│ + marcar_en_proceso() -> None                       │
 │ + marcar_adoptado() -> None                         │
 │ + tiene_solicitudes_pendientes() -> bool            │
 │ + __repr__() -> str                                 │
@@ -137,6 +135,9 @@
 - `usuarios.rol` ∈ {adoptante, admin}; `mascotas.estado` ∈ {disponible,
   en_proceso, adoptado}; `solicitudes.estado` ∈ {pendiente, aprobada,
   rechazada}; `mascotas.sexo`, `mascotas.tamano` y `edad_aprox >= 0` con CHECK.
+  El flujo ya no usa `en_proceso` (ADR-0004); el CHECK lo sigue admitiendo
+  hasta una limpieza posterior, y la migración `0002` pasó las filas que lo
+  tenían a `adoptado` (con solicitud aprobada) o a `disponible`.
 - `UNIQUE (usuario_id, mascota_id)`: un usuario solo puede solicitar una vez
   cada mascota.
 - Las solicitudes se borran en cascada (`ON DELETE CASCADE`) con su usuario o
@@ -153,6 +154,32 @@ flask --app run db upgrade                       # aplicar migraciones
 flask --app run db migrate -m "descripción"      # generar una nueva tras cambiar los modelos
 ```
 
+### Regla de adopción (ADR-0004)
+
+Las solicitudes se admiten en paralelo y el estado de la mascota lo decide
+solo `app/adopciones.py`, que usan las rutas web y la API:
+
+| Operación | Solicitud | Mascota | Otras pendientes |
+|-----------|-----------|---------|------------------|
+| `crear_solicitud` | `pendiente` | sigue `disponible` | sin cambios |
+| `rechazar` | `rechazada` | sin cambios | sin cambios |
+| `aprobar` | `aprobada` | `adoptado` | `rechazada` con `COMENTARIO_RECHAZO_AUTOMATICO` |
+
+- Cada operación hace un único commit; si la regla no la permite hace
+  rollback, lanza una subclase de `ErrorAdopcion` (`SolicitudYaRevisada`,
+  `MascotaYaAdoptada`…) y no cambia nada. La web y la API muestran su
+  `mensaje`; `MascotaNoEncontrada` se responde con 404.
+- Antes de cambiar nada bloquean la fila de la mascota
+  (`SELECT … FOR UPDATE`) y vuelven a leer la mascota y la solicitud, para
+  que dos aprobaciones simultáneas no adopten dos veces ni se cree una
+  pendiente mientras otra se aprueba.
+- Las pendientes que cierra una aprobación llevan en `revisado_por` y
+  `fecha_revision` el admin que aprobó. Las que cerró la migración `0002`
+  (pendientes de mascotas ya adoptadas) tienen `revisado_por` NULL.
+- Invariante: una mascota `adoptado` no tiene solicitudes pendientes.
+- Hasta B1.2, el formulario de edición del panel admin aún puede cambiar el
+  estado de la mascota a mano.
+
 ---
 
 ## Conceptos POO
@@ -163,7 +190,8 @@ flask --app run db migrate -m "descripción"      # generar una nueva tras cambi
 - **Validación:** Los métodos validan datos antes de modificar atributos
 
 ### 2. Abstracción
-- **Métodos de alto nivel:** `aprobar()`, `rechazar()`, `marcar_adoptado()`
+- **Funciones de dominio:** `aprobar()`, `rechazar()` y las demás de
+  `app/adopciones.py` encapsulan la regla de adopción
 - **Separación de responsabilidades:** Cada clase tiene una función clara
 
 ### 3. Polimorfismo
@@ -200,6 +228,7 @@ app/
 │                        # cabeceras de seguridad, /health y errores
 ├── cli.py               # Comando flask crear-admin
 ├── models.py            # Modelos SQLAlchemy (Usuario, Mascota, Solicitud)
+├── adopciones.py        # Regla de adopción: crear, aprobar y rechazar solicitudes
 ├── decorators.py        # @admin_required
 ├── s3.py                # Subida (validada con Pillow) y borrado de fotos en S3
 │
@@ -269,9 +298,15 @@ API RESTful con autenticación JWT y documentación Swagger automática.
 | POST | `/api/auth/login` | No | Login, devuelve JWT (máximo 5 intentos por minuto) |
 | GET | `/api/mascotas/` | No | Mascotas disponibles, paginadas y filtrables |
 | GET | `/api/mascotas/<id>` | No | Detalle de mascota |
-| POST | `/api/solicitudes/` | JWT | Crear solicitud (201 con cabecera `Location`) |
+| POST | `/api/solicitudes/` | JWT | Crear solicitud (201 con cabecera `Location`); la mascota sigue `disponible` |
 | GET | `/api/solicitudes/mias` | JWT | Mis solicitudes |
 | GET | `/api/solicitudes/<id>` | JWT | Una solicitud propia (404 si es de otro usuario) |
+
+Desde la ADR-0004, `POST /api/solicitudes/` ya no pasa la mascota a
+`en_proceso` y varios usuarios pueden solicitar la misma (201 cada uno; 409
+si el mismo usuario repite). El campo `estado` de las mascotas solo toma
+`disponible` o `adoptado`; 400 «Mascota no disponible» significa que ya está
+adoptada. El formato de errores no cambia.
 
 ### Paginación y filtros
 

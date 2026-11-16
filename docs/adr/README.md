@@ -9,4 +9,5 @@ Plantilla: [template.md](template.md).
 
 | ADR | Título | Estado | Fecha |
 |-----|--------|--------|-------|
+| [0004](0004-solicitudes-en-paralelo.md) | Solicitudes en paralelo y estados de la mascota derivados del flujo | aceptada | 2026-11-15 |
 | [0005](0005-priorizacion-iteracion-frontend.md) | Priorización de la iteración de mejora del frontend | aceptada | 2026-11-15 |

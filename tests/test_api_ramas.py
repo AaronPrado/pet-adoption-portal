@@ -9,7 +9,7 @@ import jwt
 import pytest
 from sqlalchemy.exc import IntegrityError
 
-from app import db
+from app import adopciones, db
 from app.models import Mascota, Solicitud, Usuario
 
 
@@ -134,14 +134,35 @@ class TestSolicitudesWeb:
 
     def test_envio_simultaneo_duplicado(self, client, auth_headers_adoptante, mascota_disponible, monkeypatch):
         """Si otra petición inserta la misma solicitud a la vez, salta la restricción única."""
-        def fallar(self):
-            raise IntegrityError('INSERT', {}, Exception('unique_usuario_mascota'))
-        monkeypatch.setattr(Mascota, 'marcar_en_proceso', fallar)
+        def fallar(*args):
+            raise adopciones.SolicitudDuplicada()
+        monkeypatch.setattr(adopciones, 'crear_solicitud', fallar)
 
         response = client.post(f'/solicitudes/nueva/{mascota_disponible.id}', data={}, follow_redirects=True)
 
         assert 'Ya has enviado una solicitud para esta mascota.' in response.data.decode()
         assert Solicitud.query.count() == 0
+
+    def test_adoptada_mientras_se_rellenaba(self, client, auth_headers_adoptante, mascota_disponible, monkeypatch):
+        """Otra petición la adopta entre la carga del formulario y el envío."""
+        def fallar(*args):
+            raise adopciones.MascotaNoDisponible()
+        monkeypatch.setattr(adopciones, 'crear_solicitud', fallar)
+
+        response = client.post(f'/solicitudes/nueva/{mascota_disponible.id}', data={}, follow_redirects=True)
+
+        assert 'Esta mascota ya no está disponible para adopción.' in response.data.decode()
+        assert response.request.path == f'/mascotas/{mascota_disponible.id}'
+
+    def test_mascota_borrada_mientras_se_rellenaba(self, client, auth_headers_adoptante, mascota_disponible,
+                                                    monkeypatch):
+        def fallar(*args):
+            raise adopciones.MascotaNoEncontrada()
+        monkeypatch.setattr(adopciones, 'crear_solicitud', fallar)
+
+        response = client.post(f'/solicitudes/nueva/{mascota_disponible.id}', data={})
+
+        assert response.status_code == 404
 
     def test_accion_desconocida_no_cambia_la_solicitud(self, client, auth_headers_admin, solicitud_pendiente):
         client.post(f'/solicitudes/admin/revisar/{solicitud_pendiente.id}', data={'accion': 'borrar'})

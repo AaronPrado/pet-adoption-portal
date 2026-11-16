@@ -186,7 +186,9 @@ class Mascota(db.Model):
         sexo (str): 'Macho', 'Hembra', 'Desconocido'
         tamano (str): 'Pequeño', 'Mediano', 'Grande'
         descripcion (str): Historia y personalidad
-        estado (str): 'disponible', 'en_proceso', 'adoptado'
+        estado (str): 'disponible' o 'adoptado'. El flujo ya no usa 'en_proceso'
+            (ADR-0004), pero el CHECK lo mantiene para que el downgrade de la
+            migración 0002 pueda restaurarlo.
         foto_url (str): Ruta a la imagen
         fecha_ingreso (datetime): Cuándo llegó al refugio
         vacunado (bool): Si está vacunado
@@ -215,6 +217,7 @@ class Mascota(db.Model):
         db.CheckConstraint('edad_aprox >= 0', name='mascotas_edad_aprox_check'),
         db.CheckConstraint("sexo IN ('Macho', 'Hembra', 'Desconocido')", name='mascotas_sexo_check'),
         db.CheckConstraint("tamano IN ('Pequeño', 'Mediano', 'Grande')", name='mascotas_tamano_check'),
+        # 'en_proceso' sigue admitido para que el downgrade de 0002 funcione
         db.CheckConstraint("estado IN ('disponible', 'en_proceso', 'adoptado')", name='mascotas_estado_check'),
         db.Index('idx_mascotas_estado', 'estado'),
         db.Index('idx_mascotas_especie', 'especie'),
@@ -257,15 +260,13 @@ class Mascota(db.Model):
         """
         return self.estado == 'disponible'
 
-    def marcar_en_proceso(self):
-        """Marca la mascota como 'en proceso' de adopción."""
-        self.estado = 'en_proceso'
-        db.session.commit()
-
     def marcar_adoptado(self):
-        """Marca la mascota como adoptada."""
+        """
+        Marca la mascota como adoptada, sin commit.
+
+        Úsese a través de app.adopciones, que además cierra las pendientes.
+        """
         self.estado = 'adoptado'
-        db.session.commit()
 
     def tiene_solicitudes_pendientes(self):
         """
@@ -362,37 +363,22 @@ class Solicitud(db.Model):
         self.mascota_id = mascota_id
         self.cuestionario_json = cuestionario or {}
 
-    def aprobar(self, admin_id, comentario=None):
+    def registrar_revision(self, estado, admin_id, comentario=None):
         """
-        Aprueba la solicitud de adopción.
+        Anota el resultado de la revisión, sin commit ni efectos en la mascota.
+
+        Las reglas de aprobar y rechazar (adoptar la mascota, cerrar las demás
+        pendientes, bloqueo de fila) están en app.adopciones.
 
         Args:
-            admin_id (int): ID del administrador que aprueba
+            estado (str): 'aprobada' o 'rechazada'
+            admin_id (int): ID del administrador que revisa
             comentario (str): Mensaje para el usuario (opcional)
         """
-        self.estado = 'aprobada'
+        self.estado = estado
         self.revisado_por = admin_id
         self.fecha_revision = utcnow()
         self.comentarios_admin = comentario
-
-        # Marcar la mascota como adoptada
-        self.mascota.marcar_adoptado()
-
-        db.session.commit()
-
-    def rechazar(self, admin_id, comentario=None):
-        """
-        Rechaza la solicitud de adopción.
-
-        Args:
-            admin_id (int): ID del administrador que rechaza
-            comentario (str): Razón del rechazo (opcional)
-        """
-        self.estado = 'rechazada'
-        self.revisado_por = admin_id
-        self.fecha_revision = utcnow()
-        self.comentarios_admin = comentario
-        db.session.commit()
 
     def esta_pendiente(self):
         """

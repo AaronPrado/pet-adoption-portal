@@ -139,7 +139,7 @@ class TestAdminPanel:
         assert 'admin' in content or 'permiso' in content or 'no tienes' in content
 
     def test_admin_panel_muestra_todas_mascotas(self, client, auth_headers_admin,
-                                                mascota_disponible, mascota_en_proceso):
+                                                mascota_disponible, mascota_adoptada):
         """Test: Panel admin muestra todas las mascotas."""
         response = client.get('/mascotas/admin')
 
@@ -147,7 +147,7 @@ class TestAdminPanel:
         assert 'Cerbero' in response.data.decode()
         assert 'Luna' in response.data.decode()
 
-    def test_admin_panel_filtro_estado(self, client, auth_headers_admin, mascota_disponible, mascota_en_proceso):
+    def test_admin_panel_filtro_estado(self, client, auth_headers_admin, mascota_disponible, mascota_adoptada):
         """Test: Filtro por estado en panel admin."""
         response = client.get('/mascotas/admin?estado=disponible')
 
@@ -252,16 +252,10 @@ class TestModelo:
         mascota_disponible.estado = 'adoptado'
         assert mascota_disponible.esta_disponible() is False
 
-    def test_marcar_en_proceso(self, app, mascota_disponible):
-        """Test: Marcar mascota en proceso."""
-        mascota_disponible.marcar_en_proceso()
-
-        db.session.refresh(mascota_disponible)
-        assert mascota_disponible.estado == 'en_proceso'
-
     def test_marcar_adoptado(self, app, mascota_disponible):
         """Test: Marcar mascota como adoptada."""
         mascota_disponible.marcar_adoptado()
+        db.session.commit()
 
         db.session.refresh(mascota_disponible)
         assert mascota_disponible.estado == 'adoptado'
