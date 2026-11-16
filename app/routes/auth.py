@@ -36,8 +36,39 @@ def es_redireccion_segura(destino):
     return not partes.scheme and not partes.netloc
 
 
+# Mensaje general cuando el formulario tiene errores en sus campos
+MENSAJE_REVISAR = 'Revisa los campos marcados.'
+
+# Campos del registro que se vuelven a mostrar tras un error (nunca la contraseña)
+CAMPOS_REGISTRO = ('email', 'nombre', 'apellidos', 'telefono', 'direccion')
+
+
 # Crear blueprint
 bp = Blueprint('auth', __name__, url_prefix='/auth')
+
+
+def mostrar_formulario(plantilla, valores=None, errores=None, codigo=200):
+    """
+    Renderiza un formulario de autenticación con los valores enviados y los
+    errores por campo (contrato `valores`/`errores`).
+    """
+    return render_template(plantilla, valores=valores or {}, errores=errores or {}), codigo
+
+
+def validar_registro(valores, password, password_confirm):
+    """Devuelve un dict campo → mensaje con los errores del registro."""
+    errores = {}
+    if not valores['email']:
+        errores['email'] = 'El email es obligatorio.'
+    if not valores['nombre']:
+        errores['nombre'] = 'El nombre es obligatorio.'
+    if not password:
+        errores['password'] = 'La contraseña es obligatoria.'
+    elif len(password) < PASSWORD_MIN_LENGTH:
+        errores['password'] = f'La contraseña debe tener al menos {PASSWORD_MIN_LENGTH} caracteres.'
+    if password and password != password_confirm:
+        errores['password_confirm'] = 'Las contraseñas no coinciden.'
+    return errores
 
 
 @bp.route('/registro', methods=['GET', 'POST'])
@@ -46,7 +77,9 @@ def registro():
     Ruta de registro de nuevos usuarios.
 
     GET: Muestra el formulario de registro
-    POST: Procesa el registro y crea el usuario
+    POST: Procesa el registro y crea el usuario. Ante un error de
+    validación vuelve a mostrar el formulario con los datos enviados (salvo
+    las contraseñas) y responde 400.
 
     Returns:
         Template renderizado o redirección
@@ -57,43 +90,32 @@ def registro():
 
     if request.method == 'POST':
         # Obtener datos del formulario
-        email = request.form.get('email', '').strip().lower()
-        nombre = request.form.get('nombre', '').strip()
-        apellidos = request.form.get('apellidos', '').strip()
-        telefono = request.form.get('telefono', '').strip()
-        direccion = request.form.get('direccion', '').strip()
+        valores = {campo: request.form.get(campo, '').strip() for campo in CAMPOS_REGISTRO}
+        valores['email'] = valores['email'].lower()
         password = request.form.get('password')
         password_confirm = request.form.get('password_confirm')
 
-        # Validaciones
-        if not email or not nombre or not password:
-            flash('Email, nombre y contraseña son obligatorios.', 'danger')
-            return render_template('auth/registro.html')
-
-        if password != password_confirm:
-            flash('Las contraseñas no coinciden.', 'danger')
-            return render_template('auth/registro.html')
-
-        if len(password) < PASSWORD_MIN_LENGTH:
-            flash(f'La contraseña debe tener al menos {PASSWORD_MIN_LENGTH} caracteres.', 'danger')
-            return render_template('auth/registro.html')
+        errores = validar_registro(valores, password, password_confirm)
+        if errores:
+            flash(MENSAJE_REVISAR, 'danger')
+            return mostrar_formulario('auth/registro.html', valores, errores, 400)
 
         # Verificar si el email ya existe
-        if Usuario.query.filter_by(email=email).first():
+        if Usuario.query.filter_by(email=valores['email']).first():
             flash('El email ya está registrado. Intenta iniciar sesión.', 'warning')
             return redirect(url_for('auth.login'))
 
         # Crear nuevo usuario
         try:
             nuevo_usuario = Usuario(
-                email=email,
-                nombre=nombre,
+                email=valores['email'],
+                nombre=valores['nombre'],
                 password=password,
                 rol='adoptante'  # Por defecto todos son adoptantes
             )
-            nuevo_usuario.apellidos = apellidos
-            nuevo_usuario.telefono = telefono
-            nuevo_usuario.direccion = direccion
+            nuevo_usuario.apellidos = valores['apellidos']
+            nuevo_usuario.telefono = valores['telefono']
+            nuevo_usuario.direccion = valores['direccion']
 
             db.session.add(nuevo_usuario)
             db.session.commit()
@@ -105,10 +127,10 @@ def registro():
             db.session.rollback()
             current_app.logger.exception('Error al crear usuario')
             flash('No se pudo crear el usuario. Inténtalo de nuevo.', 'danger')
-            return render_template('auth/registro.html')
+            return mostrar_formulario('auth/registro.html', valores)
 
     # GET: Mostrar formulario
-    return render_template('auth/registro.html')
+    return mostrar_formulario('auth/registro.html')
 
 
 @bp.route('/login', methods=['GET', 'POST'])
@@ -118,7 +140,10 @@ def login():
     Ruta de inicio de sesión.
 
     GET: Muestra el formulario de login
-    POST: Autentica al usuario
+    POST: Autentica al usuario. Si falta el email o la contraseña, vuelve a
+    mostrar el formulario con el email y el error de cada campo y responde 400. Con
+    credenciales incorrectas o una cuenta desactivada lo muestra de nuevo
+    con el email y un mensaje general.
 
     Returns:
         Template renderizado o redirección
@@ -131,24 +156,30 @@ def login():
         email = request.form.get('email', '').strip().lower()
         password = request.form.get('password')
         remember = request.form.get('remember', False)  # Checkbox "Recordarme"
+        valores = {'email': email}
 
         # Validaciones básicas
-        if not email or not password:
-            flash('Email y contraseña son obligatorios.', 'danger')
-            return render_template('auth/login.html')
+        errores = {}
+        if not email:
+            errores['email'] = 'El email es obligatorio.'
+        if not password:
+            errores['password'] = 'La contraseña es obligatoria.'
+        if errores:
+            flash(MENSAJE_REVISAR, 'danger')
+            return mostrar_formulario('auth/login.html', valores, errores, 400)
 
         # Buscar usuario por email
         usuario = Usuario.query.filter_by(email=email).first()
 
-        # Verificar credenciales
+        # Verificar credenciales (mensaje común: no revela si el email existe)
         if usuario is None or not usuario.check_password(password):
             flash('Email o contraseña incorrectos.', 'danger')
-            return render_template('auth/login.html')
+            return mostrar_formulario('auth/login.html', valores)
 
         # Verificar si la cuenta está activa
         if not usuario.activo:
             flash('Tu cuenta ha sido desactivada. Contacta al administrador.', 'warning')
-            return render_template('auth/login.html')
+            return mostrar_formulario('auth/login.html', valores)
 
         # Login exitoso
         login_user(usuario, remember=remember)
@@ -162,7 +193,7 @@ def login():
             return redirect(url_for('index'))
 
     # GET: Mostrar formulario
-    return render_template('auth/login.html')
+    return mostrar_formulario('auth/login.html')
 
 
 @bp.route('/logout', methods=['POST'])
