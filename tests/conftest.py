@@ -192,6 +192,26 @@ def mascota_adoptada(app):
     return mascota
 
 
+@pytest.fixture
+def respuestas_validas():
+    """
+    Respuestas válidas del cuestionario (app/cuestionario.py), tal como las
+    envían el formulario web y la API. Cada test recibe una copia nueva.
+    """
+    return {
+        'vivienda_tipo': 'casa',
+        'vivienda_propia': 'propia',
+        'tiene_jardin': 'si',
+        'tiene_mascotas': 'no',
+        'experiencia_previa': 'He tenido perros toda la vida',
+        'horas_solo': '0-4',
+        'emergencia_veterinaria': 'veterinario',
+        'motivo_adopcion': 'Quiero darle un hogar a un perro tranquilo',
+        'compromiso_gastos': 'si',
+        'compromiso_tiempo': 'si',
+    }
+
+
 @pytest.fixture(scope='function')
 def solicitud_pendiente(app, usuario_adoptante, mascota_disponible):
     """
