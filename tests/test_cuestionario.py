@@ -6,7 +6,7 @@ envíos nuevos (P-04).
 import pytest
 
 from app import cuestionario
-from app.cuestionario import PREGUNTAS, validar
+from app.cuestionario import PREGUNTAS, respuesta_legible, validar
 
 
 class TestPreguntas:
@@ -147,3 +147,54 @@ class TestDependencias:
 def test_claves_desconocidas(respuestas_validas):
     assert cuestionario.claves_desconocidas(respuestas_validas) == []
     assert cuestionario.claves_desconocidas({**respuestas_validas, 'z': 1, 'a': 2}) == ['a', 'z']
+
+
+class TestRespuestaLegible:
+    """P-10: las respuestas guardadas se muestran con su etiqueta, no con el `value`."""
+
+    @pytest.mark.parametrize('campo, valor, esperado', [
+        ('horas_solo', '8+', 'Más de 8 horas'),
+        ('emergencia_veterinaria', 'espera', 'Esperaría a ver evolución'),
+        ('vivienda_tipo', 'finca', 'Finca/Campo'),
+        ('tiene_jardin', True, 'Sí'),
+        ('tiene_mascotas', False, 'No'),
+        ('compromiso_gastos', True, 'Se compromete'),
+        ('compromiso_tiempo', False, 'No puede garantizarlo'),
+        ('motivo_adopcion', 'Quiero un perro', 'Quiero un perro'),
+    ])
+    def test_etiquetas(self, campo, valor, esperado):
+        assert respuesta_legible({campo: valor}, campo) == esperado
+
+    @pytest.mark.parametrize('respuestas', [{}, {'referencias': None}, {'referencias': '  '}, None, 'texto'])
+    def test_sin_respuesta(self, respuestas):
+        assert respuesta_legible(respuestas, 'referencias') == cuestionario.SIN_RESPUESTA == 'Sin respuesta'
+
+    @pytest.mark.parametrize('campo, valor, esperado', [
+        # Cuestionarios antiguos (seed y fixtures, B2.6): se muestran tal cual
+        ('horas_solo', '4-6 horas', '4-6 horas'),
+        ('tiene_jardin', 'Sí', 'Sí'),
+        ('tiene_jardin', 'si', 'Sí'),
+        ('horas_solo', True, 'Sí'),
+        ('horas_solo', ['8+'], "['8+']"),
+        ('vivienda_tipo', 3, '3'),
+        ('experiencia', 'Si, Beagle antes', 'Si, Beagle antes'),
+        ('experiencia', False, 'No'),
+    ])
+    def test_datos_antiguos_no_dan_error(self, campo, valor, esperado):
+        assert respuesta_legible({campo: valor}, campo) == esperado
+
+    def test_secciones_cubren_todas_las_preguntas_en_orden(self):
+        campos = [campo for _, preguntas in cuestionario.SECCIONES for campo, _ in preguntas]
+
+        assert campos == list(PREGUNTAS)
+        assert [titulo for titulo, _ in cuestionario.SECCIONES] == [
+            'Vivienda', 'Experiencia', 'Motivación y compromisos']
+
+    def test_toda_pregunta_tiene_seccion(self):
+        with pytest.raises(TypeError):
+            cuestionario.Pregunta('Sin sección')
+
+    def test_es_filtro_de_jinja(self, app):
+        plantilla = app.jinja_env.from_string("{{ r|respuesta_legible('horas_solo') }}")
+
+        assert plantilla.render(r={'horas_solo': '8+'}) == 'Más de 8 horas'

@@ -137,6 +137,10 @@ def create_app(config_name='default'):
     app.register_blueprint(solicitudes.bp)
     app.register_blueprint(api_bp)
 
+    # Respuestas del cuestionario con su etiqueta legible en las plantillas
+    from app.cuestionario import respuesta_legible
+    app.add_template_filter(respuesta_legible)
+
     # La API se autentica con JWT en la cabecera Authorization (no con cookies),
     # por lo que no necesita token CSRF
     csrf.exempt(api_bp)

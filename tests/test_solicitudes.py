@@ -10,6 +10,9 @@ Tests incluidos:
 
 import re
 
+import pytest
+from markupsafe import escape
+
 from app import cuestionario, db
 from app.models import Mascota, Solicitud
 
@@ -369,6 +372,60 @@ class TestRevisarSolicitud:
         assert solicitud_pendiente.estado == 'rechazada'
         assert solicitud_pendiente.revisado_por == usuario_admin.id
         assert solicitud_pendiente.comentarios_admin is not None
+
+
+def contenido(response):
+    """HTML del `<main>`, sin la navegación (que tiene el formulario de cerrar sesión)."""
+    html = response.data.decode()
+    return html.split('<main', 1)[1].split('</main>', 1)[0]
+
+
+class TestRespuestasLegibles:
+    """P-10: revisar y detalle muestran la etiqueta de cada respuesta."""
+
+    @pytest.fixture
+    def solicitud_nueva(self, usuario_adoptante, mascota_disponible, respuestas_validas):
+        respuestas, _ = cuestionario.validar({**respuestas_validas, 'horas_solo': '8+',
+                                              'emergencia_veterinaria': 'espera', 'compromiso_tiempo': 'no'})
+        solicitud = Solicitud(usuario_id=usuario_adoptante.id, mascota_id=mascota_disponible.id,
+                              cuestionario=respuestas)
+        db.session.add(solicitud)
+        db.session.commit()
+        return solicitud
+
+    @pytest.mark.parametrize('ruta', ['/solicitudes/admin/revisar/{}', '/solicitudes/detalle/{}'])
+    def test_etiquetas(self, client, auth_headers_admin, solicitud_nueva, ruta):
+        html = contenido(client.get(ruta.format(solicitud_nueva.id)))
+
+        assert 'Más de 8 horas' in html
+        assert 'Esperaría a ver evolución' in html
+        assert 'No puede garantizarlo' in html
+        assert '>8+<' not in html and '>espera<' not in html
+        # Las opcionales sin contestar
+        assert html.count('Sin respuesta') == 2
+        for pregunta in cuestionario.PREGUNTAS.values():
+            assert str(escape(pregunta.texto)) in html, pregunta.texto
+
+    def test_detalle_del_adoptante(self, client, auth_headers_adoptante, solicitud_nueva):
+        html = contenido(client.get(f'/solicitudes/detalle/{solicitud_nueva.id}'))
+
+        assert 'Más de 8 horas' in html
+
+    @pytest.mark.parametrize('ruta', ['/solicitudes/admin/revisar/{}', '/solicitudes/detalle/{}'])
+    @pytest.mark.parametrize('respuestas', [
+        {'experiencia': 'Si, Beagle antes', 'vivienda': 'Casa con jardin'},
+        {'tiene_jardin': 'Sí', 'horas_solo': ['8+'], 'compromiso_gastos': 'x'},
+        {},
+    ])
+    def test_cuestionarios_antiguos_no_dan_error(self, client, auth_headers_admin, solicitud_pendiente,
+                                                 ruta, respuestas):
+        solicitud_pendiente.cuestionario_json = respuestas
+        db.session.commit()
+
+        response = client.get(ruta.format(solicitud_pendiente.id))
+
+        assert response.status_code == 200
+        assert 'Sin respuesta' in response.data.decode()
 
 
 class TestModelo:

@@ -128,7 +128,7 @@ def detalle(solicitud_id):
         flash('No tienes permiso para ver esta solicitud.', 'danger')
         return redirect(url_for('solicitudes.mis_solicitudes'))
 
-    return render_template('solicitudes/detalle.html', solicitud=solicitud)
+    return render_template('solicitudes/detalle.html', solicitud=solicitud, secciones=cuestionario.SECCIONES)
 
 
 # Rutas de ADMINISTRACIÓN
@@ -208,4 +208,5 @@ def admin_revisar(solicitud_id):
 
         return redirect(url_for('solicitudes.admin_lista'))
 
-    return render_template('solicitudes/admin/revisar.html', solicitud=solicitud)
+    return render_template('solicitudes/admin/revisar.html', solicitud=solicitud,
+                           secciones=cuestionario.SECCIONES)

@@ -279,7 +279,8 @@ app/
 │   ├── auth/            # login.html, registro.html
 │   ├── mascotas/        # catalogo.html, detalle.html
 │   │   └── admin/       # lista.html, form.html
-│   └── solicitudes/     # nueva.html, mis_solicitudes.html, detalle.html
+│   └── solicitudes/     # nueva.html, mis_solicitudes.html, detalle.html,
+│       │                # _respuestas.html (respuestas legibles, parcial)
 │       └── admin/       # lista.html, revisar.html
 │
 └── static/
@@ -402,6 +403,19 @@ es una cadena o contiene NUL) y `demasiado largo`.
 El cuestionario se valida antes de buscar la mascota, así que un
 cuestionario inválido da 400 aunque la mascota no exista. La respuesta 201
 devuelve el cuestionario limpio.
+
+**Respuestas legibles (P-10).** El detalle de la solicitud y la revisión del
+admin incluyen el parcial `solicitudes/_respuestas.html`, que recorre
+`cuestionario.SECCIONES` (las preguntas de `PREGUNTAS` agrupadas por su
+atributo `seccion`, en su orden) y muestra cada respuesta con el filtro Jinja
+`respuesta_legible(respuestas, campo)`, registrado en `app/__init__.py`:
+
+- Las opciones salen con su etiqueta («8+» → «Más de 8 horas») y los
+  sí/no guardados como booleano, con la de su opción («Se compromete»).
+- Lo que falta (o está vacío) sale como «Sin respuesta».
+- Un valor que no está en la lista se muestra tal cual, y los datos que no
+  son un dict no dan error. Las claves antiguas que no son preguntas no se
+  muestran.
 
 ### Paginación y filtros
 
