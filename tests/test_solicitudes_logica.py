@@ -363,3 +363,70 @@ class TestSolicitudesWebEnParalelo:
         assert '¡Solicitud enviada con éxito para Cerbero!' in response.data.decode()
         assert Solicitud.query.filter_by(estado='pendiente').count() == 2
         assert db.session.get(Mascota, solicitud_pendiente.mascota_id).estado == 'disponible'
+
+
+class TestEstadoManual:
+    """Cambios de estado a mano del admin (ADR-0004): adopción fuera del portal y su vuelta atrás."""
+
+    def test_adoptar_fuera_del_portal(self, app, usuario_admin, tres_pendientes):
+        mascota = db.session.get(Mascota, tres_pendientes[0].mascota_id)
+
+        adopciones.adoptar_fuera_del_portal(mascota, usuario_admin.id)
+
+        assert mascota.estado == 'adoptado'
+        for solicitud in tres_pendientes:
+            assert solicitud.estado == 'rechazada'
+            assert solicitud.comentarios_admin == adopciones.COMENTARIO_RECHAZO_AUTOMATICO
+            assert solicitud.revisado_por == usuario_admin.id
+
+    def test_adoptar_fuera_del_portal_ya_adoptada(self, app, usuario_admin, mascota_adoptada):
+        with pytest.raises(adopciones.MascotaYaAdoptada):
+            adopciones.adoptar_fuera_del_portal(mascota_adoptada, usuario_admin.id)
+
+    @pytest.mark.parametrize('operacion', ['adoptar_fuera_del_portal', 'volver_a_disponible'])
+    def test_mascota_borrada(self, app, usuario_admin, operacion):
+        argumentos = (usuario_admin.id,) if operacion == 'adoptar_fuera_del_portal' else ()
+
+        with pytest.raises(adopciones.MascotaNoEncontrada):
+            getattr(adopciones, operacion)(SimpleNamespace(id=999), *argumentos)
+
+    def test_volver_a_disponible_tras_adopcion_fuera_del_portal(self, app, usuario_admin, mascota_disponible):
+        adopciones.adoptar_fuera_del_portal(mascota_disponible, usuario_admin.id)
+
+        adopciones.volver_a_disponible(mascota_disponible)
+
+        assert db.session.get(Mascota, mascota_disponible.id).estado == 'disponible'
+
+    def test_volver_a_disponible_desde_disponible(self, app, mascota_disponible):
+        with pytest.raises(adopciones.TransicionNoPermitida):
+            adopciones.volver_a_disponible(mascota_disponible)
+
+    def test_no_deshace_una_adopcion_del_portal(self, app, usuario_admin, solicitud_pendiente):
+        adopciones.aprobar(solicitud_pendiente, usuario_admin.id, '')
+
+        with pytest.raises(adopciones.TransicionNoPermitida):
+            adopciones.volver_a_disponible(solicitud_pendiente.mascota)
+        assert solicitud_pendiente.mascota.estado == 'adoptado'
+
+    def test_puede_volver_a_disponible(self, app, usuario_admin, mascota_disponible, mascota_adoptada,
+                                       solicitud_pendiente):
+        assert adopciones.puede_volver_a_disponible(mascota_adoptada)
+        assert not adopciones.puede_volver_a_disponible(mascota_disponible)
+
+        adopciones.aprobar(solicitud_pendiente, usuario_admin.id, '')
+
+        assert not adopciones.puede_volver_a_disponible(mascota_disponible)
+
+
+class TestPendientesPorMascota:
+
+    def test_cuenta_solo_las_pendientes(self, app, usuario_admin, tres_pendientes, mascota_adoptada):
+        mascota_id = tres_pendientes[0].mascota_id
+        adopciones.rechazar(tres_pendientes[0], usuario_admin.id, '')
+
+        assert adopciones.pendientes_por_mascota([mascota_id, mascota_adoptada.id]) == {mascota_id: 2}
+
+    def test_sin_mascotas_no_consulta(self, app, monkeypatch):
+        monkeypatch.setattr(db.session, 'execute', None)
+
+        assert adopciones.pendientes_por_mascota([]) == {}
