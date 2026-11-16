@@ -63,7 +63,7 @@ class TestRegistro:
             'password_confirm': 'diferente123'
         }, follow_redirects=True)
 
-        assert response.status_code == 200
+        assert response.status_code == 400
         assert 'no coinciden' in response.data.decode()
 
         # Verificar que NO se creó el usuario

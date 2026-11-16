@@ -154,7 +154,7 @@ Más detalles en [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md#api-rest).
 - Protección CSRF en todos los formularios y cierre de sesión por POST
 - Cookies `HttpOnly` y `SameSite`, y `Secure` en producción
 - Content Security Policy y cabeceras de seguridad; sin JavaScript inline
-- Límite de 5 intentos de login por minuto (web y API)
+- Límite de 5 intentos de login por minuto (web y API) y de 10 registros por hora
 - Contraseñas con hash scrypt; login con Google solo con email verificado
 - Desactivar una cuenta cierra sus sesiones e invalida sus tokens
 - Fotos validadas por su contenido antes de subirlas a S3

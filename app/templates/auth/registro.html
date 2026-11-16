@@ -11,55 +11,68 @@
 
                 <form method="POST" action="{{ url_for('auth.registro') }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
                     <!-- Email -->
                     <div class="mb-3">
                         <label for="email" class="form-label">Email *</label>
-                        <input type="email" class="form-control" id="email" name="email"
-                               placeholder="tu@email.com" required autofocus>
-                        <small class="text-muted">Usarás este email para iniciar sesión</small>
+                        <input type="email" class="form-control{% if errores.email %} is-invalid{% endif %}" id="email" name="email"
+                               value="{{ valores.email or '' }}"
+                               placeholder="tu@email.com" required autofocus
+                               {%- if errores.email %} aria-invalid="true" aria-describedby="email-error email-ayuda"{% endif %}>
+                        {% if errores.email %}<div id="email-error" class="invalid-feedback">{{ errores.email }}</div>{% endif %}
+                        <small id="email-ayuda" class="text-muted">Usarás este email para iniciar sesión</small>
                     </div>
 
                     <!-- Nombre -->
                     <div class="mb-3">
                         <label for="nombre" class="form-label">Nombre *</label>
-                        <input type="text" class="form-control" id="nombre" name="nombre"
-                               placeholder="Juan" required>
+                        <input type="text" class="form-control{% if errores.nombre %} is-invalid{% endif %}" id="nombre" name="nombre"
+                               value="{{ valores.nombre or '' }}"
+                               placeholder="Juan" required
+                               {%- if errores.nombre %} aria-invalid="true" aria-describedby="nombre-error"{% endif %}>
+                        {% if errores.nombre %}<div id="nombre-error" class="invalid-feedback">{{ errores.nombre }}</div>{% endif %}
                     </div>
 
                     <!-- Apellidos -->
                     <div class="mb-3">
                         <label for="apellidos" class="form-label">Apellidos</label>
                         <input type="text" class="form-control" id="apellidos" name="apellidos"
-                               placeholder="Pérez García">
+                               placeholder="Pérez García"
+                               value="{{ valores.apellidos or '' }}">
                     </div>
 
                     <!-- Teléfono -->
                     <div class="mb-3">
                         <label for="telefono" class="form-label">Teléfono</label>
                         <input type="tel" class="form-control" id="telefono" name="telefono"
-                               placeholder="666123456">
+                               placeholder="666123456"
+                               value="{{ valores.telefono or '' }}">
                     </div>
 
                     <!-- Dirección -->
                     <div class="mb-3">
                         <label for="direccion" class="form-label">Dirección</label>
                         <textarea class="form-control" id="direccion" name="direccion" rows="2"
-                                  placeholder="Calle Mayor 1, Madrid"></textarea>
+                                  placeholder="Calle Mayor 1, Madrid">{{ valores.direccion or '' }}</textarea>
                         <small class="text-muted">Necesaria para solicitudes de adopción</small>
                     </div>
 
                     <!-- Contraseña -->
                     <div class="mb-3">
                         <label for="password" class="form-label">Contraseña *</label>
-                        <input type="password" class="form-control" id="password" name="password"
-                               placeholder="Mínimo 8 caracteres" minlength="8" required>
+                        <input type="password" class="form-control{% if errores.password %} is-invalid{% endif %}" id="password" name="password"
+                               placeholder="Mínimo 8 caracteres" minlength="8" required
+                               {%- if errores.password %} aria-invalid="true" aria-describedby="password-error"{% endif %}>
+                        {% if errores.password %}<div id="password-error" class="invalid-feedback">{{ errores.password }}</div>{% endif %}
                     </div>
 
                     <!-- Confirmar contraseña -->
                     <div class="mb-3">
                         <label for="password_confirm" class="form-label">Confirmar Contraseña *</label>
-                        <input type="password" class="form-control" id="password_confirm" name="password_confirm"
-                               placeholder="Repite tu contraseña" required>
+                        <input type="password" class="form-control{% if errores.password_confirm %} is-invalid{% endif %}" id="password_confirm" name="password_confirm"
+                               placeholder="Repite tu contraseña" required
+                               {%- if errores.password_confirm %} aria-invalid="true" aria-describedby="password_confirm-error"{% endif %}>
+                        {% if errores.password_confirm %}<div id="password_confirm-error" class="invalid-feedback">{{ errores.password_confirm }}</div>{% endif %}
                     </div>
 
                     <!-- Botón de envío -->
@@ -74,7 +87,7 @@
                 <hr class="my-4">
                 <p class="text-center text-muted">
                     ¿Ya tienes cuenta?
-                    <a href="{{ url_for('auth.login') }}" class="text-decoration-none">Inicia sesión aquí</a>
+                    <a href="{{ url_for('auth.login', next=next) }}" class="text-decoration-none">Inicia sesión aquí</a>
                 </p>
             </div>
         </div>

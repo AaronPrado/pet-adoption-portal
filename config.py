@@ -50,6 +50,8 @@ class Config:
     # proceso; con varios workers usar Redis (p. ej. redis://localhost:6379)
     RATELIMIT_STORAGE_URI = os.environ.get('RATELIMIT_STORAGE_URI') or 'memory://'
     RATELIMIT_LOGIN = '5 per minute'
+    # El registro inicia sesión: sin límite se podrían crear cuentas en masa
+    RATELIMIT_REGISTRO = '10 per hour'
 
     # Número de proxies inversos delante de la app (0 = acceso directo).
     # Ver docs/DESPLIEGUE.md

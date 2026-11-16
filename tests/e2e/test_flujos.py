@@ -49,6 +49,28 @@ def test_adoptante_envia_solicitud(page, errores_js):
     expect(page.get_by_text('Solicitud enviada con éxito para Toby')).to_be_visible()
 
 
+def test_login_desde_la_ficha_vuelve_al_cuestionario(page, errores_js):
+    """El anónimo que pulsa «Inicia sesión para adoptar» acaba en el cuestionario."""
+    page.goto('/mascotas/catalogo')
+    tarjeta = page.locator('.card').filter(has=page.get_by_role('heading', name='Misu'))
+    tarjeta.get_by_role('link').first.click()
+    page.get_by_role('link', name='Inicia sesión para adoptar').click()
+
+    # Un primer intento fallido conserva el correo y el destino
+    page.get_by_label('Email').fill(ADOPTANTE[0])
+    page.get_by_label('Contraseña').fill('clave-equivocada')
+    page.get_by_role('button', name='Iniciar Sesión').click()
+    expect(page.get_by_text('Email o contraseña incorrectos.')).to_be_visible()
+    expect(page.get_by_label('Email')).to_have_value(ADOPTANTE[0])
+    expect(page.get_by_label('Contraseña')).to_have_value('')
+
+    page.get_by_label('Contraseña').fill(ADOPTANTE[1])
+    page.get_by_role('button', name='Iniciar Sesión').click()
+
+    expect(page).to_have_url(re.compile(r'/solicitudes/nueva/\d+$'))
+    expect(page.get_by_text('Misu').first).to_be_visible()
+
+
 def test_admin_crea_y_borra_mascota(page, errores_js):
     iniciar_sesion(page, *ADMIN)
 

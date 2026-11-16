@@ -313,7 +313,7 @@ producción):
 |------|--------|
 | Formularios | Token CSRF (Flask-WTF) en todos los POST; logout por POST |
 | Sesión | Cookies `HttpOnly` y `SameSite=Lax`; `Secure` en producción |
-| Login | 5 intentos por minuto por IP (Flask-Limiter); contraseñas de 8+ caracteres con hash scrypt |
+| Login y registro | Login: 5 intentos por minuto por IP; registro: 10 por hora por IP (Flask-Limiter). Contraseñas de 8+ caracteres con hash scrypt |
 | Google OAuth | Solo emails verificados por Google; las cuentas desactivadas no entran |
 | Cuentas desactivadas | Pierden sesiones abiertas y tokens JWT |
 | Redirecciones | `next` solo admite rutas locales |
