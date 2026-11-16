@@ -11,6 +11,7 @@
 
                 <form method="POST" action="{{ url_for('auth.registro') }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
                     <!-- Email -->
                     <div class="mb-3">
                         <label for="email" class="form-label">Email *</label>
@@ -86,7 +87,7 @@
                 <hr class="my-4">
                 <p class="text-center text-muted">
                     ¿Ya tienes cuenta?
-                    <a href="{{ url_for('auth.login') }}" class="text-decoration-none">Inicia sesión aquí</a>
+                    <a href="{{ url_for('auth.login', next=next) }}" class="text-decoration-none">Inicia sesión aquí</a>
                 </p>
             </div>
         </div>

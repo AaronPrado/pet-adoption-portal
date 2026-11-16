@@ -223,6 +223,42 @@ class TestRegistroConservaDatos:
         assert '<script>x</script>' not in html
 
 
+class TestRegistroIniciaSesion:
+    """P-07: el registro inicia sesión y vuelve a `next`."""
+
+    def test_registro_inicia_sesion(self, client):
+        response = client.post('/auth/registro', data=datos_registro())
+
+        assert response.status_code == 302
+        assert response.headers['Location'] == '/'
+        assert client.get('/solicitudes/mis-solicitudes').status_code == 200
+
+    def test_registro_redirige_a_next_local(self, client):
+        response = client.post('/auth/registro', data=datos_registro(next='/solicitudes/nueva/1'))
+        assert response.headers['Location'] == '/solicitudes/nueva/1'
+
+    def test_registro_acepta_next_en_la_query(self, client):
+        response = client.post('/auth/registro?next=/mascotas/1', data=datos_registro())
+        assert response.headers['Location'] == '/mascotas/1'
+
+    def test_formulario_conserva_next(self, client):
+        html = client.get('/auth/registro?next=/solicitudes/nueva/3').data.decode()
+        assert '<input type="hidden" name="next" value="/solicitudes/nueva/3">' in html
+        assert 'href="/auth/login?next=/solicitudes/nueva/3"' in html
+
+    def test_error_conserva_next(self, client):
+        html = client.post('/auth/registro',
+                           data=datos_registro(password_confirm='otra', next='/mascotas/2')).data.decode()
+        assert '<input type="hidden" name="next" value="/mascotas/2">' in html
+
+    def test_email_duplicado_lleva_al_login_con_next(self, client, usuario_adoptante):
+        response = client.post('/auth/registro',
+                               data=datos_registro(email='adoptante@test.com', next='/mascotas/2'))
+        assert response.status_code == 302
+        assert response.headers['Location'] == '/auth/login?next=/mascotas/2'
+        assert client.get('/solicitudes/mis-solicitudes').status_code == 302
+
+
 class TestLoginConservaDatos:
     """P-02 y P-07 en el login."""
 

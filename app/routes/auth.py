@@ -102,9 +102,9 @@ def registro():
     Ruta de registro de nuevos usuarios.
 
     GET: Muestra el formulario de registro
-    POST: Procesa el registro y crea el usuario. Ante un error de
-    validación vuelve a mostrar el formulario con los datos enviados (salvo
-    las contraseñas) y responde 400.
+    POST: Crea el usuario, inicia su sesión y redirige a `next` (si es
+    seguro) o al inicio. Ante un error de validación vuelve a mostrar el
+    formulario con los datos enviados (salvo las contraseñas) y responde 400.
 
     Returns:
         Template renderizado o redirección
@@ -112,6 +112,8 @@ def registro():
     # Si el usuario ya está autenticado, redirigir al inicio
     if current_user.is_authenticated:
         return redirect(url_for('index'))
+
+    next_page = next_seguro()
 
     if request.method == 'POST':
         # Obtener datos del formulario
@@ -123,12 +125,12 @@ def registro():
         errores = validar_registro(valores, password, password_confirm)
         if errores:
             flash(MENSAJE_REVISAR, 'danger')
-            return mostrar_formulario('auth/registro.html', valores, errores, codigo=400)
+            return mostrar_formulario('auth/registro.html', valores, errores, next_page, 400)
 
         # Verificar si el email ya existe
         if Usuario.query.filter_by(email=valores['email']).first():
             flash('El email ya está registrado. Intenta iniciar sesión.', 'warning')
-            return redirect(url_for('auth.login'))
+            return redirect(url_for('auth.login', next=next_page))
 
         # Crear nuevo usuario
         try:
@@ -145,17 +147,18 @@ def registro():
             db.session.add(nuevo_usuario)
             db.session.commit()
 
-            flash('¡Registro exitoso! Ya puedes iniciar sesión.', 'success')
-            return redirect(url_for('auth.login'))
-
         except Exception:
             db.session.rollback()
             current_app.logger.exception('Error al crear usuario')
             flash('No se pudo crear el usuario. Inténtalo de nuevo.', 'danger')
-            return mostrar_formulario('auth/registro.html', valores)
+            return mostrar_formulario('auth/registro.html', valores, next_page=next_page)
+
+        login_user(nuevo_usuario)
+        flash(f'¡Registro exitoso! Bienvenido, {nuevo_usuario.nombre}.', 'success')
+        return redirigir_tras_login(next_page)
 
     # GET: Mostrar formulario
-    return mostrar_formulario('auth/registro.html')
+    return mostrar_formulario('auth/registro.html', next_page=next_page)
 
 
 @bp.route('/login', methods=['GET', 'POST'])

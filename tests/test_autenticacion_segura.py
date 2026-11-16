@@ -57,6 +57,14 @@ class TestRedireccionNext:
         assert response.status_code == 302
         assert response.headers['Location'] == '/'
 
+    @pytest.mark.parametrize('destino', NEXT_PELIGROSOS)
+    def test_registro_ignora_next_peligroso(self, client, destino):
+        response = client.post('/auth/registro', data={
+            'email': 'nuevo@test.com', 'nombre': 'Nuevo', 'password': 'password123',
+            'password_confirm': 'password123', 'next': destino})
+        assert response.status_code == 302
+        assert response.headers['Location'] == '/'
+
     @pytest.mark.parametrize('url', ['/auth/login', '/auth/registro'])
     @pytest.mark.parametrize('destino', NEXT_PELIGROSOS)
     def test_formularios_no_conservan_next_peligroso(self, client, url, destino):
