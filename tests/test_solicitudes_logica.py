@@ -15,10 +15,10 @@ from app.models import Mascota, Solicitud, Usuario, utcnow
 from app.routes.api.auth import generate_token
 
 
-def crear_por_api(client, usuario, mascota_id, cuestionario=None):
+def crear_por_api(client, usuario, mascota_id, cuestionario):
     return client.post('/api/solicitudes/', json={
         'mascota_id': mascota_id,
-        'cuestionario': cuestionario if cuestionario is not None else {'vivienda_tipo': 'Casa'}
+        'cuestionario': cuestionario
     }, headers={'Authorization': f'Bearer {generate_token(usuario.id)}'})
 
 
@@ -45,39 +45,42 @@ def tres_pendientes(usuario_adoptante, mascota_disponible):
 
 class TestApiSolicitudes:
 
-    def test_crear_por_api_deja_la_mascota_disponible(self, client, usuario_adoptante, mascota_disponible):
-        assert crear_por_api(client, usuario_adoptante, mascota_disponible.id).status_code == 201
+    def test_crear_por_api_deja_la_mascota_disponible(self, client, usuario_adoptante, mascota_disponible,
+                                                        respuestas_validas):
+        assert crear_por_api(client, usuario_adoptante, mascota_disponible.id, respuestas_validas).status_code == 201
         assert db.session.get(Mascota, mascota_disponible.id).estado == 'disponible'
 
-    def test_segunda_solicitud_en_paralelo_por_api(self, client, usuario_adoptante, mascota_disponible):
+    def test_segunda_solicitud_en_paralelo_por_api(self, client, usuario_adoptante, mascota_disponible,
+                                                   respuestas_validas):
         otro = nuevo_usuario('otro@test.com')
 
-        crear_por_api(client, usuario_adoptante, mascota_disponible.id)
-        response = crear_por_api(client, otro, mascota_disponible.id)
+        crear_por_api(client, usuario_adoptante, mascota_disponible.id, respuestas_validas)
+        response = crear_por_api(client, otro, mascota_disponible.id, respuestas_validas)
 
         assert response.status_code == 201
         assert Solicitud.query.filter_by(estado='pendiente').count() == 2
 
-    def test_mascota_adoptada_por_api(self, client, usuario_adoptante, mascota_adoptada):
-        response = crear_por_api(client, usuario_adoptante, mascota_adoptada.id)
+    def test_mascota_adoptada_por_api(self, client, usuario_adoptante, mascota_adoptada, respuestas_validas):
+        response = crear_por_api(client, usuario_adoptante, mascota_adoptada.id, respuestas_validas)
 
         assert response.status_code == 400
         assert response.get_json() == {'error': adopciones.MascotaNoDisponible.mensaje}
 
-    def test_duplicada_por_api_usa_el_mensaje_del_dominio(self, client, usuario_adoptante, mascota_disponible):
-        crear_por_api(client, usuario_adoptante, mascota_disponible.id)
-        response = crear_por_api(client, usuario_adoptante, mascota_disponible.id)
+    def test_duplicada_por_api_usa_el_mensaje_del_dominio(self, client, usuario_adoptante, mascota_disponible,
+                                                         respuestas_validas):
+        crear_por_api(client, usuario_adoptante, mascota_disponible.id, respuestas_validas)
+        response = crear_por_api(client, usuario_adoptante, mascota_disponible.id, respuestas_validas)
 
         assert response.status_code == 409
         assert response.get_json() == {'error': adopciones.SolicitudDuplicada.mensaje}
 
     def test_mascota_borrada_mientras_tanto_por_api_da_404(self, client, usuario_adoptante,
-                                                            mascota_disponible, monkeypatch):
+                                                            mascota_disponible, monkeypatch, respuestas_validas):
         def fallar(*args):
             raise adopciones.MascotaNoEncontrada()
         monkeypatch.setattr(adopciones, 'crear_solicitud', fallar)
 
-        response = crear_por_api(client, usuario_adoptante, mascota_disponible.id)
+        response = crear_por_api(client, usuario_adoptante, mascota_disponible.id, respuestas_validas)
 
         assert response.status_code == 404
         assert response.get_json() == {'error': adopciones.MascotaNoEncontrada.mensaje}
@@ -94,8 +97,9 @@ class TestApiSolicitudes:
         assert response.status_code == 400
 
     @pytest.mark.parametrize('mascota_id', ['1', True, None, 1.5])
-    def test_mascota_id_debe_ser_entero(self, client, usuario_adoptante, mascota_disponible, mascota_id):
-        assert crear_por_api(client, usuario_adoptante, mascota_id).status_code == 400
+    def test_mascota_id_debe_ser_entero(self, client, usuario_adoptante, mascota_disponible, mascota_id,
+                                       respuestas_validas):
+        assert crear_por_api(client, usuario_adoptante, mascota_id, respuestas_validas).status_code == 400
 
 
 class TestCrearSolicitud:
@@ -353,11 +357,11 @@ class TestRechazoSinRevisor:
 
 class TestSolicitudesWebEnParalelo:
 
-    def test_segundo_usuario_solicita_por_la_web(self, client, solicitud_pendiente):
+    def test_segundo_usuario_solicita_por_la_web(self, client, solicitud_pendiente, respuestas_validas):
         nuevo_usuario('otro@test.com')
         client.post('/auth/login', data={'email': 'otro@test.com', 'password': 'password123'})
 
-        response = client.post(f'/solicitudes/nueva/{solicitud_pendiente.mascota_id}', data={},
+        response = client.post(f'/solicitudes/nueva/{solicitud_pendiente.mascota_id}', data=respuestas_validas,
                                follow_redirects=True)
 
         assert '¡Solicitud enviada con éxito para Cerbero!' in response.data.decode()

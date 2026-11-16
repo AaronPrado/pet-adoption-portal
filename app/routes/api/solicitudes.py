@@ -5,29 +5,41 @@ Endpoints de solicitudes para la API.
 from flask import g, request, url_for
 from flask_restx import Namespace, Resource, fields
 
-from app import adopciones
+from app import adopciones, cuestionario
 from app.models import Solicitud
 from app.routes.api.auth import jwt_required
 
 ns = Namespace("solicitudes", description="Solicitudes")
 
-# Límites del cuestionario recibido por la API
-CUESTIONARIO_MAX_CAMPOS = 30
-CUESTIONARIO_MAX_LONGITUD = 2000
+# Máximo de claves desconocidas que se nombran en el mensaje de error
+MAX_CLAVES_EN_ERROR = 5
+
+# Motivo breve de cada error del cuestionario, para el mensaje de la API
+MOTIVOS = {
+    cuestionario.MENSAJE_OBLIGATORIO: 'falta',
+    cuestionario.MENSAJE_DETALLES: 'falta',
+    cuestionario.MENSAJE_OPCION: 'opción no válida',
+    cuestionario.MENSAJE_TEXTO: 'texto no válido',
+    cuestionario.MENSAJE_LARGO: 'demasiado largo',
+}
 
 
-def cuestionario_valido(cuestionario):
-    """El cuestionario debe ser un objeto plano con valores simples y acotados."""
-    if not isinstance(cuestionario, dict) or not 0 < len(cuestionario) <= CUESTIONARIO_MAX_CAMPOS:
-        return False
-    for clave, valor in cuestionario.items():
-        if len(clave) > 100:
-            return False
-        if valor is not None and not isinstance(valor, (str, bool, int, float)):
-            return False
-        if isinstance(valor, str) and len(valor) > CUESTIONARIO_MAX_LONGITUD:
-            return False
-    return True
+def validar_cuestionario(datos):
+    """
+    Valida el cuestionario recibido con las mismas reglas que la web.
+
+    Returns:
+        tuple: (respuestas limpias, None) si es válido, o (None, mensaje).
+    """
+    desconocidas = cuestionario.claves_desconocidas(datos)
+    if desconocidas:
+        nombres = ', '.join(clave[:100] for clave in desconocidas[:MAX_CLAVES_EN_ERROR])
+        return None, f'Cuestionario no válido: campos desconocidos: {nombres}'
+    respuestas, errores = cuestionario.validar(datos)
+    if errores:
+        detalle = ', '.join(f'{campo} ({MOTIVOS[errores[campo]]})' for campo in sorted(errores))
+        return None, f'Cuestionario no válido: {detalle}'
+    return respuestas, None
 
 # Modelos para Swagger
 solicitud_model = ns.model('Solicitudes', {
@@ -43,7 +55,8 @@ solicitud_model = ns.model('Solicitudes', {
 
 create_solicitud_model = ns.model('CrearSolicitud', {
     'mascota_id': fields.Integer(required=True, description='ID de la mascota'),
-    'cuestionario': fields.Raw(description='Respuestas del cuestionario')
+    'cuestionario': fields.Raw(required=True,
+                               description='Respuestas del cuestionario (claves y valores de app/cuestionario.py)')
 })
 
 @ns.route("/mias")
@@ -69,12 +82,17 @@ class CrearSolicitud (Resource):
 
         mascota_id = data.get('mascota_id') if isinstance(data, dict) else None
         if not isinstance(mascota_id, int) or isinstance(mascota_id, bool) \
-                or not cuestionario_valido(data.get('cuestionario')):
+                or not isinstance(data.get('cuestionario'), dict):
             return {'error': 'Datos inválidos'}, 400
+
+        # Mismas reglas que el formulario web (P-04), antes de crear nada
+        respuestas, error = validar_cuestionario(data['cuestionario'])
+        if error:
+            return {'error': error}, 400
 
         # Misma regla que la web: la mascota sigue disponible (ADR-0004)
         try:
-            solicitud = adopciones.crear_solicitud(g.current_user.id, mascota_id, data['cuestionario'])
+            solicitud = adopciones.crear_solicitud(g.current_user.id, mascota_id, respuestas)
         except adopciones.MascotaNoEncontrada as error:
             return {'error': error.mensaje}, 404
         except adopciones.MascotaNoDisponible as error:

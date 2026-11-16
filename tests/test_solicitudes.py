@@ -8,7 +8,9 @@ Tests incluidos:
 - Validaciones y restricciones
 """
 
-from app import db
+import re
+
+from app import cuestionario, db
 from app.models import Mascota, Solicitud
 
 
@@ -30,22 +32,11 @@ class TestCrearSolicitud:
         content = response.data.decode()
         assert 'Cuestionario' in content or 'Solicitud' in content or 'vivienda' in content.lower()
 
-    def test_crear_solicitud_exitosa(self, client, auth_headers_adoptante, mascota_disponible):
+    def test_crear_solicitud_exitosa(self, client, auth_headers_adoptante, mascota_disponible,
+                                     respuestas_validas):
         """Test: Crear solicitud con cuestionario completo."""
-        response = client.post(f'/solicitudes/nueva/{mascota_disponible.id}', data={
-            'vivienda_tipo': 'Casa',
-            'vivienda_propia': 'Sí',
-            'tiene_jardin': 'Sí',
-            'otras_mascotas': 'No',
-            'experiencia_previa': 'Sí, he tenido perros',
-            'horas_solo': '4-6 horas',
-            'gastos_veterinarios': 'Sí',
-            'tiempo_dedicado': '2-3 horas',
-            'motivo_adopcion': 'Compañía para la familia',
-            'emergencia': 'Veterinario inmediatamente',
-            'compromisos': 'Sí, estoy comprometido',
-            'referencias': 'Ana García - 612345678'
-        }, follow_redirects=True)
+        response = client.post(f'/solicitudes/nueva/{mascota_disponible.id}', data=respuestas_validas,
+                               follow_redirects=True)
 
         assert response.status_code == 200
         content = response.data.decode().lower()
@@ -76,6 +67,132 @@ class TestCrearSolicitud:
         assert response.status_code == 200
         content = response.data.decode().lower()
         assert 'ya' in content or 'solicitud' in content
+
+
+class TestValidarCuestionarioWeb:
+    """P-04: el servidor valida el cuestionario antes de crear la solicitud."""
+
+    def enviar(self, client, mascota, datos):
+        return client.post(f'/solicitudes/nueva/{mascota.id}', data=datos)
+
+    def test_envio_vacio_no_crea_la_solicitud(self, client, auth_headers_adoptante, mascota_disponible):
+        response = self.enviar(client, mascota_disponible, {})
+
+        assert response.status_code == 400
+        assert Solicitud.query.count() == 0
+        html = response.data.decode()
+        assert 'Revisa los campos marcados.' in html
+        assert 'Esta pregunta es obligatoria.' in html
+        assert 'éxito' not in html
+        # Es el formulario, no la página genérica del 400 (app/errores.py)
+        assert 'id="vivienda_tipo"' in html
+        assert 'No hemos podido procesar la petición' not in html
+
+    def test_errores_junto_a_su_campo(self, client, auth_headers_adoptante, mascota_disponible):
+        html = self.enviar(client, mascota_disponible, {}).data.decode()
+
+        assert 'aria-describedby="vivienda_tipo-error"' in html
+        assert 'id="vivienda_tipo-error"' in html
+        # En los radios, cada opción apunta al error del grupo
+        assert html.count('aria-describedby="tiene_jardin-error"') == 2
+        assert 'id="jardin_si"' in html and 'id="gastos_si"' in html
+        # Las opcionales no se marcan
+        assert 'id="referencias-error"' not in html
+
+    def test_opcion_fuera_de_la_lista(self, client, auth_headers_adoptante, mascota_disponible,
+                                      respuestas_validas):
+        response = self.enviar(client, mascota_disponible, {**respuestas_validas, 'horas_solo': '24'})
+
+        assert response.status_code == 400
+        assert Solicitud.query.count() == 0
+        assert 'id="horas_solo-error"' in response.data.decode()
+
+    def test_conserva_lo_escrito(self, client, auth_headers_adoptante, mascota_disponible,
+                                 respuestas_validas):
+        datos = {**respuestas_validas, 'tiene_mascotas': 'si', 'referencias': 'Ana <García>',
+                 'horas_solo': '8+'}
+        html = self.enviar(client, mascota_disponible, datos).data.decode()
+
+        assert '<option value="casa" selected>' in html
+        assert '<option value="8+" selected>' in html
+        assert 'He tenido perros toda la vida</textarea>' in html
+        assert 'Ana &lt;García&gt;</textarea>' in html
+        assert 'id="mascotas_si" value="si" checked' in html
+        assert 'id="mascotas_no" value="no" checked' not in html
+        # El único error es la dependencia
+        assert 'id="mascotas_detalles-error"' in html
+        assert html.count('aria-invalid="true"') == 1
+
+    def test_tiene_mascotas_exige_detalles(self, client, auth_headers_adoptante, mascota_disponible,
+                                           respuestas_validas):
+        response = self.enviar(client, mascota_disponible, {**respuestas_validas, 'tiene_mascotas': 'si'})
+
+        assert response.status_code == 400
+        assert 'Si tienes otras mascotas, cuéntanos cuáles.' in response.data.decode()
+
+    def test_no_contestado_se_guarda_como_null(self, client, auth_headers_adoptante, mascota_disponible,
+                                               respuestas_validas):
+        response = self.enviar(client, mascota_disponible, {**respuestas_validas, 'compromiso_tiempo': 'no'})
+
+        assert response.status_code == 302
+        guardado = Solicitud.query.one().cuestionario_json
+        assert guardado['referencias'] is None
+        assert guardado['mascotas_detalles'] is None
+        assert guardado['compromiso_tiempo'] is False
+        assert guardado['tiene_jardin'] is True
+
+    def test_ignora_campos_que_no_son_preguntas(self, client, auth_headers_adoptante, mascota_disponible,
+                                                respuestas_validas):
+        self.enviar(client, mascota_disponible, {**respuestas_validas, 'es_admin': 'si'})
+
+        assert 'es_admin' not in Solicitud.query.one().cuestionario_json
+
+    def test_texto_con_nul(self, client, auth_headers_adoptante, mascota_disponible, respuestas_validas):
+        response = self.enviar(client, mascota_disponible, {**respuestas_validas, 'motivo_adopcion': 'a\x00b'})
+
+        assert response.status_code == 400
+        assert Solicitud.query.count() == 0
+        assert 'id="motivo_adopcion-error"' in response.data.decode()
+
+    def test_texto_largo_se_repinta_recortado(self, client, auth_headers_adoptante, mascota_disponible,
+                                              respuestas_validas):
+        enorme = 'x' * 100_000
+        html = self.enviar(client, mascota_disponible, {**respuestas_validas, 'referencias': enorme}).data.decode()
+
+        assert 'id="referencias-error"' in html
+        assert 'x' * (cuestionario.LONGITUD_MAXIMA + 1) + '</textarea>' in html
+        assert 'x' * (cuestionario.LONGITUD_MAXIMA + 2) not in html
+
+    def test_referencias_enlaza_pista_y_error(self, client, auth_headers_adoptante, mascota_disponible,
+                                              respuestas_validas):
+        largo = 'x' * (cuestionario.LONGITUD_MAXIMA + 1)
+        html = self.enviar(client, mascota_disponible, {**respuestas_validas, 'referencias': largo}).data.decode()
+
+        assert 'aria-describedby="referencias-error referencias-ayuda"' in html
+        assert 'id="referencias-ayuda"' in html
+
+    def test_referencias_enlaza_la_pista_sin_error(self, client, auth_headers_adoptante, mascota_disponible):
+        html = client.get(f'/solicitudes/nueva/{mascota_disponible.id}').data.decode()
+
+        assert 'aria-describedby="referencias-ayuda"' in html
+
+    def test_opciones_de_los_select_salen_del_modulo(self, client, auth_headers_adoptante, mascota_disponible):
+        """Fuente única: los <select> pintan exactamente las opciones de PREGUNTAS."""
+        html = client.get(f'/solicitudes/nueva/{mascota_disponible.id}').data.decode()
+
+        selects = re.findall(r'<select[^>]*\bname="([^"]+)"[^>]*>(.*?)</select>', html, re.S)
+        assert {nombre for nombre, _ in selects} == {
+            campo for campo, p in cuestionario.PREGUNTAS.items() if p.opciones and not p.si_no}
+        for nombre, cuerpo in selects:
+            pintadas = re.findall(r'<option value="([^"]*)"[^>]*>([^<]*)</option>', cuerpo)
+            assert pintadas[0] == ('', 'Selecciona...')
+            assert tuple(pintadas[1:]) == cuestionario.PREGUNTAS[nombre].opciones, nombre
+
+    def test_get_sin_errores(self, client, auth_headers_adoptante, mascota_disponible):
+        html = client.get(f'/solicitudes/nueva/{mascota_disponible.id}').data.decode()
+
+        assert 'aria-invalid' not in html
+        assert ' selected>' not in html and ' checked' not in html
 
 
 class TestMisSolicitudes:

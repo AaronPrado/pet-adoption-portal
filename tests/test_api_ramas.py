@@ -9,8 +9,9 @@ import jwt
 import pytest
 from sqlalchemy.exc import IntegrityError
 
-from app import adopciones, db
+from app import adopciones, cuestionario, db
 from app.models import Mascota, Solicitud, Usuario
+from app.routes.api import solicitudes as api_solicitudes
 
 
 def token_con(app, **payload):
@@ -106,16 +107,33 @@ class TestCrearSolicitudApi:
                            headers={'Authorization': f'Bearer {token}'})
 
     def test_clave_demasiado_larga(self, app, client, usuario_adoptante, mascota_disponible):
-        assert self.crear(app, client, usuario_adoptante, {'x' * 101: 'valor'}).status_code == 400
+        response = self.crear(app, client, usuario_adoptante, {'x' * 101: 'valor'})
+
+        assert response.status_code == 400
+        assert response.get_json() == {'error': f"Cuestionario no válido: campos desconocidos: {'x' * 100}"}
+
+    def test_cada_mensaje_del_cuestionario_tiene_motivo(self):
+        """Un mensaje nuevo en app/cuestionario.py sin motivo daría un KeyError (500)."""
+        mensajes = {valor for nombre, valor in vars(cuestionario).items() if nombre.startswith('MENSAJE_')}
+        assert set(api_solicitudes.MOTIVOS) == mensajes
+
+    def test_nombra_como_mucho_cinco_claves_desconocidas(self, app, client, usuario_adoptante,
+                                                         mascota_disponible, respuestas_validas):
+        extra = {f'campo{i}': 'x' for i in range(7)}
+        response = self.crear(app, client, usuario_adoptante, {**respuestas_validas, **extra})
+
+        assert response.status_code == 400
+        assert response.get_json() == {
+            'error': 'Cuestionario no válido: campos desconocidos: campo0, campo1, campo2, campo3, campo4'}
 
     def test_duplicado_simultaneo_devuelve_409(self, app, client, usuario_adoptante,
-                                               mascota_disponible, monkeypatch):
+                                               mascota_disponible, monkeypatch, respuestas_validas):
         """Si otra petición inserta la misma solicitud a la vez, salta la restricción única."""
         def fallar():
             raise IntegrityError('INSERT', {}, Exception('unique_usuario_mascota'))
         monkeypatch.setattr(db.session, 'commit', fallar)
 
-        response = self.crear(app, client, usuario_adoptante, {'vivienda_tipo': 'Casa'})
+        response = self.crear(app, client, usuario_adoptante, respuestas_validas)
 
         assert response.status_code == 409
 
@@ -132,35 +150,39 @@ class TestSolicitudesWeb:
 
         assert 'Ya has enviado una solicitud para esta mascota.' in response.data.decode()
 
-    def test_envio_simultaneo_duplicado(self, client, auth_headers_adoptante, mascota_disponible, monkeypatch):
+    def test_envio_simultaneo_duplicado(self, client, auth_headers_adoptante, mascota_disponible, monkeypatch,
+                                        respuestas_validas):
         """Si otra petición inserta la misma solicitud a la vez, salta la restricción única."""
         def fallar(*args):
             raise adopciones.SolicitudDuplicada()
         monkeypatch.setattr(adopciones, 'crear_solicitud', fallar)
 
-        response = client.post(f'/solicitudes/nueva/{mascota_disponible.id}', data={}, follow_redirects=True)
+        response = client.post(f'/solicitudes/nueva/{mascota_disponible.id}', data=respuestas_validas,
+                               follow_redirects=True)
 
         assert 'Ya has enviado una solicitud para esta mascota.' in response.data.decode()
         assert Solicitud.query.count() == 0
 
-    def test_adoptada_mientras_se_rellenaba(self, client, auth_headers_adoptante, mascota_disponible, monkeypatch):
+    def test_adoptada_mientras_se_rellenaba(self, client, auth_headers_adoptante, mascota_disponible, monkeypatch,
+                                            respuestas_validas):
         """Otra petición la adopta entre la carga del formulario y el envío."""
         def fallar(*args):
             raise adopciones.MascotaNoDisponible()
         monkeypatch.setattr(adopciones, 'crear_solicitud', fallar)
 
-        response = client.post(f'/solicitudes/nueva/{mascota_disponible.id}', data={}, follow_redirects=True)
+        response = client.post(f'/solicitudes/nueva/{mascota_disponible.id}', data=respuestas_validas,
+                               follow_redirects=True)
 
         assert 'Esta mascota ya no está disponible para adopción.' in response.data.decode()
         assert response.request.path == f'/mascotas/{mascota_disponible.id}'
 
     def test_mascota_borrada_mientras_se_rellenaba(self, client, auth_headers_adoptante, mascota_disponible,
-                                                    monkeypatch):
+                                                    monkeypatch, respuestas_validas):
         def fallar(*args):
             raise adopciones.MascotaNoEncontrada()
         monkeypatch.setattr(adopciones, 'crear_solicitud', fallar)
 
-        response = client.post(f'/solicitudes/nueva/{mascota_disponible.id}', data={})
+        response = client.post(f'/solicitudes/nueva/{mascota_disponible.id}', data=respuestas_validas)
 
         assert response.status_code == 404
 
