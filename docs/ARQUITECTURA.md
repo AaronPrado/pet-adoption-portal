@@ -245,6 +245,7 @@ app/
 ├── cli.py               # Comando flask crear-admin
 ├── models.py            # Modelos SQLAlchemy (Usuario, Mascota, Solicitud)
 ├── adopciones.py        # Regla de adopción: crear, aprobar y rechazar solicitudes
+├── cuestionario.py      # Preguntas, opciones y validación del cuestionario
 ├── decorators.py        # @admin_required
 ├── s3.py                # Subida (validada con Pillow) y borrado de fotos en S3
 │
@@ -343,7 +344,7 @@ API RESTful con autenticación JWT y documentación Swagger automática.
 | POST | `/api/auth/login` | No | Login, devuelve JWT (máximo 5 intentos por minuto) |
 | GET | `/api/mascotas/` | No | Mascotas disponibles, paginadas y filtrables |
 | GET | `/api/mascotas/<id>` | No | Detalle de mascota |
-| POST | `/api/solicitudes/` | JWT | Crear solicitud (201 con cabecera `Location`); la mascota sigue `disponible` |
+| POST | `/api/solicitudes/` | JWT | Crear solicitud (201 con cabecera `Location`); la mascota sigue `disponible`; cuestionario validado |
 | GET | `/api/solicitudes/mias` | JWT | Mis solicitudes |
 | GET | `/api/solicitudes/<id>` | JWT | Una solicitud propia (404 si es de otro usuario) |
 
@@ -352,6 +353,45 @@ Desde la ADR-0004, `POST /api/solicitudes/` ya no pasa la mascota a
 si el mismo usuario repite). El campo `estado` de las mascotas solo toma
 `disponible` o `adoptado`; 400 «Mascota no disponible» significa que ya está
 adoptada. El formato de errores no cambia.
+
+### Cuestionario de adopción (P-04)
+
+`app/cuestionario.py` es la única fuente del cuestionario: preguntas,
+opciones (`value` y etiqueta legible), obligatorias y dependencias. La web y
+la API validan cada envío nuevo con `validar(datos) -> (limpio, errores)`
+**antes** de llamar a `adopciones.crear_solicitud`; un envío inválido no
+crea la solicitud. Los cuestionarios ya guardados no se revalidan.
+
+- Obligatorias: todas salvo `mascotas_detalles` y `referencias`.
+  `tiene_mascotas="si"` exige `mascotas_detalles`.
+- Las preguntas de opciones solo admiten sus `value` (`"casa"`, `"8+"`…) y
+  las de sí/no, las **cadenas** `"si"` o `"no"`, como el formulario: un
+  booleano JSON (`true`/`false`) da 400. Los textos se recortan, admiten
+  hasta 2000 caracteres y no pueden contener el carácter NUL (`\u0000`),
+  que PostgreSQL rechaza en JSONB.
+- Se guarda el cuestionario limpio, con todas las preguntas: sí/no como
+  booleano y lo no contestado como `null`, nunca como `false`.
+
+En la web, un envío inválido responde 400 y vuelve a pintar el formulario
+con lo escrito (cada texto, recortado a 2001 caracteres) y el error junto a
+cada campo (contrato `valores`/`errores`).
+
+**Cambio de contrato de `POST /api/solicitudes/`.** Antes aceptaba cualquier
+objeto plano en `cuestionario`; ahora aplica la misma validación y responde
+400 con el formato de siempre:
+
+| Caso | Respuesta 400 |
+|------|---------------|
+| Falta `cuestionario` o no es un objeto | `{"error": "Datos inválidos"}` |
+| Claves que no son preguntas | `{"error": "Cuestionario no válido: campos desconocidos: a, b"}` (hasta 5) |
+| Respuestas que faltan o no son válidas | `{"error": "Cuestionario no válido: horas_solo (opción no válida), vivienda_tipo (falta)"}` |
+
+Los motivos posibles son `falta`, `opción no válida`, `texto no válido` (no
+es una cadena o contiene NUL) y `demasiado largo`.
+
+El cuestionario se valida antes de buscar la mascota, así que un
+cuestionario inválido da 400 aunque la mascota no exista. La respuesta 201
+devuelve el cuestionario limpio.
 
 ### Paginación y filtros
 

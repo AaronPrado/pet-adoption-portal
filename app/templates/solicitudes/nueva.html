@@ -2,6 +2,25 @@
 
 {% block title %}Solicitar Adopción - {{ mascota.nombre }}{% endblock %}
 
+{# Contrato `valores`/`errores`: marca el campo inválido y enlaza su error #}
+{# `ayuda`: id de una pista del campo, que se enlaza siempre junto al error #}
+{% macro invalido(campo, ayuda=None) %}
+  {%- if errores[campo] %} aria-invalid="true" aria-describedby="{{ campo }}-error{% if ayuda %} {{ ayuda }}{% endif %}"
+  {%- elif ayuda %} aria-describedby="{{ ayuda }}"{% endif %}
+{%- endmacro %}
+{% macro clase_invalida(campo) %}{% if errores[campo] %} is-invalid{% endif %}{% endmacro %}
+{% macro error(campo) %}{% if errores[campo] %}<div id="{{ campo }}-error" class="invalid-feedback d-block">{{ errores[campo] }}</div>{% endif %}{% endmacro %}
+{% macro opciones(campo) %}
+                                <option value="">Selecciona...</option>
+                                {%- for valor, etiqueta in preguntas[campo].opciones %}
+                                <option value="{{ valor }}"{% if valores[campo] == valor %} selected{% endif %}>{{ etiqueta }}</option>
+                                {%- endfor %}
+{% endmacro %}
+{% macro radio(campo, id, valor) -%}
+<input class="form-check-input{{ clase_invalida(campo) }}" type="radio" name="{{ campo }}" id="{{ id }}" value="{{ valor }}"
+       {%- if valores[campo] == valor %} checked{% endif %}{% if valor == 'si' %} required{% endif %}{{ invalido(campo) }}>
+{%- endmacro %}
+
 {% block content %}
 <div class="row mb-3">
     <div class="col-12">
@@ -30,51 +49,51 @@
                     <div class="row">
                         <div class="col-md-6 mb-3">
                             <label for="vivienda_tipo" class="form-label">Tipo de vivienda *</label>
-                            <select class="form-select" id="vivienda_tipo" name="vivienda_tipo" required>
-                                <option value="">Selecciona...</option>
-                                <option value="casa">Casa</option>
-                                <option value="apartamento">Apartamento</option>
-                                <option value="finca">Finca/Campo</option>
+                            <select class="form-select{{ clase_invalida('vivienda_tipo') }}" id="vivienda_tipo" name="vivienda_tipo" required{{ invalido('vivienda_tipo') }}>
+                                {{- opciones('vivienda_tipo') }}
                             </select>
+                            {{ error('vivienda_tipo') }}
                         </div>
 
                         <div class="col-md-6 mb-3">
                             <label for="vivienda_propia" class="form-label">¿Es vivienda propia o alquilada? *</label>
-                            <select class="form-select" id="vivienda_propia" name="vivienda_propia" required>
-                                <option value="">Selecciona...</option>
-                                <option value="propia">Propia</option>
-                                <option value="alquilada">Alquilada</option>
+                            <select class="form-select{{ clase_invalida('vivienda_propia') }}" id="vivienda_propia" name="vivienda_propia" required{{ invalido('vivienda_propia') }}>
+                                {{- opciones('vivienda_propia') }}
                             </select>
+                            {{ error('vivienda_propia') }}
                         </div>
 
                         <div class="col-md-6 mb-3">
                             <label for="tiene_jardin" class="form-label">¿Tiene jardín o patio? *</label>
                             <div class="form-check">
-                                <input class="form-check-input" type="radio" name="tiene_jardin" id="jardin_si" value="si" required>
+                                {{ radio('tiene_jardin', 'jardin_si', 'si') }}
                                 <label class="form-check-label" for="jardin_si">Sí</label>
                             </div>
                             <div class="form-check">
-                                <input class="form-check-input" type="radio" name="tiene_jardin" id="jardin_no" value="no">
+                                {{ radio('tiene_jardin', 'jardin_no', 'no') }}
                                 <label class="form-check-label" for="jardin_no">No</label>
                             </div>
+                            {{ error('tiene_jardin') }}
                         </div>
 
                         <div class="col-md-6 mb-3">
                             <label for="tiene_mascotas" class="form-label">¿Tiene otras mascotas actualmente? *</label>
                             <div class="form-check">
-                                <input class="form-check-input" type="radio" name="tiene_mascotas" id="mascotas_si" value="si" required>
+                                {{ radio('tiene_mascotas', 'mascotas_si', 'si') }}
                                 <label class="form-check-label" for="mascotas_si">Sí</label>
                             </div>
                             <div class="form-check">
-                                <input class="form-check-input" type="radio" name="tiene_mascotas" id="mascotas_no" value="no">
+                                {{ radio('tiene_mascotas', 'mascotas_no', 'no') }}
                                 <label class="form-check-label" for="mascotas_no">No</label>
                             </div>
+                            {{ error('tiene_mascotas') }}
                         </div>
 
                         <div class="col-12 mb-3">
                             <label for="mascotas_detalles" class="form-label">Si tiene mascotas, especifica (especie, edad, vacunadas)</label>
-                            <textarea class="form-control" id="mascotas_detalles" name="mascotas_detalles" rows="2"
-                                      placeholder="Ej: Perro labrador de 5 años, vacunado y esterilizado"></textarea>
+                            <textarea class="form-control{{ clase_invalida('mascotas_detalles') }}" id="mascotas_detalles" name="mascotas_detalles" rows="2"
+                                      placeholder="Ej: Perro labrador de 5 años, vacunado y esterilizado"{{ invalido('mascotas_detalles') }}>{{ valores.mascotas_detalles }}</textarea>
+                            {{ error('mascotas_detalles') }}
                         </div>
                     </div>
 
@@ -84,34 +103,32 @@
                     <div class="row">
                         <div class="col-12 mb-3">
                             <label for="experiencia_previa" class="form-label">¿Tienes experiencia previa con mascotas? *</label>
-                            <textarea class="form-control" id="experiencia_previa" name="experiencia_previa" rows="3" required
-                                      placeholder="Describe tu experiencia con mascotas..."></textarea>
+                            <textarea class="form-control{{ clase_invalida('experiencia_previa') }}" id="experiencia_previa" name="experiencia_previa" rows="3" required
+                                      placeholder="Describe tu experiencia con mascotas..."{{ invalido('experiencia_previa') }}>{{ valores.experiencia_previa }}</textarea>
+                            {{ error('experiencia_previa') }}
                         </div>
 
                         <div class="col-md-6 mb-3">
                             <label for="horas_solo" class="form-label">¿Cuántas horas al día estaría solo/a? *</label>
-                            <select class="form-select" id="horas_solo" name="horas_solo" required>
-                                <option value="">Selecciona...</option>
-                                <option value="0-4">0-4 horas</option>
-                                <option value="4-8">4-8 horas</option>
-                                <option value="8+">Más de 8 horas</option>
+                            <select class="form-select{{ clase_invalida('horas_solo') }}" id="horas_solo" name="horas_solo" required{{ invalido('horas_solo') }}>
+                                {{- opciones('horas_solo') }}
                             </select>
+                            {{ error('horas_solo') }}
                         </div>
 
                         <div class="col-md-6 mb-3">
                             <label for="emergencia_veterinaria" class="form-label">¿Cómo actuarías ante una emergencia veterinaria? *</label>
-                            <select class="form-select" id="emergencia_veterinaria" name="emergencia_veterinaria" required>
-                                <option value="">Selecciona...</option>
-                                <option value="veterinario">Llevaría inmediatamente al veterinario</option>
-                                <option value="consulta">Consultaría online primero</option>
-                                <option value="espera">Esperaría a ver evolución</option>
+                            <select class="form-select{{ clase_invalida('emergencia_veterinaria') }}" id="emergencia_veterinaria" name="emergencia_veterinaria" required{{ invalido('emergencia_veterinaria') }}>
+                                {{- opciones('emergencia_veterinaria') }}
                             </select>
+                            {{ error('emergencia_veterinaria') }}
                         </div>
 
                         <div class="col-12 mb-3">
                             <label for="motivo_adopcion" class="form-label">¿Por qué quieres adoptar a {{ mascota.nombre }}? *</label>
-                            <textarea class="form-control" id="motivo_adopcion" name="motivo_adopcion" rows="4" required
-                                      placeholder="Cuéntanos por qué quieres adoptar y qué puedes ofrecer..."></textarea>
+                            <textarea class="form-control{{ clase_invalida('motivo_adopcion') }}" id="motivo_adopcion" name="motivo_adopcion" rows="4" required
+                                      placeholder="Cuéntanos por qué quieres adoptar y qué puedes ofrecer..."{{ invalido('motivo_adopcion') }}>{{ valores.motivo_adopcion }}</textarea>
+                            {{ error('motivo_adopcion') }}
                         </div>
                     </div>
 
@@ -120,41 +137,44 @@
 
                     <div class="mb-3">
                         <div class="form-check">
-                            <input class="form-check-input" type="radio" name="compromiso_gastos" id="gastos_si" value="si" required>
+                            {{ radio('compromiso_gastos', 'gastos_si', 'si') }}
                             <label class="form-check-label" for="gastos_si">
                                 <strong>Me comprometo a cubrir todos los gastos veterinarios, alimentación y cuidados necesarios</strong>
                             </label>
                         </div>
                         <div class="form-check">
-                            <input class="form-check-input" type="radio" name="compromiso_gastos" id="gastos_no" value="no">
+                            {{ radio('compromiso_gastos', 'gastos_no', 'no') }}
                             <label class="form-check-label" for="gastos_no">
                                 No puedo garantizarlo
                             </label>
                         </div>
+                        {{ error('compromiso_gastos') }}
                     </div>
 
                     <div class="mb-3">
                         <div class="form-check">
-                            <input class="form-check-input" type="radio" name="compromiso_tiempo" id="tiempo_si" value="si" required>
+                            {{ radio('compromiso_tiempo', 'tiempo_si', 'si') }}
                             <label class="form-check-label" for="tiempo_si">
                                 <strong>Me comprometo a dedicar tiempo diario para paseos, ejercicio y atención</strong>
                             </label>
                         </div>
                         <div class="form-check">
-                            <input class="form-check-input" type="radio" name="compromiso_tiempo" id="tiempo_no" value="no">
+                            {{ radio('compromiso_tiempo', 'tiempo_no', 'no') }}
                             <label class="form-check-label" for="tiempo_no">
                                 No puedo garantizarlo
                             </label>
                         </div>
+                        {{ error('compromiso_tiempo') }}
                     </div>
 
                     <!-- Referencias (opcional) -->
                     <h5 class="mt-4 mb-3">Referencias (Opcional)</h5>
                     <div class="mb-3">
                         <label for="referencias" class="form-label">Referencias personales o veterinarias</label>
-                        <textarea class="form-control" id="referencias" name="referencias" rows="3"
-                                  placeholder="Nombre, teléfono y relación (veterinario, familiar, amigo, etc.)"></textarea>
-                        <small class="text-muted">Opcional, pero ayuda a procesar tu solicitud más rápido</small>
+                        <textarea class="form-control{{ clase_invalida('referencias') }}" id="referencias" name="referencias" rows="3"
+                                  placeholder="Nombre, teléfono y relación (veterinario, familiar, amigo, etc.)"{{ invalido('referencias', 'referencias-ayuda') }}>{{ valores.referencias }}</textarea>
+                        {{ error('referencias') }}
+                        <small id="referencias-ayuda" class="text-muted">Opcional, pero ayuda a procesar tu solicitud más rápido</small>
                     </div>
 
                     <!-- Botones -->

@@ -9,6 +9,8 @@ Tests incluidos:
 
 import json
 
+from app.models import Solicitud
+
 
 class TestAuthAPI:
     """Tests para /api/auth"""
@@ -119,27 +121,87 @@ class TestSolicitudesAPI:
         data = response.get_json()
         assert isinstance(data, list)
 
-    def test_crear_solicitud_exitosa(self, client, usuario_adoptante, mascota_disponible):
-        """POST /api/solicitudes/ crea solicitud."""
-        token = self.get_token(client)
+    def crear(self, client, mascota_id, cuestionario):
+        """Helper: POST /api/solicitudes/ con el token del adoptante."""
+        return client.post('/api/solicitudes/', json={'mascota_id': mascota_id, 'cuestionario': cuestionario},
+                           headers={'Authorization': f'Bearer {self.get_token(client)}'})
 
-        response = client.post('/api/solicitudes/',
-            data=json.dumps({
-                'mascota_id': mascota_disponible.id,
-                'cuestionario': {
-                    'vivienda_tipo': 'Casa',
-                    'tiene_jardin': True,
-                    'experiencia_previa': True
-                }
-            }),
-            content_type='application/json',
-            headers={'Authorization': f'Bearer {token}'}
-        )
+    def test_crear_solicitud_exitosa(self, client, usuario_adoptante, mascota_disponible, respuestas_validas):
+        """POST /api/solicitudes/ crea solicitud."""
+        response = self.crear(client, mascota_disponible.id, respuestas_validas)
 
         assert response.status_code == 201
         data = response.get_json()
         assert data['mascota_id'] == mascota_disponible.id
         assert data['estado'] == 'pendiente'
+        # Se guarda el cuestionario limpio: sí/no como booleano y lo no contestado como null
+        assert data['cuestionario']['tiene_jardin'] is True
+        assert data['cuestionario']['tiene_mascotas'] is False
+        assert data['cuestionario']['referencias'] is None
+
+    def test_cuestionario_arbitrario_ya_no_es_valido(self, client, usuario_adoptante, mascota_disponible):
+        """P-04: el contrato anterior aceptaba cualquier objeto plano."""
+        response = self.crear(client, mascota_disponible.id, {
+            'vivienda_tipo': 'Casa', 'tiene_jardin': True, 'experiencia_previa': True})
+
+        assert response.status_code == 400
+        assert set(response.get_json()) == {'error'}
+        assert Solicitud.query.count() == 0
+
+    def test_claves_desconocidas(self, client, usuario_adoptante, mascota_disponible, respuestas_validas):
+        response = self.crear(client, mascota_disponible.id, {**respuestas_validas, 'es_admin': 'si'})
+
+        assert response.status_code == 400
+        assert response.get_json() == {'error': 'Cuestionario no válido: campos desconocidos: es_admin'}
+        assert Solicitud.query.count() == 0
+
+    def test_opciones_fuera_de_la_lista(self, client, usuario_adoptante, mascota_disponible,
+                                        respuestas_validas):
+        response = self.crear(client, mascota_disponible.id,
+                              {**respuestas_validas, 'horas_solo': '24', 'vivienda_tipo': None})
+
+        assert response.status_code == 400
+        assert response.get_json() == {
+            'error': 'Cuestionario no válido: horas_solo (opción no válida), vivienda_tipo (falta)'}
+
+    def test_si_no_como_booleano_json_da_400(self, client, usuario_adoptante, mascota_disponible,
+                                             respuestas_validas):
+        """Los sí/no se envían como las cadenas "si"/"no", igual que el formulario."""
+        response = self.crear(client, mascota_disponible.id, {**respuestas_validas, 'tiene_jardin': True})
+
+        assert response.status_code == 400
+        assert response.get_json() == {'error': 'Cuestionario no válido: tiene_jardin (opción no válida)'}
+
+    def test_texto_con_nul_da_400(self, client, usuario_adoptante, mascota_disponible, respuestas_validas):
+        """PostgreSQL rechaza \\u0000 en JSONB: sin esta regla la respuesta sería un 500."""
+        response = self.crear(client, mascota_disponible.id, {**respuestas_validas, 'referencias': 'a\u0000b'})
+
+        assert response.status_code == 400
+        assert response.get_json() == {'error': 'Cuestionario no válido: referencias (texto no válido)'}
+        assert Solicitud.query.count() == 0
+
+    def test_texto_que_no_es_cadena_o_largo(self, client, usuario_adoptante, mascota_disponible,
+                                            respuestas_validas):
+        response = self.crear(client, mascota_disponible.id,
+                              {**respuestas_validas, 'motivo_adopcion': 5, 'referencias': 'x' * 2001})
+
+        assert response.get_json() == {
+            'error': 'Cuestionario no válido: motivo_adopcion (texto no válido), referencias (demasiado largo)'}
+
+    def test_tiene_mascotas_exige_detalles(self, client, usuario_adoptante, mascota_disponible,
+                                           respuestas_validas):
+        response = self.crear(client, mascota_disponible.id, {**respuestas_validas, 'tiene_mascotas': 'si'})
+
+        assert response.status_code == 400
+        assert response.get_json() == {'error': 'Cuestionario no válido: mascotas_detalles (falta)'}
+
+    def test_cuestionario_vacio_o_ausente(self, client, usuario_adoptante, mascota_disponible):
+        for cuerpo in [{'mascota_id': mascota_disponible.id, 'cuestionario': {}},
+                       {'mascota_id': mascota_disponible.id}]:
+            response = client.post('/api/solicitudes/', json=cuerpo,
+                                   headers={'Authorization': f'Bearer {self.get_token(client)}'})
+            assert response.status_code == 400
+        assert Solicitud.query.count() == 0
 
     def test_crear_solicitud_sin_token(self, client, mascota_disponible):
         """POST /api/solicitudes/ sin JWT devuelve 401."""
@@ -153,32 +215,11 @@ class TestSolicitudesAPI:
 
         assert response.status_code == 401
 
-    def test_crear_solicitud_mascota_no_existe(self, client, usuario_adoptante):
+    def test_crear_solicitud_mascota_no_existe(self, client, usuario_adoptante, respuestas_validas):
         """POST /api/solicitudes/ con mascota inexistente devuelve 404."""
-        token = self.get_token(client)
+        assert self.crear(client, 999, respuestas_validas).status_code == 404
 
-        response = client.post('/api/solicitudes/',
-            data=json.dumps({
-                'mascota_id': 999,
-                'cuestionario': {'test': 'data'}
-            }),
-            content_type='application/json',
-            headers={'Authorization': f'Bearer {token}'}
-        )
-
-        assert response.status_code == 404
-
-    def test_crear_solicitud_mascota_no_disponible(self, client, usuario_adoptante, mascota_adoptada):
+    def test_crear_solicitud_mascota_no_disponible(self, client, usuario_adoptante, mascota_adoptada,
+                                                   respuestas_validas):
         """POST /api/solicitudes/ con mascota adoptada devuelve 400."""
-        token = self.get_token(client)
-
-        response = client.post('/api/solicitudes/',
-            data=json.dumps({
-                'mascota_id': mascota_adoptada.id,
-                'cuestionario': {'test': 'data'}
-            }),
-            content_type='application/json',
-            headers={'Authorization': f'Bearer {token}'}
-        )
-
-        assert response.status_code == 400
+        assert self.crear(client, mascota_adoptada.id, respuestas_validas).status_code == 400

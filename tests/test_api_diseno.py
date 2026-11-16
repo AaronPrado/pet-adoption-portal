@@ -110,9 +110,9 @@ class TestFiltroEdad:
 
 class TestSolicitudes:
 
-    def test_crear_devuelve_location(self, client, usuario_adoptante, mascota_disponible):
+    def test_crear_devuelve_location(self, client, usuario_adoptante, mascota_disponible, respuestas_validas):
         response = client.post('/api/solicitudes/', headers=cabecera(usuario_adoptante), json={
-            'mascota_id': mascota_disponible.id, 'cuestionario': {'vivienda_tipo': 'Casa'}
+            'mascota_id': mascota_disponible.id, 'cuestionario': respuestas_validas
         })
 
         assert response.status_code == 201
