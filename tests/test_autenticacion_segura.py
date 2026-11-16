@@ -11,6 +11,15 @@ from app.routes.api.auth import generate_token
 from app.routes.auth import es_redireccion_segura
 from config import TestingConfig
 
+# Destinos de `next` que no deben provocar una redirección fuera del sitio
+NEXT_PELIGROSOS = [
+    'https://evil.com', 'http://evil.com/mascotas', '//evil.com', '///evil.com',
+    '/\\evil.com', '\\\\evil.com', '/\\/evil.com', '/\t/evil.com', '/\n/evil.com',
+    '/\x7f/evil.com',
+    ' //evil.com', 'javascript:alert(1)', 'JavaScript:alert(1)', 'javascript://evil.com/%0aalert(1)',
+    'data:text/html,evil.com', 'evil.com',
+]
+
 
 def login(client, email='adoptante@test.com', password='password123', next_url=None):
     url = '/auth/login' + (f'?next={next_url}' if next_url else '')
@@ -25,7 +34,7 @@ class TestRedireccionNext:
 
     @pytest.mark.parametrize('destino', [
         None, '', 'https://evil.com', '//evil.com', '/\\evil.com',
-        '\\\\evil.com', 'javascript:alert(1)', 'mascotas'
+        '\\\\evil.com', 'javascript:alert(1)', 'mascotas', *NEXT_PELIGROSOS
     ])
     def test_destinos_externos_rechazados(self, destino):
         assert not es_redireccion_segura(destino)

@@ -32,6 +32,11 @@ def es_redireccion_segura(destino):
     """
     if not destino or '\\' in destino or not destino.startswith('/') or destino.startswith('//'):
         return False
+    # Los navegadores descartan tabuladores y saltos de línea de las URLs:
+    # «/\t/evil.com» acabaría siendo «//evil.com». Se rechaza cualquier
+    # espacio o carácter no imprimible (controles C0, DEL...)
+    if any(caracter.isspace() or not caracter.isprintable() for caracter in destino):
+        return False
     partes = urlparse(destino)
     return not partes.scheme and not partes.netloc
 
