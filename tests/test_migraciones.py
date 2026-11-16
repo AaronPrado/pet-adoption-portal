@@ -17,7 +17,7 @@ from flask_migrate import downgrade, upgrade
 from sqlalchemy import inspect, text
 
 from app import adopciones, create_app, db
-from app.models import utcnow
+from app.models import Mascota, utcnow
 from config import TestingConfig
 
 
@@ -138,3 +138,96 @@ def test_0002_downgrade_vuelve_a_en_proceso_las_que_tienen_pendientes(datos_en_p
     }
     # Ni se reabren las solicitudes que cerró el upgrade
     assert solicitudes()[2][0] == solicitudes()[6][0] == 'rechazada'
+
+
+def cargar_migracion(nombre):
+    """Importa un archivo de migrations/versions como módulo."""
+    ruta = Path(__file__).parent.parent / 'migrations' / 'versions' / nombre
+    spec = importlib.util.spec_from_file_location(ruta.stem, ruta)
+    migracion = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migracion)
+    return migracion
+
+
+def especies_de_mascotas():
+    with db.engine.connect() as conexion:
+        return dict(conexion.execute(text('SELECT nombre, especie FROM mascotas')).all())
+
+
+ESPECIES_SIN_NORMALIZAR = {
+    'Bien': 'Perro', 'Minusculas': 'perro', 'Espacios': ' PERRO ', 'Gato': 'gATO',
+    'Acento': 'ñandú', 'DosPalabras': '  cobaya   DE indias ', 'Vacia': '   ',
+    'Nfd': 'n\u0303andu\u0301', 'Nbsp': 'cobaya\xa0de\xa0indias', 'AnchuraCero': 'pe\u200brro',
+    'Larga': 'ß' * 50,
+}
+
+# Casos adversos para comparar la copia de la migración con el modelo
+ESPECIES_ADVERSAS = [
+    *ESPECIES_SIN_NORMALIZAR.values(),
+    'n\u0303', 'gato\xa0montés', 'ßpecies', '\u200b', 'pe\u200b\u200drro', '\tperro\n',
+    'gato\r\n\tmontés', '\u00a0\u2003perro\u3000', 'x' * 51,
+]
+
+
+@pytest.fixture
+def datos_especies(app_bd_archivo):
+    """Base en 0002 con especies escritas de varias formas, como antes de 0003."""
+    upgrade(revision='0002')
+    with db.engine.begin() as conexion:
+        for numero, (nombre, especie) in enumerate(ESPECIES_SIN_NORMALIZAR.items(), start=1):
+            conexion.execute(text(
+                "INSERT INTO mascotas (id, nombre, especie, estado, fecha_ingreso, vacunado, esterilizado) "
+                "VALUES (:id, :nombre, :especie, 'disponible', '2026-01-01 00:00:00', FALSE, FALSE)"),
+                {'id': numero, 'nombre': nombre, 'especie': especie})
+
+
+def test_0003_upgrade_normaliza_las_especies(datos_especies):
+    upgrade(revision='0003')
+
+    # La vacía y la que pasaría de 50 caracteres se dejan como están
+    assert especies_de_mascotas() == {
+        'Bien': 'Perro', 'Minusculas': 'Perro', 'Espacios': 'Perro', 'Gato': 'Gato',
+        'Acento': 'Ñandú', 'DosPalabras': 'Cobaya de indias', 'Vacia': '   ',
+        'Nfd': 'Ñandú', 'Nbsp': 'Cobaya de indias', 'AnchuraCero': 'Perro', 'Larga': 'ß' * 50,
+    }
+
+
+def test_0003_avisa_de_las_especies_que_no_puede_normalizar(datos_especies, caplog):
+    """Se ejecuta el cuerpo directamente: env.py reconfigura el logging y caplog no lo vería."""
+    migracion = cargar_migracion('0003_normalizar_especies.py')
+    with caplog.at_level('WARNING', logger='alembic.runtime.migration'), db.engine.begin() as conexion, \
+            Operations.context(MigrationContext.configure(conexion)):
+        migracion.upgrade()
+
+    avisos = [registro.getMessage() for registro in caplog.records if registro.levelname == 'WARNING']
+    assert len(avisos) == 2
+    assert any(repr('   ') in aviso and '[7]' in aviso for aviso in avisos)
+    assert any(repr('ß' * 50) in aviso and '[11]' in aviso for aviso in avisos)
+
+
+def test_0003_usa_el_mismo_criterio_que_el_modelo():
+    """La migración copia la normalización del modelo; deben coincidir."""
+    migracion = cargar_migracion('0003_normalizar_especies.py')
+    assert migracion.LONGITUD_ESPECIE == Mascota.LONGITUD_ESPECIE
+    for especie in ESPECIES_ADVERSAS:
+        assert migracion.normalizar_especie(especie) == Mascota.normalizar_especie(especie), repr(especie)
+
+
+def test_0003_upgrade_es_idempotente(datos_especies):
+    upgrade(revision='0003')
+    especies = especies_de_mascotas()
+
+    migracion = cargar_migracion('0003_normalizar_especies.py')
+    with db.engine.begin() as conexion, Operations.context(MigrationContext.configure(conexion)):
+        migracion.upgrade()
+
+    assert especies_de_mascotas() == especies
+
+
+def test_0003_downgrade_no_cambia_los_datos(datos_especies):
+    """El downgrade no hace nada: la forma original de cada especie no se guardó."""
+    upgrade(revision='0003')
+    especies = especies_de_mascotas()
+    downgrade(revision='0002')
+
+    assert especies_de_mascotas() == especies

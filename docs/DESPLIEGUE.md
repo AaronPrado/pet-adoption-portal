@@ -63,6 +63,18 @@ La migración `0002` (ADR-0004) cambia el estado de mascotas y solicitudes con
 curso: en una ventana de mantenimiento o con la app parada. Su downgrade es
 parcial: no reabre las solicitudes que rechazó.
 
+La migración `0003` (P-31) normaliza `mascotas.especie` («perro» → «Perro»)
+con el mismo criterio que el modelo. Solo toca esa columna y es idempotente,
+así que se puede aplicar con la app en marcha. Su downgrade no hace nada: es
+irreversible, porque no guarda cómo estaba escrita cada especie, pero inocuo,
+porque la versión anterior acepta las especies normalizadas.
+
+Si una especie quedaría vacía (solo espacios o invisibles) o con más de 50
+caracteres, la migración no la cambia y deja un aviso `WARNING` en su salida
+con el valor y los id de las mascotas. **Corrige esas mascotas a mano** (en el
+panel o con un `UPDATE`) después de migrar: si no, al editarlas el modelo
+rechazaría la especie y no se podrían guardar.
+
 ## 5. Primer despliegue
 
 1. Crea la base de datos y aplica las migraciones (`flask --app run db upgrade`).

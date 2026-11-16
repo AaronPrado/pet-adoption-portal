@@ -143,6 +143,16 @@
 - Las solicitudes se borran en cascada (`ON DELETE CASCADE`) con su usuario o
   su mascota.
 - `cuestionario_json` es JSONB en PostgreSQL.
+- `mascotas.especie` es texto libre, pero el modelo la normaliza al asignarla
+  (`@validates('especie')` con `Mascota.normalizar_especie`): compone los
+  caracteres (NFC), quita los invisibles de formato (Unicode `Cf`, como
+  U+200B), quita los espacios de los extremos, deja un solo espacio entre
+  palabras y pone mayúscula solo en la primera letra («perro» y « PERRO » →
+  «Perro»; «cobaya DE Indias» → «Cobaya de indias»). Lanza `ValueError` si no
+  es texto, si queda vacía o si supera `Mascota.LONGITUD_ESPECIE` (50; «ß» pasa
+  a «Ss» y alarga el valor). Así el filtro del catálogo muestra una sola opción
+  por especie. La migración `0003` normalizó las especies que ya existían
+  (P-31).
 
 ### Migraciones
 
@@ -359,6 +369,10 @@ adoptada. El formato de errores no cambia.
 y los filtros `especie`, `raza`, `tamano`, `edad_aprox`, `edad_min` y
 `edad_max`. El cuerpo es una lista; el total va en la cabecera
 `X-Total-Count` y los enlaces a otras páginas en `Link` (RFC 8288).
+El filtro `especie` se normaliza con `Mascota.normalizar_especie`, así que
+`?especie=perro` encuentra «Perro»; si queda vacío no filtra. El filtro del
+catálogo web (`app/routes/mascotas.py`) todavía compara el valor exacto: se
+normalizará en B4.2.
 
 ### Errores
 

@@ -86,7 +86,10 @@ class MascotaList(Resource):
         query = Mascota.query.filter_by(estado='disponible')
 
         # Filtros opcionales desde query params
+        # Las especies se guardan normalizadas; «perro» debe encontrar «Perro»
         especie = request.args.get("especie")
+        if especie:
+            especie = Mascota.normalizar_especie(especie)
         if especie:
             query = query.filter_by(especie=especie)
 
