@@ -5,6 +5,10 @@ estado de la mascota lo decide solo este módulo.
 - La mascota sigue `disponible` mientras tenga solicitudes pendientes.
 - Aprobar una solicitud adopta la mascota y rechaza las demás pendientes.
 - Rechazar solo cambia esa solicitud.
+- El admin solo puede marcarla «adoptada fuera del portal» (con los mismos
+  efectos que una aprobación sobre las pendientes) o deshacer eso.
+- «Tiene solicitudes en curso» se deriva del recuento de pendientes; no se
+  guarda.
 
 Las rutas web y la API usan estas funciones; cada una hace su propio commit.
 Todas bloquean antes la fila de la mascota (`SELECT … FOR UPDATE`) y vuelven
@@ -18,7 +22,7 @@ cambios pendientes que se quieran conservar.
 """
 
 from flask import current_app
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError, InvalidRequestError, NoResultFound
 
 from app import db
@@ -71,6 +75,10 @@ class MascotaYaAdoptada(ErrorAdopcion):
     mensaje = 'Esta mascota ya ha sido adoptada.'
 
 
+class TransicionNoPermitida(ErrorAdopcion):
+    mensaje = 'Este cambio de estado no está permitido.'
+
+
 def consulta_mascota_bloqueada(mascota_id):
     """
     SELECT de la mascota con bloqueo de fila hasta el commit.
@@ -116,13 +124,14 @@ def _releer(solicitud):
         raise SolicitudYaRevisada()
 
 
-def _cerrar_pendientes(mascota, admin_id, excepto_id):
-    """Rechaza con el comentario estándar las demás pendientes de la mascota."""
+def _cerrar_pendientes(mascota, admin_id, excepto_id=None):
+    """Rechaza con el comentario estándar las pendientes de la mascota, salvo `excepto_id`."""
     consulta = select(Solicitud).where(
         Solicitud.mascota_id == mascota.id,
         Solicitud.estado == 'pendiente',
-        Solicitud.id != excepto_id,
     ).execution_options(populate_existing=True)
+    if excepto_id is not None:
+        consulta = consulta.where(Solicitud.id != excepto_id)
     for solicitud in db.session.scalars(consulta):
         solicitud.registrar_revision('rechazada', admin_id, COMENTARIO_RECHAZO_AUTOMATICO)
 
@@ -217,3 +226,70 @@ def rechazar(solicitud, admin_id, comentario=None):
     _releer(solicitud)
     solicitud.registrar_revision('rechazada', admin_id, comentario)
     _confirmar()
+
+
+def adoptar_fuera_del_portal(mascota, admin_id):
+    """
+    Marca la mascota como adoptada sin solicitud aprobada y rechaza sus
+    pendientes, igual que una aprobación, en un solo commit.
+
+    Raises:
+        MascotaNoEncontrada: la mascota ya no existe.
+        MascotaYaAdoptada: ya estaba adoptada; no cambia nada.
+    """
+    mascota = _bloquear_mascota(mascota.id)
+    if mascota.estado == 'adoptado':
+        db.session.rollback()
+        raise MascotaYaAdoptada()
+
+    mascota.marcar_adoptado()
+    _cerrar_pendientes(mascota, admin_id)
+    _confirmar()
+
+
+def puede_volver_a_disponible(mascota):
+    """True si la mascota está adoptada y ninguna solicitud aprobada la adoptó (fue fuera del portal)."""
+    if mascota.estado != 'adoptado':
+        return False
+    aprobada = db.session.scalar(
+        select(Solicitud.id).where(Solicitud.mascota_id == mascota.id, Solicitud.estado == 'aprobada').limit(1)
+    )
+    return aprobada is None
+
+
+def volver_a_disponible(mascota):
+    """
+    Deshace una adopción fuera del portal y la mascota vuelve al catálogo.
+
+    Las solicitudes que se rechazaron al marcarla no se reabren.
+
+    Raises:
+        MascotaNoEncontrada: la mascota ya no existe.
+        TransicionNoPermitida: no está adoptada o la adoptó una solicitud
+            aprobada (esa adopción no se deshace desde aquí); no cambia nada.
+    """
+    mascota = _bloquear_mascota(mascota.id)
+    if not puede_volver_a_disponible(mascota):
+        db.session.rollback()
+        raise TransicionNoPermitida()
+
+    mascota.estado = 'disponible'
+    _confirmar()
+
+
+def pendientes_por_mascota(mascota_ids):
+    """
+    Número de solicitudes pendientes de cada mascota, con una sola consulta
+    agregada (sin N+1). Las mascotas sin pendientes no aparecen.
+
+    Returns:
+        dict: {mascota_id: número de pendientes}
+    """
+    if not mascota_ids:
+        return {}
+    consulta = (
+        select(Solicitud.mascota_id, func.count())
+        .where(Solicitud.mascota_id.in_(mascota_ids), Solicitud.estado == 'pendiente')
+        .group_by(Solicitud.mascota_id)
+    )
+    return dict(db.session.execute(consulta).all())

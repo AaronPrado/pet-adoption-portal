@@ -77,21 +77,6 @@
                             </select>
                         </div>
 
-                        <!-- Estado (solo en edición) -->
-                        {% if mascota %}
-                        <div class="col-12 mb-3">
-                            <label for="estado" class="form-label">Estado</label>
-                            <select class="form-select" id="estado" name="estado">
-                                <option value="disponible" {% if mascota.estado=='disponible' %}selected{% endif %}>
-                                    Disponible</option>
-                                <option value="en_proceso" {% if mascota.estado=='en_proceso' %}selected{% endif %}>En
-                                    Proceso</option>
-                                <option value="adoptado" {% if mascota.estado=='adoptado' %}selected{% endif %}>Adoptado
-                                </option>
-                            </select>
-                        </div>
-                        {% endif %}
-
                         <!-- Descripción -->
                         <div class="col-12 mb-3">
                             <label for="descripcion" class="form-label">Descripción *</label>
@@ -161,6 +146,42 @@
                 </form>
             </div>
         </div>
+
+        {% if mascota %}
+        <!-- Estado: lo decide el flujo de solicitudes (ADR-0004) -->
+        <div class="card mt-4">
+            <div class="card-body p-4">
+                <h3 class="h5">Estado</h3>
+                {% if mascota.estado == 'adoptado' %}
+                    <p><span class="badge bg-secondary">Adoptado</span></p>
+                    {% if puede_volver_a_disponible %}
+                        <p class="text-muted">Se marcó como adoptada fuera del portal.</p>
+                        <form method="POST" action="{{ url_for('mascotas.admin_volver_a_disponible', mascota_id=mascota.id) }}"
+                              data-confirmar="¿Volver a poner a {{ mascota.nombre }} en el catálogo?">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-outline-primary">Volver a disponible</button>
+                        </form>
+                    {% else %}
+                        <p class="text-muted mb-0">La adoptó una solicitud aprobada; esa adopción no se deshace desde aquí.</p>
+                    {% endif %}
+                {% else %}
+                    <p>
+                        <span class="badge bg-success">Disponible</span>
+                        {% if pendientes %}<span class="badge bg-info text-dark">Tiene solicitudes en curso</span>{% endif %}
+                    </p>
+                    <p class="text-muted">
+                        Pasa a adoptada al aprobar una solicitud. Si la adoptaron por otra vía, márcala aquí{% if pendientes %}:
+                        se rechazarán {{ pendientes }} solicitud{{ 'es' if pendientes != 1 }} pendiente{{ 's' if pendientes != 1 }}{% endif %}.
+                    </p>
+                    <form method="POST" action="{{ url_for('mascotas.admin_adoptar_fuera', mascota_id=mascota.id) }}"
+                          data-confirmar="¿Marcar a {{ mascota.nombre }} como adoptada fuera del portal?{% if pendientes %} Se rechazarán sus solicitudes pendientes.{% endif %}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-outline-danger">Marcar como adoptada fuera del portal</button>
+                    </form>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
     </div>
 </div>
 {% endblock %}

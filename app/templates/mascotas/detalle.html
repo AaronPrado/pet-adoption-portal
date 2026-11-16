@@ -33,9 +33,10 @@
                 <!-- Estado -->
                 {% if mascota.estado == 'disponible' %}
                     <span class="badge bg-success mb-3">Disponible para adopción</span>
-                {% elif mascota.estado == 'en_proceso' %}
-                    <span class="badge bg-warning text-dark mb-3">En proceso de adopción</span>
-                {% else %}
+                    {% if pendientes %}
+                        <span class="badge bg-info text-dark mb-3">Tiene solicitudes en curso</span>
+                    {% endif %}
+                {% elif mascota.estado == 'adoptado' %}
                     <span class="badge bg-secondary mb-3">Adoptado</span>
                 {% endif %}
 

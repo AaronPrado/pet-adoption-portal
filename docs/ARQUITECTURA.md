@@ -164,6 +164,8 @@ solo `app/adopciones.py`, que usan las rutas web y la API:
 | `crear_solicitud` | `pendiente` | sigue `disponible` | sin cambios |
 | `rechazar` | `rechazada` | sin cambios | sin cambios |
 | `aprobar` | `aprobada` | `adoptado` | `rechazada` con `COMENTARIO_RECHAZO_AUTOMATICO` |
+| `adoptar_fuera_del_portal` | — | `adoptado` | todas `rechazada` con `COMENTARIO_RECHAZO_AUTOMATICO` |
+| `volver_a_disponible` | — | `disponible` | sin cambios (las rechazadas no se reabren) |
 
 - Cada operación hace un único commit; si la regla no la permite hace
   rollback, lanza una subclase de `ErrorAdopcion` (`SolicitudYaRevisada`,
@@ -177,8 +179,21 @@ solo `app/adopciones.py`, que usan las rutas web y la API:
   `fecha_revision` el admin que aprobó. Las que cerró la migración `0002`
   (pendientes de mascotas ya adoptadas) tienen `revisado_por` NULL.
 - Invariante: una mascota `adoptado` no tiene solicitudes pendientes.
-- Hasta B1.2, el formulario de edición del panel admin aún puede cambiar el
-  estado de la mascota a mano.
+- El formulario de edición del panel admin no cambia el estado (un POST que
+  incluya `estado` lo ignora). En su lugar ofrece dos acciones POST, solo
+  para admin: «Marcar como adoptada fuera del portal»
+  (`/mascotas/admin/adoptada-fuera/<id>`) en una mascota no adoptada y
+  «Volver a disponible» (`/mascotas/admin/volver-a-disponible/<id>`) solo si
+  está `adoptado` sin ninguna solicitud aprobada
+  (`puede_volver_a_disponible`); una adopción del portal no se deshace.
+  La lista del panel solo filtra por `disponible` y `adoptado`; cualquier
+  otro valor de `?estado=` se ignora.
+- «Tiene solicitudes en curso» (catálogo, detalle y formulario admin) se
+  deriva de `pendientes_por_mascota(ids)`: una sola consulta agregada
+  (`GROUP BY mascota_id`) para toda la página, sin N+1.
+- Borrar una mascota bloquea antes su fila con `consulta_mascota_bloqueada`,
+  para que una solicitud creada a la vez no se cuele entre la comprobación de
+  solicitudes y el borrado.
 
 ---
 

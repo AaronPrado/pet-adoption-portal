@@ -68,6 +68,16 @@ class TestNMasUno:
 
         assert consultas_en(client, '/solicitudes/mis-solicitudes') == con_1
 
+    def test_catalogo_cuenta_pendientes_con_una_consulta(self, client):
+        crear_solicitudes(1)
+        con_1 = consultas_en(client, '/mascotas/catalogo')
+
+        crear_solicitudes(11, prefijo='x')
+
+        html = client.get('/mascotas/catalogo').data.decode()
+        assert html.count('Tiene solicitudes en curso') == 12
+        assert consultas_en(client, '/mascotas/catalogo') == con_1
+
 
 class TestPaginacion:
 

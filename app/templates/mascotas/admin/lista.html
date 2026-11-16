@@ -31,10 +31,6 @@
                        class="btn {% if estado_filtro == 'disponible' %}btn-primary{% else %}btn-outline-secondary{% endif %} flex-fill">
                         Disponibles
                     </a>
-                    <a href="{{ url_for('mascotas.admin_lista', estado='en_proceso') }}"
-                       class="btn {% if estado_filtro == 'en_proceso' %}btn-primary{% else %}btn-outline-secondary{% endif %} flex-fill">
-                        En Proceso
-                    </a>
                     <a href="{{ url_for('mascotas.admin_lista', estado='adoptado') }}"
                        class="btn {% if estado_filtro == 'adoptado' %}btn-primary{% else %}btn-outline-secondary{% endif %} flex-fill">
                         Adoptados
@@ -126,10 +122,10 @@
                                 <td>
                                     {% if mascota.estado == 'disponible' %}
                                         <span class="badge bg-success">Disponible</span>
-                                    {% elif mascota.estado == 'en_proceso' %}
-                                        <span class="badge bg-warning text-dark">En Proceso</span>
-                                    {% else %}
+                                    {% elif mascota.estado == 'adoptado' %}
                                         <span class="badge bg-secondary">Adoptado</span>
+                                    {% else %}
+                                        <span class="badge bg-light text-dark">Otro estado</span>
                                     {% endif %}
                                 </td>
                                 <td>

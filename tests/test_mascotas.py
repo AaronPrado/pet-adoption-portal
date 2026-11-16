@@ -272,3 +272,50 @@ class TestModelo:
         assert 'Cerbero' in repr_str
         assert 'Perro' in repr_str
         assert 'disponible' in repr_str
+
+
+class TestAvisoSolicitudesEnCurso:
+    """ADR-0004: con pendientes, la mascota sigue en el catálogo con un aviso."""
+
+    AVISO = 'Tiene solicitudes en curso'
+
+    def test_catalogo_muestra_el_aviso(self, client, solicitud_pendiente):
+        html = client.get('/mascotas/catalogo').data.decode()
+
+        assert 'Cerbero' in html
+        assert html.count(self.AVISO) == 1
+
+    def test_catalogo_sin_pendientes_sin_aviso(self, client, mascota_disponible):
+        assert self.AVISO not in client.get('/mascotas/catalogo').data.decode()
+
+    def test_catalogo_solo_avisa_en_la_mascota_con_pendientes(self, client, solicitud_pendiente):
+        db.session.add(Mascota(nombre='Michi', especie='Gato', descripcion='Gata cariñosa y tranquila'))
+        db.session.commit()
+
+        html = client.get('/mascotas/catalogo').data.decode()
+
+        assert html.count(self.AVISO) == 1
+
+    def test_detalle_muestra_el_aviso(self, client, solicitud_pendiente):
+        html = client.get(f'/mascotas/{solicitud_pendiente.mascota_id}').data.decode()
+
+        assert self.AVISO in html
+        assert 'Disponible para adopción' in html
+
+    def test_detalle_sin_pendientes_sin_aviso(self, client, mascota_disponible):
+        assert self.AVISO not in client.get(f'/mascotas/{mascota_disponible.id}').data.decode()
+
+    def test_detalle_rechazada_sin_aviso(self, client, solicitud_pendiente):
+        solicitud_pendiente.estado = 'rechazada'
+        db.session.commit()
+
+        assert self.AVISO not in client.get(f'/mascotas/{solicitud_pendiente.mascota_id}').data.decode()
+
+    def test_detalle_sin_en_proceso(self, client, mascota_disponible):
+        mascota_disponible.estado = 'en_proceso'
+        db.session.commit()
+
+        html = client.get(f'/mascotas/{mascota_disponible.id}').data.decode()
+
+        assert 'En proceso de adopción' not in html
+        assert 'Adoptado' not in html
