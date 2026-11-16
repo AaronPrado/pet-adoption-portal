@@ -7,16 +7,19 @@ Este módulo maneja:
 - Panel de administración con CRUD completo (solo admin)
 """
 
-from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
-from flask_login import login_required
+from flask import Blueprint, abort, current_app, flash, redirect, render_template, request, url_for
+from flask_login import current_user, login_required
 
-from app import db
+from app import adopciones, db
 from app.decorators import admin_required
 from app.models import Mascota
 from app.s3 import delete_from_s3, es_url_imagen_valida, upload_to_s3
 
 # Crear blueprint
 bp = Blueprint('mascotas', __name__, url_prefix='/mascotas')
+
+# Estados por los que se puede filtrar la lista del panel admin
+ESTADOS_FILTRABLES = ('disponible', 'adoptado')
 
 
 @bp.route('/')
@@ -105,13 +108,15 @@ def admin_lista():
     """
     Panel de administración: lista de todas las mascotas.
 
-    Muestra todas las mascotas (disponibles, en proceso, adoptadas).
+    Muestra todas las mascotas (disponibles y adoptadas).
     Solo accesible para administradores.
     Permite ordenar por cualquier columna.
     """
 
     # Obtener parámetros de URL
     estado_filtro = request.args.get('estado', '')
+    if estado_filtro not in ESTADOS_FILTRABLES:
+        estado_filtro = ''  # en_proceso ya no lo usa el flujo (ADR-0004)
     orden_campo = request.args.get('orden', 'id')  # Campo por el cual ordenar
     orden_dir = request.args.get('dir', 'asc')  # Dirección: asc o desc
 
@@ -247,6 +252,16 @@ def admin_nueva():
     return render_template('mascotas/admin/form.html', mascota=None)
 
 
+def _formulario_edicion(mascota):
+    """Formulario de edición con las acciones de estado que permite la regla de adopción."""
+    return render_template(
+        'mascotas/admin/form.html',
+        mascota=mascota,
+        pendientes=adopciones.pendientes_por_mascota([mascota.id]).get(mascota.id, 0),
+        puede_volver_a_disponible=adopciones.puede_volver_a_disponible(mascota),
+    )
+
+
 @bp.route('/admin/editar/<int:mascota_id>', methods=['GET', 'POST'])
 @login_required
 @admin_required
@@ -255,7 +270,8 @@ def admin_editar(mascota_id):
     Editar una mascota existente.
 
     GET: Muestra formulario con datos actuales
-    POST: Procesa y guarda los cambios
+    POST: Procesa y guarda los cambios. El estado no se edita aquí: lo
+    cambian el flujo de solicitudes o las acciones de estado (ADR-0004).
     Solo accesible para administradores.
 
     Args:
@@ -274,22 +290,21 @@ def admin_editar(mascota_id):
         sexo = request.form.get('sexo', '').strip()
         tamano = request.form.get('tamano', '').strip()
         descripcion = request.form.get('descripcion', '').strip()
-        estado = request.form.get('estado', '').strip()
         vacunado = request.form.get('vacunado') == 'on'
         esterilizado = request.form.get('esterilizado') == 'on'
 
         # Validaciones básicas
         if not nombre or len(nombre) < 2:
             flash('El nombre debe tener al menos 2 caracteres.', 'danger')
-            return render_template('mascotas/admin/form.html', mascota=mascota)
+            return _formulario_edicion(mascota)
 
         if not especie or len(especie) < 2:
             flash('La especie es obligatoria.', 'danger')
-            return render_template('mascotas/admin/form.html', mascota=mascota)
+            return _formulario_edicion(mascota)
 
         if not descripcion or len(descripcion) < 10:
             flash('La descripción debe tener al menos 10 caracteres.', 'danger')
-            return render_template('mascotas/admin/form.html', mascota=mascota)
+            return _formulario_edicion(mascota)
 
         # Manejar foto: prioridad archivo > URL
         foto_url = None
@@ -304,7 +319,7 @@ def admin_editar(mascota_id):
             foto_url = request.form.get('foto_url', '').strip() or None
             if foto_url and not es_url_imagen_valida(foto_url):
                 flash('La URL de la foto debe empezar por https://', 'danger')
-                return render_template('mascotas/admin/form.html', mascota=mascota)
+                return _formulario_edicion(mascota)
             # Si cambió la URL, borrar la antigua de S3
             if foto_url != mascota.foto_url:
                 delete_from_s3(mascota.foto_url)
@@ -314,10 +329,10 @@ def admin_editar(mascota_id):
             edad_aprox = int(edad_aprox) if edad_aprox else None
             if edad_aprox is not None and (edad_aprox < 0 or edad_aprox > 30):
                 flash('La edad debe estar entre 0 y 30 años.', 'danger')
-                return render_template('mascotas/admin/form.html', mascota=mascota)
+                return _formulario_edicion(mascota)
         except ValueError:
             flash('La edad debe ser un número válido.', 'danger')
-            return render_template('mascotas/admin/form.html', mascota=mascota)
+            return _formulario_edicion(mascota)
 
         # Actualizar datos
         mascota.nombre = nombre
@@ -328,7 +343,6 @@ def admin_editar(mascota_id):
         mascota.tamano = tamano if tamano else None
         mascota.descripcion = descripcion
         mascota.foto_url = foto_url if foto_url else None
-        mascota.estado = estado if estado in ['disponible', 'en_proceso', 'adoptado'] else 'disponible'
         mascota.vacunado = vacunado
         mascota.esterilizado = esterilizado
 
@@ -340,10 +354,10 @@ def admin_editar(mascota_id):
             db.session.rollback()
             current_app.logger.exception('Error al actualizar la mascota')
             flash('No se pudo actualizar la mascota. Inténtalo de nuevo.', 'danger')
-            return render_template('mascotas/admin/form.html', mascota=mascota)
+            return _formulario_edicion(mascota)
 
     # GET: Mostrar formulario con datos actuales
-    return render_template('mascotas/admin/form.html', mascota=mascota)
+    return _formulario_edicion(mascota)
 
 
 @bp.route('/admin/eliminar/<int:mascota_id>', methods=['POST'])
@@ -380,3 +394,47 @@ def admin_eliminar(mascota_id):
         flash('No se pudo eliminar la mascota. Inténtalo de nuevo.', 'danger')
 
     return redirect(url_for('mascotas.admin_lista'))
+
+
+@bp.route('/admin/adoptada-fuera/<int:mascota_id>', methods=['POST'])
+@login_required
+@admin_required
+def admin_adoptar_fuera(mascota_id):
+    """
+    Marca la mascota como adoptada fuera del portal y rechaza sus pendientes.
+
+    Args:
+        mascota_id (int): ID de la mascota
+    """
+    mascota = db.get_or_404(Mascota, mascota_id)
+    try:
+        adopciones.adoptar_fuera_del_portal(mascota, current_user.id)
+    except adopciones.MascotaNoEncontrada:
+        abort(404)
+    except adopciones.ErrorAdopcion as error:
+        flash(error.mensaje, 'warning')
+    else:
+        flash(f'Mascota "{mascota.nombre}" marcada como adoptada fuera del portal.', 'success')
+    return redirect(url_for('mascotas.admin_editar', mascota_id=mascota_id))
+
+
+@bp.route('/admin/volver-a-disponible/<int:mascota_id>', methods=['POST'])
+@login_required
+@admin_required
+def admin_volver_a_disponible(mascota_id):
+    """
+    Deshace una adopción fuera del portal: la mascota vuelve al catálogo.
+
+    Args:
+        mascota_id (int): ID de la mascota
+    """
+    mascota = db.get_or_404(Mascota, mascota_id)
+    try:
+        adopciones.volver_a_disponible(mascota)
+    except adopciones.MascotaNoEncontrada:
+        abort(404)
+    except adopciones.ErrorAdopcion as error:
+        flash(error.mensaje, 'warning')
+    else:
+        flash(f'Mascota "{mascota.nombre}" vuelve a estar disponible.', 'success')
+    return redirect(url_for('mascotas.admin_editar', mascota_id=mascota_id))

@@ -9,8 +9,8 @@ from html.parser import HTMLParser
 import pytest
 from sqlalchemy.exc import SQLAlchemyError
 
-from app import db
-from app.models import Mascota
+from app import adopciones, db
+from app.models import Mascota, Solicitud, Usuario
 from app.routes import mascotas as rutas_mascotas
 
 
@@ -265,18 +265,26 @@ class TestEditarMascota:
 
         assert s3_falso['borrados'] == []
 
-    @pytest.mark.parametrize('estado, esperado', [
-        ('adoptado', 'adoptado'),
-        ('en_proceso', 'en_proceso'),
-        ('inventado', 'disponible'),
-    ])
-    def test_estado_solo_admite_valores_validos(self, client, auth_headers_admin, mascota_disponible,
-                                                 s3_falso, estado, esperado):
+    @pytest.mark.parametrize('estado', ['adoptado', 'en_proceso', 'inventado'])
+    def test_editar_no_cambia_el_estado(self, client, auth_headers_admin, mascota_disponible, s3_falso, estado):
         client.post(self.url(mascota_disponible),
                     data=datos_mascota(estado=estado, foto_url=mascota_disponible.foto_url))
 
         db.session.refresh(mascota_disponible)
-        assert mascota_disponible.estado == esperado
+        assert mascota_disponible.nombre == 'Rocky'
+        assert mascota_disponible.estado == 'disponible'
+
+    def test_editar_una_adoptada_la_deja_adoptada(self, client, auth_headers_admin, mascota_adoptada, s3_falso):
+        client.post(self.url(mascota_adoptada), data=datos_mascota(foto_url=mascota_adoptada.foto_url))
+
+        db.session.refresh(mascota_adoptada)
+        assert mascota_adoptada.estado == 'adoptado'
+
+    def test_el_formulario_no_tiene_selector_de_estado(self, client, auth_headers_admin, mascota_disponible):
+        html = client.get(self.url(mascota_disponible)).data.decode()
+
+        assert 'name="estado"' not in html
+        assert 'en_proceso' not in html
 
     def test_error_de_base_de_datos_muestra_mensaje_generico(self, client, auth_headers_admin,
                                                             mascota_disponible, s3_falso, commit_falla):
@@ -311,3 +319,161 @@ class TestEliminarMascota:
 
     def test_mascota_inexistente_devuelve_404(self, client, auth_headers_admin):
         assert client.post('/mascotas/admin/eliminar/999').status_code == 404
+
+
+def nueva_pendiente(mascota, email):
+    usuario = Usuario(email=email, nombre=email.split('@')[0], password='password123')
+    db.session.add(usuario)
+    db.session.flush()
+    solicitud = Solicitud(usuario_id=usuario.id, mascota_id=mascota.id, cuestionario={'a': 'b'})
+    db.session.add(solicitud)
+    db.session.commit()
+    return solicitud
+
+
+class TestEstadoManual:
+    """Acciones del admin: «Marcar como adoptada fuera del portal» y «Volver a disponible»."""
+
+    def adoptar(self, client, mascota, **kwargs):
+        return client.post(f'/mascotas/admin/adoptada-fuera/{mascota.id}', **kwargs)
+
+    def volver(self, client, mascota, **kwargs):
+        return client.post(f'/mascotas/admin/volver-a-disponible/{mascota.id}', **kwargs)
+
+    def test_adoptar_fuera_rechaza_las_pendientes(self, client, auth_headers_admin, usuario_admin,
+                                                  mascota_disponible):
+        pendientes = [nueva_pendiente(mascota_disponible, f'p{i}@test.com') for i in range(2)]
+
+        response = self.adoptar(client, mascota_disponible, follow_redirects=True)
+
+        assert 'marcada como adoptada fuera del portal' in response.data.decode()
+        db.session.expire_all()
+        assert db.session.get(Mascota, mascota_disponible.id).estado == 'adoptado'
+        for pendiente in pendientes:
+            solicitud = db.session.get(Solicitud, pendiente.id)
+            assert solicitud.estado == 'rechazada'
+            assert solicitud.comentarios_admin == adopciones.COMENTARIO_RECHAZO_AUTOMATICO
+            assert solicitud.revisado_por == usuario_admin.id
+
+    def test_adoptar_fuera_redirige_al_formulario(self, client, auth_headers_admin, mascota_disponible):
+        response = self.adoptar(client, mascota_disponible)
+
+        assert response.status_code == 302
+        assert response.headers['Location'].endswith(f'/mascotas/admin/editar/{mascota_disponible.id}')
+
+    def test_adoptar_fuera_ya_adoptada(self, client, auth_headers_admin, mascota_adoptada):
+        response = self.adoptar(client, mascota_adoptada, follow_redirects=True)
+
+        assert adopciones.MascotaYaAdoptada.mensaje in response.data.decode()
+
+    def test_volver_a_disponible_tras_adopcion_fuera(self, client, auth_headers_admin, mascota_disponible):
+        self.adoptar(client, mascota_disponible)
+
+        response = self.volver(client, mascota_disponible, follow_redirects=True)
+
+        assert 'vuelve a estar disponible' in response.data.decode()
+        db.session.expire_all()
+        assert db.session.get(Mascota, mascota_disponible.id).estado == 'disponible'
+        assert 'Cerbero' in client.get('/mascotas/catalogo').data.decode()
+
+    def test_volver_a_disponible_tras_aprobar_no_se_permite(self, client, auth_headers_admin, usuario_admin,
+                                                            solicitud_pendiente):
+        mascota = solicitud_pendiente.mascota
+        adopciones.aprobar(solicitud_pendiente, usuario_admin.id, '')
+
+        response = self.volver(client, mascota, follow_redirects=True)
+
+        assert adopciones.TransicionNoPermitida.mensaje in response.data.decode()
+        db.session.expire_all()
+        assert db.session.get(Mascota, mascota.id).estado == 'adoptado'
+
+    @pytest.mark.parametrize('accion', ['adoptada-fuera', 'volver-a-disponible'])
+    def test_mascota_inexistente_devuelve_404(self, client, auth_headers_admin, accion):
+        assert client.post(f'/mascotas/admin/{accion}/999').status_code == 404
+
+    @pytest.mark.parametrize('accion', ['adoptada-fuera', 'volver-a-disponible'])
+    def test_borrada_mientras_tanto_devuelve_404(self, client, auth_headers_admin, mascota_disponible,
+                                                 monkeypatch, accion):
+        def fallar(*args):
+            raise adopciones.MascotaNoEncontrada()
+        monkeypatch.setattr(adopciones, 'adoptar_fuera_del_portal', fallar)
+        monkeypatch.setattr(adopciones, 'volver_a_disponible', fallar)
+
+        assert client.post(f'/mascotas/admin/{accion}/{mascota_disponible.id}').status_code == 404
+
+    @pytest.mark.parametrize('accion', ['adoptada-fuera', 'volver-a-disponible'])
+    def test_solo_admin(self, client, auth_headers_adoptante, mascota_disponible, accion):
+        response = client.post(f'/mascotas/admin/{accion}/{mascota_disponible.id}')
+
+        assert response.status_code == 302
+        assert response.headers['Location'].endswith('/mascotas/catalogo')
+        assert 'No tienes permisos' in client.get('/mascotas/catalogo').data.decode()
+        db.session.expire_all()
+        assert db.session.get(Mascota, mascota_disponible.id).estado == 'disponible'
+
+    @pytest.mark.parametrize('accion', ['adoptada-fuera', 'volver-a-disponible'])
+    def test_solo_post(self, client, auth_headers_admin, mascota_disponible, accion):
+        assert client.get(f'/mascotas/admin/{accion}/{mascota_disponible.id}').status_code == 405
+
+    def test_formulario_de_disponible_ofrece_adoptar_fuera(self, client, auth_headers_admin, mascota_disponible):
+        nueva_pendiente(mascota_disponible, 'p@test.com')
+
+        html = client.get(f'/mascotas/admin/editar/{mascota_disponible.id}').data.decode()
+
+        assert f'action="/mascotas/admin/adoptada-fuera/{mascota_disponible.id}"' in html
+        assert 'Marcar como adoptada fuera del portal' in html
+        assert 'se rechazarán 1 solicitud' in html
+        accion = html.split('/mascotas/admin/adoptada-fuera/', 1)[1].split('</form>', 1)[0]
+        assert 'name="csrf_token"' in accion
+        assert 'Volver a disponible' not in html
+
+    def test_formulario_de_adoptada_fuera_ofrece_volver(self, client, auth_headers_admin, mascota_adoptada):
+        html = client.get(f'/mascotas/admin/editar/{mascota_adoptada.id}').data.decode()
+
+        assert f'action="/mascotas/admin/volver-a-disponible/{mascota_adoptada.id}"' in html
+        assert 'Marcar como adoptada fuera del portal' not in html
+
+    def test_formulario_de_adoptada_por_el_portal_sin_acciones(self, client, auth_headers_admin, usuario_admin,
+                                                               solicitud_pendiente):
+        mascota_id = solicitud_pendiente.mascota_id
+        adopciones.aprobar(solicitud_pendiente, usuario_admin.id, '')
+
+        html = client.get(f'/mascotas/admin/editar/{mascota_id}').data.decode()
+
+        assert 'adoptada-fuera' not in html
+        assert 'volver-a-disponible' not in html
+        assert 'solicitud aprobada' in html
+
+    def test_nueva_mascota_sin_acciones_de_estado(self, client, auth_headers_admin):
+        html = client.get('/mascotas/admin/nueva').data.decode()
+
+        assert 'adoptada-fuera' not in html
+
+
+class TestListaSinEnProceso:
+
+    def test_sin_filtro_ni_badge_en_proceso(self, client, auth_headers_admin, mascota_disponible):
+        html = client.get('/mascotas/admin').data.decode()
+
+        assert 'en_proceso' not in html
+        assert 'En Proceso' not in html
+
+    @pytest.mark.parametrize('estado', ['en_proceso', 'inventado'])
+    def test_filtro_desconocido_se_ignora(self, client, auth_headers_admin, mascota_disponible,
+                                          mascota_adoptada, estado):
+        html = client.get(f'/mascotas/admin?estado={estado}').data.decode()
+
+        assert 'Cerbero' in html
+        assert 'Luna' in html
+        todas = html.split('>\n                        Todas', 1)[0].rsplit('<a ', 1)[1]
+        assert 'btn-primary' in todas
+        assert f'estado={estado}' not in html
+
+    def test_estado_heredado_no_se_muestra_como_adoptado(self, client, auth_headers_admin, mascota_disponible):
+        mascota_disponible.estado = 'en_proceso'
+        db.session.commit()
+
+        html = client.get('/mascotas/admin').data.decode()
+
+        assert 'Cerbero' in html
+        assert 'badge bg-secondary">Adoptado' not in html
