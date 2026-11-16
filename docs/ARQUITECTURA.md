@@ -191,6 +191,9 @@ solo `app/adopciones.py`, que usan las rutas web y la API:
 - «Tiene solicitudes en curso» (catálogo, detalle y formulario admin) se
   deriva de `pendientes_por_mascota(ids)`: una sola consulta agregada
   (`GROUP BY mascota_id`) para toda la página, sin N+1.
+- Borrar una mascota bloquea antes su fila con `consulta_mascota_bloqueada`,
+  para que una solicitud creada a la vez no se cuele entre la comprobación de
+  solicitudes y el borrado.
 
 ---
 

@@ -11,6 +11,7 @@ from flask import Blueprint, abort, current_app, flash, redirect, render_templat
 from flask_login import current_user, login_required
 
 from app import adopciones, db
+from app.adopciones import consulta_mascota_bloqueada
 from app.decorators import admin_required
 from app.models import Mascota
 from app.s3 import delete_from_s3, es_url_imagen_valida, upload_to_s3
@@ -376,11 +377,15 @@ def admin_eliminar(mascota_id):
         mascota_id (int): ID de la mascota a eliminar
     """
 
-    # Obtener la mascota
-    mascota = db.get_or_404(Mascota, mascota_id)
+    # Bloquear la fila: crear_solicitud también la bloquea, así que no puede
+    # entrar una solicitud entre la comprobación y el borrado
+    mascota = db.session.execute(consulta_mascota_bloqueada(mascota_id)).scalar_one_or_none()
+    if mascota is None:
+        abort(404)
 
     # Verificar si tiene solicitudes asociadas
     if mascota.solicitudes.count() > 0:
+        db.session.rollback()
         flash(f'No se puede eliminar "{mascota.nombre}" porque tiene solicitudes de adopción asociadas.', 'danger')
         return redirect(url_for('mascotas.admin_lista'))
 

@@ -297,6 +297,21 @@ class TestEditarMascota:
 
 class TestEliminarMascota:
 
+    def test_bloquea_la_mascota_antes_de_comprobar(self, client, auth_headers_admin, mascota_disponible,
+                                                  s3_falso, monkeypatch):
+        bloqueadas = []
+        original = rutas_mascotas.consulta_mascota_bloqueada
+
+        def espiar(mascota_id):
+            bloqueadas.append(mascota_id)
+            return original(mascota_id)
+        monkeypatch.setattr(rutas_mascotas, 'consulta_mascota_bloqueada', espiar)
+
+        client.post(f'/mascotas/admin/eliminar/{mascota_disponible.id}')
+
+        assert bloqueadas == [mascota_disponible.id]
+        assert db.session.get(Mascota, mascota_disponible.id) is None
+
     def test_no_elimina_si_tiene_solicitudes(self, client, auth_headers_admin, solicitud_pendiente):
         mascota_id = solicitud_pendiente.mascota_id
         response = client.post(f'/mascotas/admin/eliminar/{mascota_id}', follow_redirects=True)
