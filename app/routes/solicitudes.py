@@ -8,12 +8,11 @@ Este módulo maneja:
 - Aprobación/rechazo de solicitudes (solo admin)
 """
 
-from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
+from flask import Blueprint, abort, current_app, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
 
-from app import db
+from app import adopciones, db
 from app.decorators import admin_required
 from app.models import Mascota, Solicitud
 
@@ -38,7 +37,7 @@ def nueva(mascota_id):
 
     # Verificar que la mascota esté disponible
     if not mascota.esta_disponible():
-        flash('Esta mascota ya no está disponible para adopción.', 'warning')
+        flash(adopciones.MascotaNoDisponible.mensaje, 'warning')
         return redirect(url_for('mascotas.detalle', mascota_id=mascota_id))
 
     # Verificar si el usuario ya tiene una solicitud para esta mascota
@@ -48,7 +47,7 @@ def nueva(mascota_id):
     ).first()
 
     if solicitud_existente:
-        flash('Ya has enviado una solicitud para esta mascota.', 'info')
+        flash(adopciones.SolicitudDuplicada.mensaje, 'info')
         return redirect(url_for('solicitudes.mis_solicitudes'))
 
     if request.method == 'POST':
@@ -68,23 +67,17 @@ def nueva(mascota_id):
             'referencias': request.form.get('referencias', '')
         }
 
-        # Crear la solicitud
-        solicitud = Solicitud(
-            usuario_id=current_user.id,
-            mascota_id=mascota_id,
-            cuestionario=cuestionario
-        )
-
-        db.session.add(solicitud)
-
-        # Marcar la mascota como "en proceso" (hace commit de ambos cambios).
-        # La restricción única protege de dos envíos simultáneos.
+        # La mascota sigue disponible: admite más solicitudes en paralelo
         try:
-            mascota.marcar_en_proceso()
-        except IntegrityError:
-            db.session.rollback()
-            flash('Ya has enviado una solicitud para esta mascota.', 'info')
+            adopciones.crear_solicitud(current_user.id, mascota_id, cuestionario)
+        except adopciones.SolicitudDuplicada as error:
+            flash(error.mensaje, 'info')
             return redirect(url_for('solicitudes.mis_solicitudes'))
+        except adopciones.MascotaNoDisponible as error:
+            flash(error.mensaje, 'warning')
+            return redirect(url_for('mascotas.detalle', mascota_id=mascota_id))
+        except adopciones.MascotaNoEncontrada:
+            abort(404)
 
         flash(f'¡Solicitud enviada con éxito para {mascota.nombre}! Revisaremos tu solicitud pronto.', 'success')
         return redirect(url_for('solicitudes.mis_solicitudes'))
@@ -188,25 +181,23 @@ def admin_revisar(solicitud_id):
     solicitud = db.get_or_404(Solicitud, solicitud_id)
 
     if request.method == 'POST':
-        # Una solicitud ya resuelta no se puede volver a aprobar o rechazar
-        if not solicitud.esta_pendiente():
-            flash('Esta solicitud ya ha sido revisada.', 'warning')
-            return redirect(url_for('solicitudes.admin_lista'))
-
         accion = request.form.get('accion')
         comentarios = request.form.get('comentarios', '')
 
-        if accion == 'aprobar':
-            # Evita dos adopciones de la misma mascota
-            if solicitud.mascota.estado == 'adoptado':
-                flash(f'{solicitud.mascota.nombre} ya ha sido adoptado.', 'warning')
-                return redirect(url_for('solicitudes.admin_lista'))
-            solicitud.aprobar(current_user.id, comentarios)
-            flash(f'Solicitud aprobada. {solicitud.usuario.nombre} ha adoptado a {solicitud.mascota.nombre}.',
-                  'success')
-        elif accion == 'rechazar':
-            solicitud.rechazar(current_user.id, comentarios)
-            flash('Solicitud rechazada.', 'info')
+        # Aprobar adopta la mascota y rechaza las demás pendientes; rechazar
+        # solo cambia esta solicitud (app.adopciones)
+        try:
+            if accion == 'aprobar':
+                adopciones.aprobar(solicitud, current_user.id, comentarios)
+                flash(f'Solicitud aprobada. {solicitud.usuario.nombre} ha adoptado a {solicitud.mascota.nombre}. '
+                      'Las demás solicitudes pendientes se han rechazado.', 'success')
+            elif accion == 'rechazar':
+                adopciones.rechazar(solicitud, current_user.id, comentarios)
+                flash('Solicitud rechazada.', 'info')
+        except (adopciones.MascotaNoEncontrada, adopciones.SolicitudNoEncontrada):
+            abort(404)
+        except (adopciones.MascotaYaAdoptada, adopciones.SolicitudYaRevisada) as error:
+            flash(error.mensaje, 'warning')
 
         return redirect(url_for('solicitudes.admin_lista'))
 

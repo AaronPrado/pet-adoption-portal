@@ -57,17 +57,17 @@ class TestCrearSolicitud:
         assert solicitud.estado == 'pendiente'
         assert solicitud.cuestionario_json is not None
 
-        # Verificar que mascota pasó a en_proceso
+        # La mascota sigue disponible: admite más solicitudes en paralelo
         db.session.refresh(mascota_disponible)
-        assert mascota_disponible.estado == 'en_proceso'
+        assert mascota_disponible.estado == 'disponible'
 
-    def test_crear_solicitud_mascota_no_disponible(self, client, auth_headers_adoptante, mascota_en_proceso):
+    def test_crear_solicitud_mascota_no_disponible(self, client, auth_headers_adoptante, mascota_adoptada):
         """Test: No se puede solicitar mascota que no está disponible."""
-        response = client.get(f'/solicitudes/nueva/{mascota_en_proceso.id}', follow_redirects=True)
+        response = client.get(f'/solicitudes/nueva/{mascota_adoptada.id}', follow_redirects=True)
 
         assert response.status_code == 200
         content = response.data.decode().lower()
-        assert 'no está disponible' in content or 'no disponible' in content or 'en proceso' in content
+        assert 'no está disponible' in content
 
     def test_crear_solicitud_duplicada(self, client, auth_headers_adoptante, solicitud_pendiente):
         """Test: No se puede solicitar la misma mascota dos veces."""
@@ -271,27 +271,17 @@ class TestModelo:
         assert solicitud.estado == 'pendiente'
         assert solicitud.cuestionario_json == {'pregunta': 'respuesta'}
 
-    def test_aprobar_metodo(self, app, solicitud_pendiente, usuario_admin):
-        """Test: Método aprobar() funciona correctamente."""
-        solicitud_pendiente.aprobar(usuario_admin.id, 'Aprobada')
+    def test_registrar_revision(self, app, solicitud_pendiente, usuario_admin):
+        """Test: registrar_revision() solo anota la revisión, sin tocar la mascota ni hacer commit."""
+        solicitud_pendiente.registrar_revision('aprobada', usuario_admin.id, 'Aprobada')
 
-        db.session.refresh(solicitud_pendiente)
         assert solicitud_pendiente.estado == 'aprobada'
         assert solicitud_pendiente.revisado_por == usuario_admin.id
+        assert solicitud_pendiente.comentarios_admin == 'Aprobada'
         assert solicitud_pendiente.fecha_revision is not None
-
-        # Verificar que mascota se marcó como adoptado
-        mascota = db.session.get(Mascota, solicitud_pendiente.mascota_id)
-        assert mascota.estado == 'adoptado'
-
-    def test_rechazar_metodo(self, app, solicitud_pendiente, usuario_admin):
-        """Test: Método rechazar() funciona correctamente."""
-        solicitud_pendiente.rechazar(usuario_admin.id, 'Rechazada')
-
-        db.session.refresh(solicitud_pendiente)
-        assert solicitud_pendiente.estado == 'rechazada'
-        assert solicitud_pendiente.revisado_por == usuario_admin.id
-        assert solicitud_pendiente.fecha_revision is not None
+        assert solicitud_pendiente.mascota.estado == 'disponible'
+        db.session.rollback()
+        assert db.session.get(Solicitud, solicitud_pendiente.id).estado == 'pendiente'
 
     def test_esta_pendiente(self, app, solicitud_pendiente):
         """Test: Método esta_pendiente() funciona."""

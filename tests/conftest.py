@@ -162,15 +162,15 @@ def mascota_disponible(app):
 
 
 @pytest.fixture(scope='function')
-def mascota_en_proceso(app):
+def mascota_adoptada(app):
     """
-    Fixture que crea una mascota en proceso de adopción.
+    Fixture que crea una mascota ya adoptada (fuera del catálogo).
 
     Args:
         app: Fixture de aplicación Flask
 
     Returns:
-        Mascota: Mascota con estado 'en_proceso'
+        Mascota: Mascota con estado 'adoptado'
     """
     mascota = Mascota(
         nombre='Luna',
@@ -180,7 +180,7 @@ def mascota_en_proceso(app):
         edad_aprox=2,
         sexo='Hembra',
         tamano='Pequeño',
-        estado='en_proceso',
+        estado='adoptado',
         foto_url='https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba',
         vacunado=True,
         esterilizado=True
@@ -225,9 +225,6 @@ def solicitud_pendiente(app, usuario_adoptante, mascota_disponible):
         mascota_id=mascota_disponible.id,
         cuestionario=cuestionario
     )
-
-    # Marcar mascota como en proceso
-    mascota_disponible.estado = 'en_proceso'
 
     db.session.add(solicitud)
     db.session.commit()

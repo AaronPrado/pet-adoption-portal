@@ -4,10 +4,9 @@ Endpoints de solicitudes para la API.
 
 from flask import g, request, url_for
 from flask_restx import Namespace, Resource, fields
-from sqlalchemy.exc import IntegrityError
 
-from app import db
-from app.models import Mascota, Solicitud
+from app import adopciones
+from app.models import Solicitud
 from app.routes.api.auth import jwt_required
 
 ns = Namespace("solicitudes", description="Solicitudes")
@@ -73,26 +72,15 @@ class CrearSolicitud (Resource):
                 or not cuestionario_valido(data.get('cuestionario')):
             return {'error': 'Datos inválidos'}, 400
 
-        mascota = db.session.get(Mascota, mascota_id)
-        if not mascota:
-            return {'error': 'Mascota no encontrada'}, 404
-
-        if mascota.estado != 'disponible':
-            return {'error': 'Mascota no disponible'}, 400
-
-        solicitud = Solicitud(
-            usuario_id=g.current_user.id,
-            mascota_id=mascota.id,
-            cuestionario=data['cuestionario']
-        )
-        db.session.add(solicitud)
-        # Igual que en la web: la mascota deja de aceptar más solicitudes
-        mascota.estado = 'en_proceso'
+        # Misma regla que la web: la mascota sigue disponible (ADR-0004)
         try:
-            db.session.commit()
-        except IntegrityError:
-            db.session.rollback()
-            return {'error': 'Ya has enviado una solicitud para esta mascota'}, 409
+            solicitud = adopciones.crear_solicitud(g.current_user.id, mascota_id, data['cuestionario'])
+        except adopciones.MascotaNoEncontrada as error:
+            return {'error': error.mensaje}, 404
+        except adopciones.MascotaNoDisponible as error:
+            return {'error': error.mensaje}, 400
+        except adopciones.SolicitudDuplicada as error:
+            return {'error': error.mensaje}, 409
         ubicacion = url_for('api.solicitudes_solicitud_detail', id=solicitud.id)
         return solicitud.to_dict(), 201, {'Location': ubicacion}
 

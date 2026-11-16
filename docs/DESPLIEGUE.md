@@ -56,6 +56,13 @@ El `Procfile` define:
 - `release`: aplica las migraciones antes de cada despliegue.
 - `web`: arranca gunicorn con `gunicorn.conf.py`.
 
+### Migraciones de datos
+
+La migración `0002` (ADR-0004) cambia el estado de mascotas y solicitudes con
+`UPDATE` que no bloquean filas. Aplícala sin revisiones de solicitudes en
+curso: en una ventana de mantenimiento o con la app parada. Su downgrade es
+parcial: no reabre las solicitudes que rechazó.
+
 ## 5. Primer despliegue
 
 1. Crea la base de datos y aplica las migraciones (`flask --app run db upgrade`).

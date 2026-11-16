@@ -168,13 +168,13 @@ class TestSolicitudesAPI:
 
         assert response.status_code == 404
 
-    def test_crear_solicitud_mascota_no_disponible(self, client, usuario_adoptante, mascota_en_proceso):
-        """POST /api/solicitudes/ con mascota en proceso devuelve 400."""
+    def test_crear_solicitud_mascota_no_disponible(self, client, usuario_adoptante, mascota_adoptada):
+        """POST /api/solicitudes/ con mascota adoptada devuelve 400."""
         token = self.get_token(client)
 
         response = client.post('/api/solicitudes/',
             data=json.dumps({
-                'mascota_id': mascota_en_proceso.id,
+                'mascota_id': mascota_adoptada.id,
                 'cuestionario': {'test': 'data'}
             }),
             content_type='application/json',

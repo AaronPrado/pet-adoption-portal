@@ -83,7 +83,7 @@ def test_detalle_mascota(client, mascota_disponible):
     assert problemas(client, f'/mascotas/{mascota_disponible.id}') == []
 
 
-def test_paginas_de_adoptante(client, auth_headers_adoptante, solicitud_pendiente, mascota_en_proceso):
+def test_paginas_de_adoptante(client, auth_headers_adoptante, solicitud_pendiente, mascota_adoptada):
     for url in ['/solicitudes/mis-solicitudes', f'/solicitudes/detalle/{solicitud_pendiente.id}']:
         assert problemas(client, url) == [], url
 

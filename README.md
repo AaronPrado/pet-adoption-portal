@@ -38,13 +38,15 @@ por roles y API REST documentada.
 - Vista detallada de cada mascota
 - Alta, edición y baja desde el panel de administración
 - Fotos subidas a AWS S3 o enlazadas por URL
-- El estado cambia solo según el proceso de adopción (disponible → en proceso → adoptado)
+- El estado cambia solo según el proceso de adopción (disponible → adoptado)
 
 ![Catálogo](docs/catalogo.png)
 
 ### Solicitudes
 - Cuestionario de evaluación del adoptante
 - Revisión por el administrador: aprobar o rechazar con comentarios
+- Varias personas pueden solicitar la misma mascota a la vez; al aprobar una
+  solicitud se rechazan automáticamente las demás
 - Una solicitud por usuario y mascota, y una sola adopción por mascota
 
 ![Solicitud](docs/solicitud.png)
@@ -208,6 +210,7 @@ despliegue están en [docs/DESPLIEGUE.md](docs/DESPLIEGUE.md).
 app/
 ├── __init__.py        # Application Factory, extensiones y cabeceras de seguridad
 ├── models.py          # Usuario, Mascota, Solicitud
+├── adopciones.py      # Regla de adopción (solicitudes en paralelo)
 ├── routes/            # Blueprints web (auth, mascotas, solicitudes)
 │   └── api/           # API REST con Flask-RESTX
 ├── templates/         # Plantillas Jinja2

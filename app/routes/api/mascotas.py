@@ -21,7 +21,7 @@ mascota_model = ns.model('Mascotas', {
     'sexo': fields.String(required=True, description='Macho/Hembra'),
     'tamano': fields.String(required=True, description='Pequeño/Mediano/Grande'),
     'descripcion': fields.String(required=True, description='Descripción'),
-    'estado': fields.String(required=True, description='disponible/en_proceso/adoptado'),
+    'estado': fields.String(required=True, description='disponible/adoptado'),
     'foto_url': fields.String(required=True, description='URL de la imagen'),
     'fecha_ingreso': fields.String(required=True, description='Fecha ISO'),
     'vacunado': fields.Boolean(required=True, description='Estado vacunación'),
