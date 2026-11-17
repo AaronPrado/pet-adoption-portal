@@ -16,7 +16,7 @@
     <div class="col-md-6 col-lg-4 mb-4">
         <div class="card h-100">
             {% if solicitud.mascota.foto_url %}
-                <img src="{{ solicitud.mascota.foto_url }}" class="card-img-top" alt="{{ solicitud.mascota.nombre }}" style="height: 200px; object-fit: cover;">
+                <img src="{{ solicitud.mascota.foto_url }}" class="card-img-top foto-alto-200" alt="{{ solicitud.mascota.nombre }}">
             {% else %}
                 <img src="https://placehold.co/400x200/8ecae6/023047?text={{ solicitud.mascota.especie }}"
                      class="card-img-top" alt="{{ solicitud.mascota.nombre }}">

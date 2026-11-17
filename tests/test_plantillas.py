@@ -64,3 +64,44 @@ def test_bootstrap_vendorizado_con_licencia():
     assert ruta, 'base.html no carga bootstrap.min.css desde static/vendor/'
     licencia = (RAIZ_APP / 'static' / ruta).parent / 'LICENSE'
     assert 'MIT' in licencia.read_text(encoding='utf-8')
+
+
+# Comentarios HTML y de Jinja: su contenido no llega al navegador.
+COMENTARIOS = re.compile(r'<!--.*?-->|\{#.*?#\}', re.DOTALL)
+# Atributo style (también en la columna 0) o elemento <style>.
+ESTILO_EN_LINEA = re.compile(r'(?:^|\s)style\s*=|<style[\s>]', re.IGNORECASE | re.MULTILINE)
+PLANTILLAS = sorted((RAIZ_APP / 'templates').rglob('*.html'))
+
+
+def _rel(ruta):
+    return ruta.relative_to(RAIZ_APP).as_posix()
+
+
+def _estilos_en_linea(texto):
+    """Fragmentos con estilos en línea, sin contar los comentarios."""
+    return [m.group(0).strip() for m in ESTILO_EN_LINEA.finditer(COMENTARIOS.sub('', texto))]
+
+
+def test_hay_plantillas():
+    assert PLANTILLAS, 'No se han encontrado plantillas'
+
+
+@pytest.mark.parametrize('texto, esperado', [
+    ('<img src="x" style="width: 1px">', True),
+    ('style="color: red"', True),
+    ('<div\nstyle="x">', True),
+    ('<style>\n.a {}\n</style>', True),
+    ('<!-- <p style="x"> -->', False),
+    ('{# <style> #}', False),
+    ('<div data-style="x" class="estilo">', False),
+])
+def test_deteccion_de_estilos_en_linea(texto, esperado):
+    assert bool(_estilos_en_linea(texto)) is esperado
+
+
+@pytest.mark.parametrize('plantilla', PLANTILLAS, ids=_rel)
+def test_plantilla_sin_estilos_en_linea(plantilla):
+    """La CSP no permite 'unsafe-inline' en style-src: los estilos van en
+    app/static/css/styles.css."""
+    encontrados = _estilos_en_linea(plantilla.read_text(encoding='utf-8'))
+    assert not encontrados, f'{_rel(plantilla)} tiene estilos en línea: {encontrados}'

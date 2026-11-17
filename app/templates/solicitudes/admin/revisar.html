@@ -25,7 +25,7 @@
     <div class="col-md-4 mb-4">
         <div class="card mb-3">
             {% if solicitud.mascota.foto_url %}
-                <img src="{{ solicitud.mascota.foto_url }}" class="card-img-top" alt="{{ solicitud.mascota.nombre }}" style="height: 200px; object-fit: cover;">
+                <img src="{{ solicitud.mascota.foto_url }}" class="card-img-top foto-alto-200" alt="{{ solicitud.mascota.nombre }}">
             {% endif %}
             <div class="card-body">
                 <h5 class="card-title">{{ solicitud.mascota.nombre }}</h5>
