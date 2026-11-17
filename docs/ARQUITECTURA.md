@@ -289,8 +289,9 @@ app/
 │       └── admin/       # lista.html, revisar.html
 │
 └── static/
-    ├── css/styles.css
-    └── js/app.js        # Confirmaciones `data-confirmar` y límite de tamaño de la foto (sin JavaScript inline)
+    ├── css/styles.css   # Todos los estilos propios (las plantillas no llevan `style=` ni `<style>`)
+    ├── js/app.js        # Confirmaciones `data-confirmar` y límite de tamaño de la foto (sin JavaScript inline)
+    └── vendor/bootstrap/5.3.0/  # Bootstrap CSS y bundle JS con su LICENSE (ADR-0001), sin CDN
 
 config.py                # Configuración por entornos
 migrations/              # Migraciones de Alembic
@@ -604,6 +605,38 @@ producción):
 | Navegador | CSP, `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy`; sin JavaScript inline; SRI en Bootstrap |
 | Errores | Mensajes genéricos al usuario; detalle solo en el log |
 | Dependencias | `pip-audit` en cada push |
+
+### Content Security Policy
+
+`app/__init__.py` (`CSP`) envía la cabecera en todas las respuestas salvo
+Swagger UI, que usa scripts inline:
+
+```
+default-src 'self'; script-src 'self'; style-src 'self';
+img-src 'self' https: data:; font-src 'self'; object-src 'none';
+base-uri 'none'; form-action 'self'; frame-ancestors 'none'
+```
+
+- **Sin terceros para CSS, JS ni fuentes.** Bootstrap 5.3.0 se sirve desde
+  `app/static/vendor/bootstrap/5.3.0/` (ADR-0001), marcado como
+  `linguist-vendored` en `.gitattributes`. Mientras dure la migración por
+  fases lo sigue usando todo el sitio; se retira en B5.4.
+- **SRI también en local.** `base.html` mantiene `integrity` (el mismo hash que
+  publicaba jsDelivr) sin `crossorigin`, que sobra en el mismo origen: si el
+  fichero vendorizado cambia o se corrompe, el navegador no lo aplica.
+  `tests/test_plantillas.py` comprueba que el hash coincide con el fichero.
+- **Sin `'unsafe-inline'`.** Los estilos van en `app/static/css/styles.css`;
+  `tests/test_plantillas.py` falla si una plantilla tiene `style=` o
+  `<style>`. Bootstrap JS (menú móvil, desplegables) aplica estilos con el
+  CSSOM (`element.style`), que la CSP no bloquea.
+- **Imágenes:** `img-src` admite `https:` por las fotos externas de mascotas.
+- **Actualizar Bootstrap.** Descargar `bootstrap.min.css` y
+  `bootstrap.bundle.min.js` de la nueva versión a
+  `app/static/vendor/bootstrap/<versión>/` (con su `LICENSE`), calcular el
+  hash con `openssl dgst -sha384 -binary <fichero> | openssl base64 -A` y
+  cambiar en `base.html` la ruta y el `integrity` (`sha384-<hash>`). Después
+  borrar la carpeta de la versión anterior. El test de SRI saca la ruta de
+  `base.html`, así que falla si el hash no coincide con el fichero.
 
 ---
 
