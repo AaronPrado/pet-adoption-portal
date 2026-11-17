@@ -69,6 +69,26 @@ class TestCabeceras:
         assert response.headers['X-Frame-Options'] == 'DENY'
         assert "frame-ancestors 'none'" in response.headers['Content-Security-Policy']
 
+    def test_csp_sin_unsafe_inline_ni_cdn(self, client):
+        """ADR-0001: Bootstrap se sirve desde /static, así que la CSP no
+        necesita la CDN ni 'unsafe-inline'. Se fijan todas las directivas
+        para que ninguna se relaje sin que falle este test."""
+        csp = client.get('/').headers['Content-Security-Policy']
+        assert 'unsafe-inline' not in csp
+        assert 'jsdelivr' not in csp
+        directivas = dict(d.strip().split(' ', 1) for d in csp.split(';'))
+        assert directivas == {
+            'default-src': "'self'",
+            'script-src': "'self'",
+            'style-src': "'self'",
+            'img-src': "'self' https: data:",
+            'font-src': "'self'",
+            'object-src': "'none'",
+            'base-uri': "'none'",
+            'form-action': "'self'",
+            'frame-ancestors': "'none'",
+        }
+
     def test_cookie_sesion_samesite(self, client, usuario_adoptante):
         response = client.post('/auth/login', data={
             'email': 'adoptante@test.com',

@@ -73,7 +73,7 @@
         <div class="col-md-4 mb-4">
             <div class="card h-100 shadow-sm">
                 {% if mascota.foto_url %}
-                    <img src="{{ mascota.foto_url }}" class="card-img-top" alt="{{ mascota.nombre }}" style="height: 250px; object-fit: cover;">
+                    <img src="{{ mascota.foto_url }}" class="card-img-top foto-alto-250" alt="{{ mascota.nombre }}">
                 {% else %}
                     <img src="https://placehold.co/400x250/8ecae6/023047?text={{ mascota.especie }}"
                          class="card-img-top" alt="{{ mascota.nombre }}">
@@ -143,50 +143,4 @@
     </a>
 </div>
 {% endif %}
-{% endblock %}
-
-{% block extra_css %}
-<style>
-    .hero-home {
-        background: linear-gradient(rgba(2,48,71,0.5), rgba(2,48,71,0.5)),
-                    url('https://images.unsplash.com/photo-1450778869180-41d0601e046e?w=1200&h=500&fit=crop') center/cover no-repeat;
-        border-radius: 10px;
-        padding: 100px 20px;
-        color: white;
-    }
-
-    .step-number {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 60px;
-        height: 60px;
-        background-color: #219ebc;
-        color: white;
-        border-radius: 50%;
-        font-size: 24px;
-        font-weight: bold;
-        margin: 0 auto;
-    }
-
-    .icon-box {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-    }
-
-    @media (max-width: 768px) {
-        .hero-home {
-            padding: 60px 20px;
-        }
-
-        .hero-home h1 {
-            font-size: 2rem;
-        }
-
-        .hero-home .lead {
-            font-size: 1rem;
-        }
-    }
-</style>
 {% endblock %}

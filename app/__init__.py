@@ -40,16 +40,18 @@ csrf = CSRFProtect()
 limiter = Limiter(key_func=get_remote_address)
 
 
-# Content Security Policy: solo scripts propios y de jsDelivr (Bootstrap).
-# 'unsafe-inline' en estilos se mantiene por los atributos style de las plantillas.
+# Content Security Policy: scripts, estilos y fuentes solo propios. Bootstrap
+# se sirve desde app/static/vendor/ (ADR-0001) y las plantillas no llevan
+# estilos en línea (tests/test_plantillas.py), así que no hace falta
+# 'unsafe-inline'. Bootstrap JS aplica estilos con el CSSOM, que la CSP permite.
 CSP = (
     "default-src 'self'; "
-    "script-src 'self' https://cdn.jsdelivr.net; "
-    "style-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; "
+    "script-src 'self'; "
+    "style-src 'self'; "
     "img-src 'self' https: data:; "
-    "font-src 'self' https://cdn.jsdelivr.net; "
+    "font-src 'self'; "
     "object-src 'none'; "
-    "base-uri 'self'; "
+    "base-uri 'none'; "
     "form-action 'self'; "
     "frame-ancestors 'none'"
 )

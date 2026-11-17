@@ -22,7 +22,7 @@
     <div class="col-md-4 mb-4">
         <div class="card">
             {% if solicitud.mascota.foto_url %}
-                <img src="{{ solicitud.mascota.foto_url }}" class="card-img-top" alt="{{ solicitud.mascota.nombre }}" style="height: 250px; object-fit: cover;">
+                <img src="{{ solicitud.mascota.foto_url }}" class="card-img-top foto-alto-250" alt="{{ solicitud.mascota.nombre }}">
             {% else %}
                 <img src="https://placehold.co/400x250/8ecae6/023047?text={{ solicitud.mascota.especie }}"
                      class="card-img-top" alt="{{ solicitud.mascota.nombre }}">
@@ -72,7 +72,7 @@
                 <table class="table table-borderless">
                     <tbody>
                         <tr>
-                            <th style="width: 30%;">Nombre:</th>
+                            <th class="columna-etiqueta-30">Nombre:</th>
                             <td>{{ solicitud.usuario.nombre }} {{ solicitud.usuario.apellidos or '' }}</td>
                         </tr>
                         <tr>

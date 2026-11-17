@@ -67,7 +67,7 @@ por roles y API REST documentada.
 | Base de datos   | PostgreSQL 15, SQLAlchemy 2.1, psycopg 3, migraciones con Flask-Migrate     |
 | Autenticación   | Authlib (Google OAuth 2.0), PyJWT, Flask-WTF (CSRF), Flask-Limiter          |
 | Almacenamiento  | Disco local o AWS S3 (boto3), Pillow para validar imágenes                 |
-| Frontend        | HTML5, CSS3, Bootstrap 5                                                   |
+| Frontend        | HTML5, CSS3, Bootstrap 5.3 servido desde `app/static/vendor/` (sin CDN)    |
 | Calidad         | pytest, Playwright, ruff, pip-audit, GitHub Actions                        |
 | Infraestructura | Docker, Docker Compose, Gunicorn                                           |
 
@@ -225,7 +225,7 @@ app/
 ├── routes/            # Blueprints web (auth, fotos, mascotas, solicitudes)
 │   └── api/           # API REST con Flask-RESTX
 ├── templates/         # Plantillas Jinja2
-├── static/            # CSS y JavaScript
+├── static/            # CSS, JavaScript y Bootstrap vendorizado (vendor/)
 ├── fotos/             # Fotos: procesado con Pillow, variantes WebP y backends local y s3 (ADR-0003)
 └── cli.py             # flask crear-admin y flask exportar-fotos
 migrations/            # Migraciones de Alembic
