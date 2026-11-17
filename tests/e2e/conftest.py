@@ -6,6 +6,11 @@ unitarios) sobre una base de datos SQLite temporal y abre las páginas en
 Chromium. Se ejecutan con:
 
     python -m pytest -m e2e
+
+Los tests van en un módulo por área (`test_navegacion.py`, `test_catalogo.py`,
+`test_solicitud.py` y `test_admin.py`) y localizan los elementos por rol, por
+etiqueta o por texto accesible, no por clases de Bootstrap ni por la
+estructura del HTML, para que sobrevivan al rediseño.
 """
 
 import threading
@@ -22,7 +27,8 @@ ADOPTANTE = ('adoptante@e2e.test', 'clave-adoptante-e2e')
 
 
 @pytest.fixture(scope='session')
-def servidor(tmp_path_factory):
+def app_e2e(tmp_path_factory):
+    """La app con CSRF activado y la semilla de los e2e en una SQLite temporal."""
     class E2EConfig(TestingConfig):
         SQLALCHEMY_DATABASE_URI = f"sqlite:///{tmp_path_factory.mktemp('e2e') / 'e2e.db'}"
         WTF_CSRF_ENABLED = True
@@ -42,12 +48,24 @@ def servidor(tmp_path_factory):
         ])
         db.session.commit()
 
-    servidor = make_server('127.0.0.1', 0, app, threaded=True)
+    yield app
+    del config['e2e']
+
+
+@pytest.fixture(scope='session')
+def servidor(app_e2e):
+    servidor = make_server('127.0.0.1', 0, app_e2e, threaded=True)
     hilo = threading.Thread(target=servidor.serve_forever, daemon=True)
     hilo.start()
     yield f'http://127.0.0.1:{servidor.server_port}'
     servidor.shutdown()
-    del config['e2e']
+
+
+@pytest.fixture(scope='session')
+def mascotas(app_e2e):
+    """Id de cada mascota por su nombre, para entrar directamente en su ficha."""
+    with app_e2e.app_context():
+        return {nombre: id_ for nombre, id_ in db.session.execute(db.select(Mascota.nombre, Mascota.id))}
 
 
 @pytest.fixture(scope='session')
