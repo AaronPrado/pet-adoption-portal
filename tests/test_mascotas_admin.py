@@ -10,7 +10,7 @@ from html.parser import HTMLParser
 import pytest
 from sqlalchemy.exc import SQLAlchemyError
 
-from app import adopciones, db
+from app import adopciones, db, fotos
 from app.models import Mascota, Solicitud, Usuario
 from app.routes import mascotas as rutas_mascotas
 
@@ -28,15 +28,17 @@ def datos_mascota(**cambios):
 
 @pytest.fixture
 def s3_falso(monkeypatch):
-    """Sustituye la subida y el borrado en S3 de las rutas de mascotas."""
+    """Sustituye el guardado y el borrado de fotos de las rutas de mascotas."""
     llamadas = {'subidas': [], 'borrados': [], 'url': 'https://bucket/mascotas/nueva.png'}
 
     def subir(foto):
         llamadas['subidas'].append(foto.filename)
+        if llamadas['url'] is None:
+            raise fotos.ErrorAlmacenamiento(fotos.MENSAJE_FORMATO)
         return llamadas['url']
 
-    monkeypatch.setattr(rutas_mascotas, 'upload_to_s3', subir)
-    monkeypatch.setattr(rutas_mascotas, 'delete_from_s3', lambda url: llamadas['borrados'].append(url))
+    monkeypatch.setattr(fotos, 'guardar_foto', subir)
+    monkeypatch.setattr(fotos, 'borrar_foto', lambda url: llamadas['borrados'].append(url))
     return llamadas
 
 
@@ -302,7 +304,7 @@ class TestCrearMascota:
         ('rocky.png', b'<html></html>'),
     ], ids=['extension', 'contenido'])
     def test_foto_no_valida_conserva_los_datos(self, client, auth_headers_admin, nombre, contenido):
-        """Con la validación real de app/s3.py, que rechaza antes de llamar a S3."""
+        """Con la validación real de app/fotos, que rechaza antes de llamar a S3."""
         datos = {**FICHA_ENVIADA, 'foto': (io.BytesIO(contenido), nombre)}
         response = client.post('/mascotas/admin/nueva', data=datos, content_type='multipart/form-data')
 

@@ -10,12 +10,11 @@ Este módulo maneja:
 from flask import Blueprint, abort, current_app, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
-from app import adopciones, db
+from app import adopciones, db, fotos
 from app.adopciones import consulta_mascota_bloqueada
 from app.decorators import admin_required
 from app.models import Mascota
 from app.routes.auth import MENSAJE_REVISAR
-from app.s3 import delete_from_s3, es_url_imagen_valida, upload_to_s3
 
 # Crear blueprint
 bp = Blueprint('mascotas', __name__, url_prefix='/mascotas')
@@ -266,13 +265,14 @@ def _validar_mascota(valores, foto):
 
     hay_archivo = bool(foto and foto.filename)
     foto_url = valores['foto_url'] or None
-    if not hay_archivo and foto_url and not es_url_imagen_valida(foto_url):
+    if not hay_archivo and foto_url and not fotos.es_url_imagen_valida(foto_url):
         errores['foto_url'] = 'La URL de la foto debe empezar por https://'
 
     if not errores and hay_archivo:
-        foto_url = upload_to_s3(foto)
-        if not foto_url:
-            errores['foto'] = 'Formato de imagen no permitido'
+        try:
+            foto_url = fotos.guardar_foto(foto)
+        except fotos.ErrorAlmacenamiento as error:
+            errores['foto'] = error.mensaje
 
     datos = {
         'nombre': valores['nombre'],
@@ -355,9 +355,9 @@ def admin_editar(mascota_id):
             flash(MENSAJE_REVISAR, 'danger')
             return _formulario_edicion(mascota, valores, errores, 400)
 
-        # Una foto nueva (subida o URL distinta) sustituye a la anterior en S3
+        # Una foto nueva (subida o URL distinta) sustituye a la anterior
         if datos['foto_url'] != mascota.foto_url:
-            delete_from_s3(mascota.foto_url)
+            fotos.borrar_foto(mascota.foto_url)
 
         for atributo, valor in datos.items():
             setattr(mascota, atributo, valor)
@@ -404,7 +404,7 @@ def admin_eliminar(mascota_id):
 
     try:
         nombre = mascota.nombre
-        delete_from_s3(mascota.foto_url)
+        fotos.borrar_foto(mascota.foto_url)
         db.session.delete(mascota)
         db.session.commit()
         flash(f'Mascota "{nombre}" eliminada exitosamente.', 'success')
