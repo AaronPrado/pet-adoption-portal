@@ -2,6 +2,12 @@
 Tests de la configuración por entornos.
 """
 
+import ast
+import os
+import subprocess
+import sys
+from pathlib import Path
+
 import pytest
 
 from app import create_app
@@ -127,3 +133,36 @@ def test_produccion_s3_exige_bucket(config_produccion, monkeypatch):
 
     with pytest.raises(RuntimeError, match="FOTOS_BACKEND='s3' exige AWS_S3_BUCKET"):
         create_app('production')
+
+
+# Marca de la protectora (ADR-0002)
+
+def _config_marca(**entorno):
+    """MARCA_* de config.py en un proceso nuevo con el entorno indicado.
+
+    config.py lee el entorno al importarse; recargarlo aquí dejaría clases
+    nuevas mezcladas con las que ya usan la app y otros tests. Las MARCA_*
+    vacías anulan las que pudiera traer un .env (load_dotenv no las pisa).
+    """
+    env = {**os.environ, 'MARCA_NOMBRE': '', 'MARCA_LOGO': '', 'MARCA_CONTACTO': '', **entorno}
+    codigo = ('import config; c = config.Config; '
+              'print(repr((c.MARCA_NOMBRE, c.MARCA_LOGO, c.MARCA_CONTACTO)))')
+    raiz = Path(__file__).resolve().parent.parent
+    salida = subprocess.run([sys.executable, '-c', codigo], cwd=raiz, env=env,
+                            capture_output=True, text=True)
+    assert salida.returncode == 0, f'config.py falló al importarse:\n{salida.stderr}'
+    return ast.literal_eval(salida.stdout.strip())
+
+
+def test_marca_valores_por_defecto():
+    """Sin variables de entorno, la marca es neutra."""
+    assert _config_marca() == ('Portal de Adopción', '', '')
+
+
+def test_marca_configurable_por_entorno():
+    """Cada protectora define su nombre, logo y contacto en el entorno."""
+    nombre, logo, contacto = _config_marca(
+        MARCA_NOMBRE='Protectora Ejemplo', MARCA_LOGO='img/logo.svg',
+        MARCA_CONTACTO='hola@protectora.example',
+    )
+    assert (nombre, logo, contacto) == ('Protectora Ejemplo', 'img/logo.svg', 'hola@protectora.example')

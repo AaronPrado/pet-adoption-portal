@@ -94,6 +94,14 @@ class Config:
     MAIL_PASSWORD = os.environ.get('MAIL_PASSWORD')
     MAIL_DEFAULT_SENDER = os.environ.get('MAIL_DEFAULT_SENDER') or 'noreply@aaronpradoadopciones.com'
 
+    # Marca de la protectora (ADR-0002). El color y las fuentes están en
+    # app/static/css/marca.css. MARCA_LOGO es una ruta dentro de static/ a un
+    # SVG (vacío: isotipo genérico); MARCA_CONTACTO, un email o teléfono
+    # público (vacío: no se muestra)
+    MARCA_NOMBRE = os.environ.get('MARCA_NOMBRE') or 'Portal de Adopción'
+    MARCA_LOGO = os.environ.get('MARCA_LOGO') or ''
+    MARCA_CONTACTO = os.environ.get('MARCA_CONTACTO') or ''
+
     # Paginación de listados web
     CATALOGO_POR_PAGINA = 12
     ADMIN_POR_PAGINA = 20
