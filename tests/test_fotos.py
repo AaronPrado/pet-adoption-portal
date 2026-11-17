@@ -95,6 +95,9 @@ class TestValidacionComun:
         assert error.value.mensaje == fotos.MENSAJE_FORMATO
         assert not directorio.exists()
 
+    def test_el_mensaje_de_formato_dice_causa_y_solucion(self):
+        assert fotos.MENSAJE_FORMATO == 'No hemos podido usar esa imagen. Sube un archivo JPG, PNG, GIF o WebP.'
+
     def test_url_manual_debe_ser_https(self):
         assert fotos.es_url_imagen_valida('https://ejemplo.com/a.jpg')
         assert fotos.es_url_imagen_valida('HTTPS://ejemplo.com/a.jpg')

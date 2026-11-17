@@ -96,31 +96,47 @@
 
                         <!-- Foto -->
                         <div class="col-12 mb-3">
+                            {% if subida_disponible %}
                             <label for="foto" class="form-label">Foto de la mascota</label>
-                            <input type="file" class="form-control{% if errores.foto %} is-invalid{% endif %}" id="foto" name="foto" accept="image/*"
+                            <input type="file" class="form-control{% if errores.foto %} is-invalid{% endif %}" id="foto" name="foto"
+                                accept=".jpg,.jpeg,.png,.gif,.webp,image/jpeg,image/png,image/gif,image/webp"
                                 data-max-bytes="{{ max_bytes_foto }}"
                                 data-mensaje-tamano="La foto ocupa más de {{ max_mb_foto }} MB. Elige otra más pequeña o quita el archivo para usar una URL."
-                                {%- set describe_foto = (['foto-error'] if errores.foto else []) + (['foto-aviso'] if foto_descartada else []) %}
-                                {%- if errores.foto %} aria-invalid="true"{% endif %}
-                                {%- if describe_foto %} aria-describedby="{{ describe_foto|join(' ') }}"{% endif %}>
+                                {%- set describe_foto = (['foto-error'] if errores.foto else []) + (['foto-aviso'] if foto_descartada else []) + ['foto-ayuda'] %}
+                                {%- if errores.foto %} aria-invalid="true"{% endif %} aria-describedby="{{ describe_foto|join(' ') }}">
                             {% if errores.foto %}<div id="foto-error" class="invalid-feedback">{{ errores.foto }}</div>{% endif %}
                             {% if foto_descartada %}<div id="foto-aviso" class="form-text">Vuelve a seleccionar la foto: el navegador no la conserva al mostrar el formulario de nuevo.</div>{% endif %}
+                            <div id="foto-ayuda" class="form-text">JPG, PNG, GIF o WebP. Máximo {{ max_mb_foto }} MB.</div>
+                            {% else %}
+                            <p class="form-label mb-1">Foto de la mascota</p>
+                            <p id="foto-no-disponible" class="form-text mt-0">La subida de archivos no está disponible en este servidor: pega el enlace de una imagen.</p>
+                            {% if errores.foto %}<div id="foto-error" class="invalid-feedback d-block">{{ errores.foto }}</div>{% endif %}
+                            {% endif %}
 
                             <div class="mt-2">
-                                <label for="foto_url" class="form-label text-muted">O proporciona una URL
-                                    externa:</label>
+                                <label for="foto_url" class="form-label{% if subida_disponible %} text-muted{% endif %}">
+                                    {%- if subida_disponible %}O pega el enlace de una imagen{% else %}Enlace de la foto{% endif -%}
+                                </label>
                                 {#- type="text": en edición puede llevar la ruta relativa /fotos/<clave>, que type="url" no admite #}
                                 <input type="text" inputmode="url" spellcheck="false" class="form-control{% if errores.foto_url %} is-invalid{% endif %}" id="foto_url" name="foto_url"
                                     value="{{ valores.foto_url or '' }}"
                                     placeholder="https://ejemplo.com/foto.jpg"
-                                    {%- if errores.foto_url %} aria-invalid="true" aria-describedby="foto_url-error"{% endif %}>
+                                    {#- Sin subida, el aviso y el error del archivo se leen desde el único campo de foto #}
+                                    {%- set describe_url = (['foto_url-error'] if errores.foto_url else [])
+                                        + ([] if subida_disponible else (['foto-error'] if errores.foto else []) + ['foto-no-disponible'])
+                                        + ['foto_url-ayuda'] %}
+                                    {%- if errores.foto_url %} aria-invalid="true"{% endif %} aria-describedby="{{ describe_url|join(' ') }}">
                                 {% if errores.foto_url %}<div id="foto_url-error" class="invalid-feedback">{{ errores.foto_url }}</div>{% endif %}
+                                <div id="foto_url-ayuda" class="form-text">
+                                    Si escribes un enlace nuevo, debe empezar por https://.{% if subida_disponible %} Si también subes un archivo, se usará el archivo.{% endif %}
+                                    Déjalo vacío para dejar la mascota sin foto.
+                                </div>
                             </div>
 
                             {% if mascota and mascota.foto_url %}
                             <div class="mt-2">
                                 <small class="text-muted">Imagen actual:</small><br>
-                                <img src="{{ mascota.foto_url }}" alt="Foto actual" style="max-height: 150px;"
+                                <img src="{{ mascota.foto_url }}" alt="Foto actual de {{ mascota.nombre }}" style="max-height: 150px;"
                                     class="rounded mt-1">
                             </div>
                             {% endif %}

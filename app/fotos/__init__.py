@@ -5,7 +5,7 @@ Interfaz común sobre dos backends, elegidos con FOTOS_BACKEND:
 - `local`: archivos en FOTOS_DIR (o instance/fotos), servidos por GET /fotos/<clave>;
 - `s3`: AWS S3 o un servicio compatible (AWS_S3_ENDPOINT_URL).
 
-Sin backend, `subida_disponible()` es falso y guardar_foto da un error de campo.
+Sin backend, `subida_disponible()` es falso y el formulario solo admite URLs.
 `foto_url` guarda la ruta `/fotos/<clave>` (local), la URL completa (S3) o
 una URL externa `https://`, que nunca se borra.
 """
@@ -31,8 +31,8 @@ FORMATOS_IMAGEN = {
     'WEBP': ('webp', 'image/webp'),
 }
 
-# Mensajes para el campo de foto
-MENSAJE_FORMATO = 'Formato de imagen no permitido'
+# Mensajes para el campo de foto: la causa y qué puede hacer el admin (P-32)
+MENSAJE_FORMATO = 'No hemos podido usar esa imagen. Sube un archivo JPG, PNG, GIF o WebP.'
 MENSAJE_NO_DISPONIBLE = ('La subida de archivos no está disponible en este servidor. '
                          'Quita el archivo y pega el enlace https:// de la imagen.')
 MENSAJE_FALLO = ('No hemos podido guardar la foto por un problema del servidor. '
@@ -141,8 +141,8 @@ def borrar_foto(url):
     """
     Borra una foto propia; las URLs externas o ajenas se ignoran.
 
-    Un fallo se registra en el log y no se propaga: un problema del
-    almacenamiento no debe impedir guardar la mascota.
+    Un fallo se registra en el log y no se propaga: se llama después de un
+    commit correcto y no debe convertirlo en un error para el usuario.
 
     Returns:
         bool: True si la foto era propia y ya no existe.
