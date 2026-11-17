@@ -226,15 +226,17 @@ def _valores_de_mascota(mascota):
     return valores
 
 
-def _validar_mascota(valores, foto):
+def _validar_mascota(valores, foto, foto_actual=None):
     """
     Valida el formulario de mascota.
 
     La foto subida tiene prioridad sobre la URL, que entonces no se valida.
-    Si todo lo demás es válido, sube la foto: su formato se comprueba al
-    subirla, así que no queda ninguna subida huérfana por un error en otro
-    campo. Sin backend o si falla el almacenamiento, el error va al campo de
-    la foto (nunca un 500).
+    La URL debe ser https://, salvo que sea la foto propia que ya tiene la
+    mascota (`foto_actual`, p. ej. `/fotos/<clave>` del backend local); una
+    `http://` heredada se vuelve a validar. Si todo lo demás es válido,
+    guarda la foto: su formato se comprueba al guardarla, así que no queda
+    ninguna subida huérfana por un error en otro campo. Sin backend o si
+    falla el almacenamiento, el error va al campo de la foto (nunca un 500).
 
     Returns:
         tuple: (errores, datos). `errores` es un dict campo → mensaje (el
@@ -266,9 +268,10 @@ def _validar_mascota(valores, foto):
 
     hay_archivo = bool(foto and foto.filename)
     foto_url = valores['foto_url'] or None
+    conserva_foto_propia = foto_url == foto_actual and fotos.es_foto_propia(foto_actual)
     if hay_archivo and not fotos.subida_disponible():
         errores['foto'] = fotos.MENSAJE_NO_DISPONIBLE
-    elif not hay_archivo and foto_url and not fotos.es_url_imagen_valida(foto_url):
+    elif not hay_archivo and foto_url and not conserva_foto_propia and not fotos.es_url_imagen_valida(foto_url):
         errores['foto_url'] = 'La URL de la foto debe empezar por https://'
 
     if not errores and hay_archivo:
@@ -353,7 +356,7 @@ def admin_editar(mascota_id):
 
     if request.method == 'POST':
         valores = _leer_formulario_mascota()
-        errores, datos = _validar_mascota(valores, request.files.get('foto'))
+        errores, datos = _validar_mascota(valores, request.files.get('foto'), mascota.foto_url)
         if errores:
             flash(MENSAJE_REVISAR, 'danger')
             return _formulario_edicion(mascota, valores, errores, 400)

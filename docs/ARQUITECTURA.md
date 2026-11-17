@@ -356,6 +356,10 @@ indica `FOTOS_BACKEND`:
 - **Nombres**: `<uuid hex>.<ext>`. Solo se sirven o borran claves con ese
   formato, así que no se puede salir del directorio ni tocar otros objetos
   del bucket. Las URLs externas `https://` nunca se borran.
+- **Regla archivo/URL**: el archivo tiene prioridad. La URL debe ser
+  `https://`, salvo que sea la foto propia que ya tiene la mascota
+  (`/fotos/...` o la URL de S3), que se acepta tal cual; vaciar el campo deja
+  la mascota sin foto.
 - **Limpieza**: al editar o eliminar una mascota se borra su foto anterior si
   es propia. Un fallo al borrar se registra y no afecta a la respuesta.
 

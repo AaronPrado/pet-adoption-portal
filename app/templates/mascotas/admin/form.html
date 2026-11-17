@@ -109,7 +109,8 @@
                             <div class="mt-2">
                                 <label for="foto_url" class="form-label text-muted">O proporciona una URL
                                     externa:</label>
-                                <input type="url" class="form-control{% if errores.foto_url %} is-invalid{% endif %}" id="foto_url" name="foto_url"
+                                {#- type="text": en edición puede llevar la ruta relativa /fotos/<clave>, que type="url" no admite #}
+                                <input type="text" inputmode="url" spellcheck="false" class="form-control{% if errores.foto_url %} is-invalid{% endif %}" id="foto_url" name="foto_url"
                                     value="{{ valores.foto_url or '' }}"
                                     placeholder="https://ejemplo.com/foto.jpg"
                                     {%- if errores.foto_url %} aria-invalid="true" aria-describedby="foto_url-error"{% endif %}>
