@@ -105,9 +105,17 @@ rechazaría la especie y no se podrían guardar.
   escribe en el contenedor (incluido `instance/fotos`) se borra en cada
   despliegue o reinicio. Usa `FOTOS_BACKEND=s3` o, con `FOTOS_BACKEND=local`,
   monta un volumen persistente y apunta `FOTOS_DIR` a él (por eso producción
-  exige `FOTOS_DIR`). Con Docker: `-v fotos:/datos/fotos -e FOTOS_DIR=/datos/fotos`,
-  con permisos de escritura para el usuario sin privilegios de la imagen.
-  Incluye ese directorio en las copias de seguridad.
+  exige `FOTOS_DIR`). Con Docker: `-v fotos:/datos/fotos -e FOTOS_DIR=/datos/fotos`.
+  Solo el proceso de la app debe poder escribir en `FOTOS_DIR` (propietario el
+  usuario sin privilegios de la imagen, sin escritura para otros). Incluye ese
+  directorio en las copias de seguridad.
+- **Backend explícito.** Las variables `AWS_*` no activan nada por sí solas:
+  sin `FOTOS_BACKEND=s3`, la subida de fotos queda desactivada y el formulario
+  solo admite URLs.
+- **Cambiar de `local` a `s3`.** Las fotos ya guardadas (`/fotos/<clave>`) no
+  se migran al bucket ni se borran: se siguen sirviendo mientras exista su
+  directorio y la app no las borrará al editar o eliminar la mascota. Cópialas
+  y actualiza `foto_url` a mano si quieres retirarlas.
 
 ## 7. Revertir una versión
 

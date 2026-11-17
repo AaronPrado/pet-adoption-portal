@@ -342,7 +342,7 @@ indica `FOTOS_BACKEND`:
 |---|---|---|
 | `local` | `FOTOS_DIR` o `instance/fotos`; la app las sirve en `GET /fotos/<clave>` | `/fotos/<uuid>.<ext>` |
 | `s3` | Bucket `AWS_S3_BUCKET`, carpeta `mascotas/` (`AWS_S3_ENDPOINT_URL` para servicios compatibles) | URL completa del objeto |
-| vacío | No hay subida: un archivo da un error en el campo y la foto se indica con una URL | URL externa `https://` |
+| vacío | No hay subida: el formulario oculta el archivo y solo admite una URL | URL externa `https://` |
 
 - **Interfaz**: `guardar_foto()`, `borrar_foto()`, `subida_disponible()` y
   `ErrorAlmacenamiento`, cuyo `mensaje` (causa y solución) se muestra junto
@@ -360,8 +360,10 @@ indica `FOTOS_BACKEND`:
   `https://`, salvo que sea la foto propia que ya tiene la mascota
   (`/fotos/...` o la URL de S3), que se acepta tal cual; vaciar el campo deja
   la mascota sin foto.
-- **Limpieza**: al editar o eliminar una mascota se borra su foto anterior si
-  es propia. Un fallo al borrar se registra y no afecta a la respuesta.
+- **Limpieza**: la foto anterior se borra solo después de un commit correcto
+  (edición y baja) y si ninguna otra mascota usa la misma `foto_url`. Si el
+  commit falla, se borra la foto recién subida para que no quede huérfana.
+  Un fallo al borrar se registra y no afecta a la respuesta.
 
 ---
 
