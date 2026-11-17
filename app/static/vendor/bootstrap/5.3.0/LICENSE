@@ -1,0 +1,33 @@
+The MIT License (MIT)
+
+Copyright (c) 2011-2023 The Bootstrap Authors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+---
+Origen de este fichero: no se ha descargado. El aviso de copyright y la
+licencia (MIT) salen de la cabecera de bootstrap.min.css y
+bootstrap.bundle.min.js (Bootstrap v5.3.0, «Copyright 2011-2023 The Bootstrap
+Authors», «Licensed under MIT»). El texto es la licencia MIT estándar.
+bootstrap.bundle.min.js incluye también Popper (licencia MIT).
+
+Ficheros (descargados de cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/ y
+comprobados contra el SRI que usaba base.html):
+- bootstrap.min.css  sha384-9ndCyUaIbzAi2FUVXJi0CjmCapSmO7SnpJef0486qhLnuZ2cdeRhO02iuK6FUUVM
+- bootstrap.bundle.min.js  sha384-geWF76RCwLtnZ8qwWowPQNguL3RmwHVBC9FhGdlKrxdiJJigb/j/68SIy3Te4Bkz
