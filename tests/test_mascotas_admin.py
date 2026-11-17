@@ -4,13 +4,19 @@ y de los filtros del catálogo que no cubre test_mascotas.py.
 """
 
 import io
+import logging
 import re
 from html.parser import HTMLParser
+from pathlib import Path
 
 import pytest
+from botocore.exceptions import ClientError
+from PIL import Image
 from sqlalchemy.exc import SQLAlchemyError
+from werkzeug.datastructures import FileStorage
 
-from app import adopciones, db
+from app import adopciones, db, fotos
+from app.fotos import s3 as fotos_s3
 from app.models import Mascota, Solicitud, Usuario
 from app.routes import mascotas as rutas_mascotas
 
@@ -28,16 +34,47 @@ def datos_mascota(**cambios):
 
 @pytest.fixture
 def s3_falso(monkeypatch):
-    """Sustituye la subida y el borrado en S3 de las rutas de mascotas."""
+    """Sustituye el guardado y el borrado de fotos de las rutas de mascotas."""
     llamadas = {'subidas': [], 'borrados': [], 'url': 'https://bucket/mascotas/nueva.png'}
 
     def subir(foto):
         llamadas['subidas'].append(foto.filename)
+        if llamadas['url'] is None:
+            raise fotos.ErrorAlmacenamiento(fotos.MENSAJE_FORMATO)
         return llamadas['url']
 
-    monkeypatch.setattr(rutas_mascotas, 'upload_to_s3', subir)
-    monkeypatch.setattr(rutas_mascotas, 'delete_from_s3', lambda url: llamadas['borrados'].append(url))
+    monkeypatch.setattr(fotos, 'guardar_foto', subir)
+    monkeypatch.setattr(fotos, 'borrar_foto', lambda url: llamadas['borrados'].append(url))
     return llamadas
+
+
+def png():
+    buffer = io.BytesIO()
+    Image.new('RGB', (2, 2), 'red').save(buffer, format='PNG')
+    return buffer.getvalue()
+
+
+def foto_png(nombre='rocky.png'):
+    return (io.BytesIO(png()), nombre)
+
+
+def fotos_guardadas(app):
+    """URLs de las fotos que hay en el directorio del backend local."""
+    directorio = Path(app.config['FOTOS_DIR'])
+    return {'/fotos/' + f.name for f in directorio.iterdir()} if directorio.exists() else set()
+
+
+@pytest.fixture
+def foto_local(app):
+    """Guarda una foto en el backend local (tmp_path) y devuelve su foto_url."""
+    return fotos.guardar_foto(FileStorage(stream=io.BytesIO(png()), filename='actual.png'))
+
+
+@pytest.fixture
+def con_foto_local(mascota_disponible, foto_local):
+    mascota_disponible.foto_url = foto_local
+    db.session.commit()
+    return mascota_disponible
 
 
 @pytest.fixture
@@ -113,6 +150,8 @@ VALIDACIONES = [
     ({'edad_aprox': '-1'}, 'edad_aprox', 'La edad debe estar entre 0 y 30 años.'),
     ({'edad_aprox': 'abc'}, 'edad_aprox', 'La edad debe ser un número válido.'),
     ({'foto_url': 'http://inseguro.com/foto.jpg'}, 'foto_url', 'La URL de la foto debe empezar por https://'),
+    # Una ruta del backend local solo vale si es la foto que ya tiene la mascota
+    ({'foto_url': '/fotos/' + 'a' * 32 + '.png'}, 'foto_url', 'La URL de la foto debe empezar por https://'),
 ]
 
 # Ficha completa distinta de la de mascota_disponible, para comprobar que tras
@@ -302,7 +341,7 @@ class TestCrearMascota:
         ('rocky.png', b'<html></html>'),
     ], ids=['extension', 'contenido'])
     def test_foto_no_valida_conserva_los_datos(self, client, auth_headers_admin, nombre, contenido):
-        """Con la validación real de app/s3.py, que rechaza antes de llamar a S3."""
+        """Con la validación real de app/fotos, que rechaza antes de llamar a S3."""
         datos = {**FICHA_ENVIADA, 'foto': (io.BytesIO(contenido), nombre)}
         response = client.post('/mascotas/admin/nueva', data=datos, content_type='multipart/form-data')
 
@@ -319,6 +358,57 @@ class TestCrearMascota:
         assert 'No se pudo crear la mascota' in html
         assert 'fallo simulado' not in html
         assert_conserva(html, FICHA_ENVIADA)
+
+
+class TestSinBackendDeFotos:
+    """P-09: sin almacenamiento configurado, un archivo da un error del campo y nunca un 500."""
+
+    @pytest.fixture(params=[{'FOTOS_BACKEND': ''}, {'FOTOS_BACKEND': 's3', 'AWS_S3_BUCKET': None}],
+                    ids=['sin_backend', 's3_sin_bucket'])
+    def sin_backend(self, app, request):
+        app.config.update(request.param)
+
+    def test_post_con_archivo_da_error_de_campo_y_conserva(self, client, auth_headers_admin, sin_backend):
+        datos = {**FICHA_ENVIADA, 'foto': foto_png()}
+        response = client.post('/mascotas/admin/nueva', data=datos, content_type='multipart/form-data')
+
+        html = response.data.decode()
+        assert response.status_code == 400
+        assert_error_en_campo(html, 'foto', fotos.MENSAJE_NO_DISPONIBLE)
+        assert 'Quita el archivo y pega el enlace https://' in html
+        assert_conserva(html, FICHA_ENVIADA)
+        assert Mascota.query.count() == 0
+
+    def test_con_url_se_crea(self, client, auth_headers_admin, sin_backend):
+        response = client.post('/mascotas/admin/nueva', data=FICHA_ENVIADA)
+
+        assert response.status_code == 302
+        assert Mascota.query.one().foto_url == FICHA_ENVIADA['foto_url']
+
+
+class TestErrorDeS3:
+
+    @pytest.fixture
+    def s3_que_falla(self, app, monkeypatch):
+        app.config.update(FOTOS_BACKEND='s3', AWS_S3_BUCKET='bucket-test', AWS_S3_ENDPOINT_URL=None)
+
+        class Cliente:
+            def upload_fileobj(self, *args, **kwargs):
+                raise ClientError({'Error': {'Code': 'AccessDenied', 'Message': 'denegado'}}, 'PutObject')
+        monkeypatch.setattr(fotos_s3.boto3, 'client', lambda *args, **kwargs: Cliente())
+
+    def test_client_error_da_error_de_campo_y_se_registra(self, client, auth_headers_admin, s3_que_falla, caplog):
+        datos = {**FICHA_ENVIADA, 'foto': foto_png()}
+        with caplog.at_level(logging.ERROR):
+            response = client.post('/mascotas/admin/nueva', data=datos, content_type='multipart/form-data')
+
+        html = response.data.decode()
+        assert response.status_code == 400
+        assert_error_en_campo(html, 'foto', fotos.MENSAJE_FALLO)
+        assert 'AccessDenied' not in html
+        assert_conserva(html, FICHA_ENVIADA)
+        assert 'AccessDenied' in caplog.text
+        assert Mascota.query.count() == 0
 
 
 class TestEditarMascota:
@@ -433,6 +523,29 @@ class TestEditarMascota:
                     data=datos_mascota(foto_url='https://ejemplo.com/otra.jpg'))
 
         assert s3_falso['borrados'] == [foto_anterior]
+
+    def test_reenviar_sin_cambios_conserva_la_foto_local(self, app, client, auth_headers_admin, con_foto_local):
+        """La ruta /fotos/<clave> no es https://, pero es la foto actual: se acepta tal cual."""
+        foto = con_foto_local.foto_url
+        datos = campos_del_formulario(client.get(self.url(con_foto_local)).data.decode())
+        assert datos['foto_url'] == foto
+        response = client.post(self.url(con_foto_local), data=datos)
+
+        assert response.status_code == 302
+        db.session.refresh(con_foto_local)
+        assert con_foto_local.foto_url == foto
+        assert fotos_guardadas(app) == {foto}
+
+    def test_url_http_heredada_se_vuelve_a_validar(self, client, auth_headers_admin, mascota_disponible):
+        """Solo se acepta sin validar la foto propia actual, no una URL externa no segura."""
+        mascota_disponible.foto_url = 'http://antigua.ejemplo.com/foto.jpg'
+        db.session.commit()
+
+        response = client.post(self.url(mascota_disponible),
+                               data={**FICHA_ENVIADA, 'foto_url': 'http://antigua.ejemplo.com/foto.jpg'})
+
+        assert response.status_code == 400
+        assert_error_en_campo(response.data.decode(), 'foto_url', 'La URL de la foto debe empezar por https://')
 
     def test_misma_url_no_borra_nada(self, client, auth_headers_admin, mascota_disponible, s3_falso):
         client.post(self.url(mascota_disponible),

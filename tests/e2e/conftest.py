@@ -26,6 +26,7 @@ def servidor(tmp_path_factory):
     class E2EConfig(TestingConfig):
         SQLALCHEMY_DATABASE_URI = f"sqlite:///{tmp_path_factory.mktemp('e2e') / 'e2e.db'}"
         WTF_CSRF_ENABLED = True
+        FOTOS_DIR = str(tmp_path_factory.mktemp('fotos'))
 
     config['e2e'] = E2EConfig
     app = create_app('e2e')

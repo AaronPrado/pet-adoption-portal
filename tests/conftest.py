@@ -13,11 +13,12 @@ from app.models import Mascota, Solicitud, Usuario
 
 
 @pytest.fixture(scope='function')
-def app():
+def app(tmp_path):
     """
     Fixture que crea una instancia de la aplicación Flask en modo testing.
 
-    Cada test obtiene una aplicación nueva con una BD en memoria SQLite.
+    Cada test obtiene una aplicación nueva con una BD en memoria SQLite y
+    un directorio de fotos temporal (backend local).
     Después de cada test, la BD se destruye automáticamente.
 
     Yields:
@@ -25,6 +26,7 @@ def app():
     """
     # Crear app en modo testing
     app = create_app('testing')
+    app.config['FOTOS_DIR'] = str(tmp_path / 'fotos')
 
     # El contexto de aplicación del fixture sigue activo durante las
     # peticiones del cliente, así que todas comparten `g`. Flask-Login guarda

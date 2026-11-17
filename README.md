@@ -37,7 +37,7 @@ por roles y API REST documentada.
 - Catálogo público con filtros por especie, tamaño, sexo y edad, paginado
 - Vista detallada de cada mascota
 - Alta, edición y baja desde el panel de administración
-- Fotos subidas a AWS S3 o enlazadas por URL
+- Fotos subidas al disco del servidor o a AWS S3, o enlazadas por URL
 - El estado cambia solo según el proceso de adopción (disponible → adoptado)
 
 ![Catálogo](docs/catalogo.png)
@@ -66,7 +66,7 @@ por roles y API REST documentada.
 | Backend         | Python 3.12, Flask 3.1, Flask-SQLAlchemy, Flask-Login, Flask-RESTX, Jinja2  |
 | Base de datos   | PostgreSQL 15, SQLAlchemy 2.1, psycopg 3, migraciones con Flask-Migrate     |
 | Autenticación   | Authlib (Google OAuth 2.0), PyJWT, Flask-WTF (CSRF), Flask-Limiter          |
-| Almacenamiento  | AWS S3 (boto3), Pillow para validar imágenes                               |
+| Almacenamiento  | Disco local o AWS S3 (boto3), Pillow para validar imágenes                 |
 | Frontend        | HTML5, CSS3, Bootstrap 5                                                   |
 | Calidad         | pytest, Playwright, ruff, pip-audit, GitHub Actions                        |
 | Infraestructura | Docker, Docker Compose, Gunicorn                                           |
@@ -112,7 +112,8 @@ flask --app run crear-admin
 | Variables | Para qué |
 |---|---|
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Login con Google. En [Google Cloud Console](https://console.cloud.google.com/), añade `http://localhost:5000/auth/google/callback` como URI de redirección. |
-| `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_S3_BUCKET`, `AWS_S3_REGION` | Subir fotos. Bucket con lectura pública y usuario IAM con `PutObject` y `DeleteObject` sobre `mascotas/*`. Sin ellas, las fotos se indican por URL. |
+| `FOTOS_BACKEND`, `FOTOS_DIR` | Dónde se guardan las fotos subidas: `local` (en `FOTOS_DIR` o, sin ella, en `instance/fotos`), `s3` o vacío (sin subida; las fotos se indican por URL `https://`). En desarrollo, sin definir, es `local`. |
+| `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_S3_BUCKET`, `AWS_S3_REGION`, `AWS_S3_ENDPOINT_URL` | Backend `s3`. Bucket con lectura pública y usuario IAM con `PutObject` y `DeleteObject` sobre `mascotas/*`. `AWS_S3_ENDPOINT_URL` solo para servicios compatibles (MinIO, R2). |
 | `SECRET_KEY`, `JWT_SECRET_KEY` | Obligatorias en producción (mínimo 32 bytes). En desarrollo hay valores por defecto. |
 
 ### Cambios en la base de datos
@@ -161,7 +162,7 @@ Más detalles en [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md#api-rest).
 - Límite de 5 intentos de login por minuto (web y API) y de 10 registros por hora
 - Contraseñas con hash scrypt; login con Google solo con email verificado
 - Desactivar una cuenta cierra sus sesiones e invalida sus tokens
-- Fotos validadas por su contenido antes de subirlas a S3
+- Fotos validadas por su contenido antes de guardarlas, con nombre aleatorio
 - La app no arranca en producción sin secretos de al menos 32 bytes
 
 El detalle por capas está en [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md#seguridad).
@@ -213,11 +214,11 @@ app/
 ├── __init__.py        # Application Factory, extensiones y cabeceras de seguridad
 ├── models.py          # Usuario, Mascota, Solicitud
 ├── adopciones.py      # Regla de adopción (solicitudes en paralelo)
-├── routes/            # Blueprints web (auth, mascotas, solicitudes)
+├── routes/            # Blueprints web (auth, fotos, mascotas, solicitudes)
 │   └── api/           # API REST con Flask-RESTX
 ├── templates/         # Plantillas Jinja2
 ├── static/            # CSS y JavaScript
-├── s3.py              # Subida y borrado de fotos
+├── fotos/             # Almacenamiento de fotos: backends local y s3 (ADR-0003)
 └── cli.py             # flask crear-admin
 migrations/            # Migraciones de Alembic
 tests/                 # pytest; tests/e2e con Playwright

@@ -5,7 +5,7 @@ Tests de la configuración por entornos.
 import pytest
 
 from app import create_app
-from config import ProductionConfig
+from config import ProductionConfig, config
 
 
 @pytest.fixture
@@ -84,3 +84,46 @@ def test_sqlite_sin_opciones_de_postgresql(app):
 def test_token_csrf_dura_lo_que_la_sesion(config_produccion, nombre):
     """Sin límite de tiempo, quien tarda en rellenar el cuestionario no pierde el envío."""
     assert create_app(nombre).config['WTF_CSRF_TIME_LIMIT'] is None
+
+
+@pytest.mark.parametrize('nombre', ['production', 'testing'])
+def test_backend_de_fotos_desconocido_no_arranca(config_produccion, monkeypatch, nombre):
+    """Un FOTOS_BACKEND mal escrito falla al arrancar, no al subir la primera foto."""
+    monkeypatch.setattr(config[nombre], 'FOTOS_BACKEND', 'gcs')
+
+    with pytest.raises(RuntimeError, match="FOTOS_BACKEND no válido: 'gcs'"):
+        create_app(nombre)
+
+
+def test_produccion_local_exige_fotos_dir(config_produccion, monkeypatch):
+    """En un PaaS con disco efímero, instance/fotos se perdería en cada despliegue."""
+    monkeypatch.setattr(config_produccion, 'FOTOS_BACKEND', 'local')
+    monkeypatch.setattr(config_produccion, 'FOTOS_DIR', None)
+
+    with pytest.raises(RuntimeError, match="FOTOS_BACKEND='local' exige FOTOS_DIR"):
+        create_app('production')
+
+
+def test_produccion_local_con_fotos_dir(config_produccion, monkeypatch, tmp_path):
+    monkeypatch.setattr(config_produccion, 'FOTOS_BACKEND', 'local')
+    monkeypatch.setattr(config_produccion, 'FOTOS_DIR', str(tmp_path))
+
+    assert create_app('production').config['FOTOS_DIR'] == str(tmp_path)
+
+
+@pytest.mark.parametrize('backend', ['', 's3'])
+def test_produccion_sin_backend_o_con_s3_no_exige_fotos_dir(config_produccion, monkeypatch, backend):
+    monkeypatch.setattr(config_produccion, 'FOTOS_BACKEND', backend)
+    monkeypatch.setattr(config_produccion, 'FOTOS_DIR', None)
+    monkeypatch.setattr(config_produccion, 'AWS_S3_BUCKET', 'bucket')
+
+    assert create_app('production').config['FOTOS_BACKEND'] == backend
+
+
+def test_produccion_s3_exige_bucket(config_produccion, monkeypatch):
+    """Sin bucket, el backend s3 no puede guardar nada: mejor fallar al arrancar."""
+    monkeypatch.setattr(config_produccion, 'FOTOS_BACKEND', 's3')
+    monkeypatch.setattr(config_produccion, 'AWS_S3_BUCKET', None)
+
+    with pytest.raises(RuntimeError, match="FOTOS_BACKEND='s3' exige AWS_S3_BUCKET"):
+        create_app('production')

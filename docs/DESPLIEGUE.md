@@ -6,8 +6,9 @@ Docker (o, sin Docker, cualquier PaaS compatible con `Procfile`).
 ## 1. Requisitos
 
 - PostgreSQL 15 o superior.
-- Un bucket de S3 con lectura pública para las fotos (opcional: también se
-  pueden indicar URLs de imágenes externas).
+- Para subir fotos, un bucket de S3 con lectura pública o un volumen
+  persistente (ver «Fotos» en el punto 6). Sin ninguno de los dos, las fotos
+  se indican con URLs de imágenes externas.
 - Redis si se ejecuta más de un worker o más de una instancia (ver punto 4).
 
 ## 2. Variables de entorno
@@ -18,7 +19,10 @@ Docker (o, sin Docker, cualquier PaaS compatible con `Procfile`).
 | `JWT_SECRET_KEY` | Sí | Firma de los tokens de la API. Mínimo 32 bytes. |
 | `DATABASE_URL` | Sí | `postgresql://usuario:clave@host:5432/bd` |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Para login con Google | Añade `https://<tu-dominio>/auth/google/callback` como URI de redirección en Google Cloud Console. |
-| `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_S3_BUCKET`, `AWS_S3_REGION` | Para subir fotos | Usuario IAM con `PutObject` y `DeleteObject` sobre `mascotas/*`. |
+| `FOTOS_BACKEND` | Para subir fotos | `s3` o `local`. Sin definir (o vacía), no hay subida y el formulario solo admite URLs `https://`. |
+| `FOTOS_DIR` | Con `FOTOS_BACKEND=local` | Ruta de un volumen persistente. La app no arranca en producción con `local` sin ella. |
+| `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_S3_BUCKET`, `AWS_S3_REGION` | Con `FOTOS_BACKEND=s3` | Usuario IAM con `PutObject` y `DeleteObject` sobre `mascotas/*`. Sin `AWS_S3_BUCKET`, la subida se oculta. |
+| `AWS_S3_ENDPOINT_URL` | No | Servicio compatible con S3 (MinIO, Cloudflare R2...). Las URLs de las fotos quedan como `<endpoint>/<bucket>/mascotas/<clave>`, así que el bucket debe ser legible por esa ruta. |
 | `TRUSTED_PROXIES` | Detrás de un proxy | Número de proxies inversos delante de la app (normalmente `1`). |
 | `RATELIMIT_STORAGE_URI` | Con varios workers | `redis://host:6379/0` |
 | `WEB_CONCURRENCY` | No | Workers de gunicorn (por defecto 2 × CPU + 1). |
@@ -97,6 +101,13 @@ rechazaría la especie y no se podrían guardar.
   `DB_CONNECT_TIMEOUT` segundos. Úsalo como comprobación de disponibilidad del
   balanceador u orquestador.
 - **Swagger.** `/api/docs` está desactivado en producción.
+- **Fotos.** La mayoría de los PaaS tienen un **disco efímero**: lo que se
+  escribe en el contenedor (incluido `instance/fotos`) se borra en cada
+  despliegue o reinicio. Usa `FOTOS_BACKEND=s3` o, con `FOTOS_BACKEND=local`,
+  monta un volumen persistente y apunta `FOTOS_DIR` a él (por eso producción
+  exige `FOTOS_DIR`). Con Docker: `-v fotos:/datos/fotos -e FOTOS_DIR=/datos/fotos`,
+  con permisos de escritura para el usuario sin privilegios de la imagen.
+  Incluye ese directorio en las copias de seguridad.
 
 ## 7. Revertir una versión
 
