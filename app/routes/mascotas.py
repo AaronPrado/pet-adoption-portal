@@ -233,7 +233,8 @@ def _validar_mascota(valores, foto):
     La foto subida tiene prioridad sobre la URL, que entonces no se valida.
     Si todo lo demás es válido, sube la foto: su formato se comprueba al
     subirla, así que no queda ninguna subida huérfana por un error en otro
-    campo.
+    campo. Sin backend o si falla el almacenamiento, el error va al campo de
+    la foto (nunca un 500).
 
     Returns:
         tuple: (errores, datos). `errores` es un dict campo → mensaje (el
@@ -265,7 +266,9 @@ def _validar_mascota(valores, foto):
 
     hay_archivo = bool(foto and foto.filename)
     foto_url = valores['foto_url'] or None
-    if not hay_archivo and foto_url and not fotos.es_url_imagen_valida(foto_url):
+    if hay_archivo and not fotos.subida_disponible():
+        errores['foto'] = fotos.MENSAJE_NO_DISPONIBLE
+    elif not hay_archivo and foto_url and not fotos.es_url_imagen_valida(foto_url):
         errores['foto_url'] = 'La URL de la foto debe empezar por https://'
 
     if not errores and hay_archivo:

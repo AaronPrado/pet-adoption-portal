@@ -5,6 +5,7 @@ Interfaz común sobre dos backends, elegidos con FOTOS_BACKEND:
 - `local`: archivos en FOTOS_DIR (o instance/fotos), servidos por GET /fotos/<clave>;
 - `s3`: AWS S3 o un servicio compatible (AWS_S3_ENDPOINT_URL).
 
+Sin backend, `subida_disponible()` es falso y guardar_foto da un error de campo.
 `foto_url` guarda la ruta `/fotos/<clave>` (local), la URL completa (S3) o
 una URL externa `https://`, que nunca se borra.
 """
@@ -30,7 +31,12 @@ FORMATOS_IMAGEN = {
     'WEBP': ('webp', 'image/webp'),
 }
 
+# Mensajes para el campo de foto
 MENSAJE_FORMATO = 'Formato de imagen no permitido'
+MENSAJE_NO_DISPONIBLE = ('La subida de archivos no está disponible en este servidor. '
+                         'Quita el archivo y pega el enlace https:// de la imagen.')
+MENSAJE_FALLO = ('No hemos podido guardar la foto por un problema del servidor. '
+                 'Inténtalo de nuevo más tarde o pega el enlace https:// de la imagen.')
 
 
 class ErrorAlmacenamiento(Exception):
@@ -56,6 +62,12 @@ def _backend():
     return BACKENDS.get(current_app.config.get('FOTOS_BACKEND', 's3'))
 
 
+def subida_disponible():
+    """Hay un backend configurado con lo que necesita para guardar fotos."""
+    backend = _backend()
+    return backend is not None and backend.disponible()
+
+
 def _extension_permitida(nombre):
     return '.' in nombre and nombre.rsplit('.', 1)[1].lower() in current_app.config['ALLOWED_EXTENSIONS']
 
@@ -72,7 +84,8 @@ def detectar_formato_imagen(archivo):
         with Image.open(archivo.stream) as imagen:
             formato = imagen.format
             imagen.verify()
-    except (UnidentifiedImageError, OSError, SyntaxError, ValueError):
+    except (UnidentifiedImageError, Image.DecompressionBombError, OSError, SyntaxError, ValueError):
+        # DecompressionBombError: más píxeles que Image.MAX_IMAGE_PIXELS
         return None
     finally:
         archivo.stream.seek(0)
@@ -90,13 +103,22 @@ def guardar_foto(archivo):
         str: el valor para `foto_url`.
 
     Raises:
-        ErrorAlmacenamiento: si el formato no es válido.
+        ErrorAlmacenamiento: sin backend, formato no válido o fallo al guardar
+        (este último se registra en el log).
     """
+    if not subida_disponible():
+        raise ErrorAlmacenamiento(MENSAJE_NO_DISPONIBLE)
     formato = detectar_formato_imagen(archivo) if _extension_permitida(archivo.filename or '') else None
     if formato is None:
         raise ErrorAlmacenamiento(MENSAJE_FORMATO)
     extension, content_type = formato
-    return _backend().guardar(archivo.stream, f'{uuid.uuid4().hex}.{extension}', content_type)
+
+    backend = _backend()
+    try:
+        return backend.guardar(archivo.stream, f'{uuid.uuid4().hex}.{extension}', content_type)
+    except backend.ERRORES:
+        current_app.logger.exception('No se pudo guardar la foto (backend %s)', current_app.config.get('FOTOS_BACKEND'))
+        raise ErrorAlmacenamiento(MENSAJE_FALLO) from None
 
 
 def _clave_propia(backend, url):
@@ -120,12 +142,19 @@ def borrar_foto(url):
     """
     Borra una foto propia; las URLs externas o ajenas se ignoran.
 
+    Un fallo se registra en el log y no se propaga: un problema del
+    almacenamiento no debe impedir guardar la mascota.
+
     Returns:
-        bool: True si la foto era propia y se ha borrado.
+        bool: True si la foto era propia y ya no existe.
     """
     backend = _backend()
     clave = _clave_propia(backend, url)
     if clave is None:
         return False
-    backend.borrar(clave)
+    try:
+        backend.borrar(clave)
+    except backend.ERRORES:
+        current_app.logger.exception('No se pudo borrar la foto %s', url)
+        return False
     return True

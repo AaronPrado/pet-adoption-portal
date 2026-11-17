@@ -333,18 +333,31 @@ cerrarla (`renovar_token_csrf()` en `app/routes/auth.py`).
 
 ---
 
-## Integración AWS S3
+## Almacenamiento de fotos
 
-Las imágenes de mascotas se almacenan en AWS S3:
+Las fotos pasan por la interfaz de `app/fotos/` (ADR-0003), con el backend que
+indica `FOTOS_BACKEND`:
 
-- **`app/s3.py`**: `upload_to_s3()` y `delete_from_s3()`
+| Backend | Dónde guarda | `foto_url` |
+|---|---|---|
+| `local` | `FOTOS_DIR` o `instance/fotos`; la app las sirve en `GET /fotos/<clave>` | `/fotos/<uuid>.<ext>` |
+| `s3` | Bucket `AWS_S3_BUCKET`, carpeta `mascotas/` (`AWS_S3_ENDPOINT_URL` para servicios compatibles) | URL completa del objeto |
+| vacío | No hay subida: un archivo da un error en el campo y la foto se indica con una URL | URL externa `https://` |
+
+- **Interfaz**: `guardar_foto()`, `borrar_foto()`, `subida_disponible()` y
+  `ErrorAlmacenamiento`, cuyo `mensaje` (causa y solución) se muestra junto
+  al campo. Sin backend o con un fallo del servicio (`ClientError`, error de
+  disco) el formulario responde 400 y conserva lo escrito; el fallo se
+  registra en el log.
 - **Validación**: extensión permitida (png, jpg, jpeg, gif, webp), tamaño
-  máximo de 5 MB y contenido comprobado con Pillow. El `Content-Type` se
+  máximo de 5 MB y contenido comprobado con Pillow (una imagen por encima de
+  `Image.MAX_IMAGE_PIXELS` es un error de formato). El `Content-Type` se
   deduce del contenido, no del que envía el navegador.
-- **Nombres únicos**: `mascotas/<uuid>.<ext>`
-- **Limpieza**: al editar o eliminar una mascota se borra su foto anterior,
-  solo si es un objeto de `mascotas/` de nuestro bucket.
-- Las URLs de foto introducidas a mano tienen que ser `https://`.
+- **Nombres**: `<uuid hex>.<ext>`. Solo se sirven o borran claves con ese
+  formato, así que no se puede salir del directorio ni tocar otros objetos
+  del bucket. Las URLs externas `https://` nunca se borran.
+- **Limpieza**: al editar o eliminar una mascota se borra su foto anterior si
+  es propia. Un fallo al borrar se registra y no afecta a la respuesta.
 
 ---
 

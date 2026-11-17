@@ -4,8 +4,10 @@ backend S3 con un cliente boto3 falso y la ruta GET /fotos/<clave>.
 """
 
 import io
+import logging
 
 import pytest
+from botocore.exceptions import ClientError
 from PIL import Image
 from werkzeug.datastructures import FileStorage
 
@@ -38,12 +40,21 @@ class ClienteS3Falso:
     def __init__(self):
         self.subidas = []
         self.borrados = []
+        self.error = None
 
     def upload_fileobj(self, fileobj, bucket, key, ExtraArgs=None):
+        if self.error:
+            raise self.error
         self.subidas.append((bucket, key, ExtraArgs, fileobj.read()))
 
     def delete_object(self, Bucket, Key):
+        if self.error:
+            raise self.error
         self.borrados.append((Bucket, Key))
+
+
+def error_s3():
+    return ClientError({'Error': {'Code': 'AccessDenied', 'Message': 'denegado'}}, 'PutObject')
 
 
 @pytest.fixture
@@ -64,16 +75,25 @@ def cliente_s3(app, monkeypatch):
 class TestValidacionComun:
     """Las comprobaciones de formato no dependen del backend."""
 
-    def test_rechaza_html_con_extension_de_imagen(self, cliente_s3):
+    def test_rechaza_html_con_extension_de_imagen(self, directorio):
         with pytest.raises(fotos.ErrorAlmacenamiento) as error:
             fotos.guardar_foto(archivo(b'<script>alert(1)</script>'))
         assert error.value.mensaje == fotos.MENSAJE_FORMATO
-        assert cliente_s3.subidas == []
+        assert not directorio.exists()
 
-    def test_rechaza_extension_no_permitida(self, cliente_s3):
+    def test_rechaza_extension_no_permitida(self, directorio):
         with pytest.raises(fotos.ErrorAlmacenamiento) as error:
             fotos.guardar_foto(archivo(png_valido(), 'foto.svg', 'image/svg+xml'))
         assert error.value.mensaje == fotos.MENSAJE_FORMATO
+
+    def test_bomba_de_descompresion_es_error_de_formato(self, directorio, monkeypatch):
+        """Más del doble de Image.MAX_IMAGE_PIXELS: Pillow lanza DecompressionBombError."""
+        monkeypatch.setattr(Image, 'MAX_IMAGE_PIXELS', 1)
+
+        with pytest.raises(fotos.ErrorAlmacenamiento) as error:
+            fotos.guardar_foto(archivo(png_valido()))
+        assert error.value.mensaje == fotos.MENSAJE_FORMATO
+        assert not directorio.exists()
 
     def test_url_manual_debe_ser_https(self):
         assert fotos.es_url_imagen_valida('https://ejemplo.com/a.jpg')
@@ -82,7 +102,34 @@ class TestValidacionComun:
         assert not fotos.es_url_imagen_valida('javascript:alert(1)')
 
 
+class TestSinBackend:
+
+    @pytest.mark.parametrize('config', [
+        {'FOTOS_BACKEND': ''},
+        {'FOTOS_BACKEND': None},
+        {'FOTOS_BACKEND': 's3', 'AWS_S3_BUCKET': None},
+    ], ids=['vacio', 'none', 's3_sin_bucket'])
+    def test_subida_no_disponible(self, app, config):
+        app.config.update(config)
+        assert fotos.subida_disponible() is False
+
+    def test_guardar_da_error_con_solucion_y_no_500(self, app):
+        app.config['FOTOS_BACKEND'] = ''
+        with pytest.raises(fotos.ErrorAlmacenamiento) as error:
+            fotos.guardar_foto(archivo(png_valido()))
+        assert 'no está disponible' in error.value.mensaje
+        assert 'https://' in error.value.mensaje
+
+    def test_borrar_no_hace_nada(self, app):
+        app.config['FOTOS_BACKEND'] = ''
+        assert fotos.borrar_foto('/fotos/' + CLAVE) is False
+        assert fotos.es_foto_propia('/fotos/' + CLAVE) is False
+
+
 class TestBackendLocal:
+
+    def test_disponible(self, directorio):
+        assert fotos.subida_disponible() is True
 
     def test_guarda_en_el_directorio_y_devuelve_la_ruta(self, directorio):
         contenido = png_valido()
@@ -102,6 +149,26 @@ class TestBackendLocal:
 
         assert (tmp_path / 'instance' / 'fotos' / url.removeprefix('/fotos/')).exists()
 
+    def test_error_de_disco_da_error_de_campo_y_se_registra(self, directorio, caplog):
+        directorio.parent.mkdir(exist_ok=True)
+        directorio.write_text('no es un directorio')
+
+        with caplog.at_level(logging.ERROR), pytest.raises(fotos.ErrorAlmacenamiento) as error:
+            fotos.guardar_foto(archivo(png_valido()))
+
+        assert error.value.mensaje == fotos.MENSAJE_FALLO
+        assert 'No se pudo guardar la foto' in caplog.text
+
+    def test_escritura_fallida_no_deja_archivo_a_medias(self, directorio, monkeypatch):
+        def fallar(origen, destino):
+            destino.write(b'parcial')
+            raise OSError('disco lleno')
+        monkeypatch.setattr('app.fotos.local.shutil.copyfileobj', fallar)
+
+        with pytest.raises(fotos.ErrorAlmacenamiento):
+            fotos.guardar_foto(archivo(png_valido()))
+        assert list(directorio.iterdir()) == []
+
     def test_borra_foto_propia(self, directorio):
         url = fotos.guardar_foto(archivo(png_valido()))
 
@@ -110,6 +177,17 @@ class TestBackendLocal:
 
     def test_borrar_foto_que_ya_no_existe_no_falla(self, directorio):
         assert fotos.borrar_foto('/fotos/' + CLAVE) is True
+
+    def test_error_al_borrar_se_registra_sin_propagarse(self, directorio, monkeypatch, caplog):
+        url = fotos.guardar_foto(archivo(png_valido()))
+
+        def fallar(ruta):
+            raise PermissionError('sin permiso')
+        monkeypatch.setattr('app.fotos.local.os.remove', fallar)
+
+        with caplog.at_level(logging.ERROR):
+            assert fotos.borrar_foto(url) is False
+        assert 'No se pudo borrar la foto' in caplog.text
 
     @pytest.mark.parametrize('url', [
         None,
@@ -168,6 +246,9 @@ class TestRutaFotos:
 
 class TestBackendS3:
 
+    def test_disponible_con_bucket(self, cliente_s3):
+        assert fotos.subida_disponible() is True
+
     def test_sube_con_content_type_del_contenido(self, cliente_s3):
         # El navegador declara text/html, pero el contenido es un PNG
         contenido = png_valido()
@@ -191,9 +272,25 @@ class TestBackendS3:
         assert fotos.es_foto_propia(url)
         assert not fotos.es_foto_propia(BASE_S3 + CLAVE)
 
+    def test_client_error_da_error_de_campo_y_se_registra(self, cliente_s3, caplog):
+        cliente_s3.error = error_s3()
+
+        with caplog.at_level(logging.ERROR), pytest.raises(fotos.ErrorAlmacenamiento) as error:
+            fotos.guardar_foto(archivo(png_valido()))
+
+        assert error.value.mensaje == fotos.MENSAJE_FALLO
+        assert 'AccessDenied' in caplog.text
+
     def test_borra_foto_propia(self, cliente_s3):
         assert fotos.borrar_foto(BASE_S3 + CLAVE) is True
         assert cliente_s3.borrados == [('bucket-test', 'mascotas/' + CLAVE)]
+
+    def test_error_al_borrar_se_registra_sin_propagarse(self, cliente_s3, caplog):
+        cliente_s3.error = error_s3()
+
+        with caplog.at_level(logging.ERROR):
+            assert fotos.borrar_foto(BASE_S3 + CLAVE) is False
+        assert 'No se pudo borrar la foto' in caplog.text
 
     @pytest.mark.parametrize('url', [
         None,

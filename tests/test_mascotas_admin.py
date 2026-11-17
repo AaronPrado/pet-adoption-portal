@@ -4,13 +4,17 @@ y de los filtros del catálogo que no cubre test_mascotas.py.
 """
 
 import io
+import logging
 import re
 from html.parser import HTMLParser
 
 import pytest
+from botocore.exceptions import ClientError
+from PIL import Image
 from sqlalchemy.exc import SQLAlchemyError
 
 from app import adopciones, db, fotos
+from app.fotos import s3 as fotos_s3
 from app.models import Mascota, Solicitud, Usuario
 from app.routes import mascotas as rutas_mascotas
 
@@ -40,6 +44,16 @@ def s3_falso(monkeypatch):
     monkeypatch.setattr(fotos, 'guardar_foto', subir)
     monkeypatch.setattr(fotos, 'borrar_foto', lambda url: llamadas['borrados'].append(url))
     return llamadas
+
+
+def png():
+    buffer = io.BytesIO()
+    Image.new('RGB', (2, 2), 'red').save(buffer, format='PNG')
+    return buffer.getvalue()
+
+
+def foto_png(nombre='rocky.png'):
+    return (io.BytesIO(png()), nombre)
 
 
 @pytest.fixture
@@ -321,6 +335,57 @@ class TestCrearMascota:
         assert 'No se pudo crear la mascota' in html
         assert 'fallo simulado' not in html
         assert_conserva(html, FICHA_ENVIADA)
+
+
+class TestSinBackendDeFotos:
+    """P-09: sin almacenamiento configurado, un archivo da un error del campo y nunca un 500."""
+
+    @pytest.fixture(params=[{'FOTOS_BACKEND': ''}, {'FOTOS_BACKEND': 's3', 'AWS_S3_BUCKET': None}],
+                    ids=['sin_backend', 's3_sin_bucket'])
+    def sin_backend(self, app, request):
+        app.config.update(request.param)
+
+    def test_post_con_archivo_da_error_de_campo_y_conserva(self, client, auth_headers_admin, sin_backend):
+        datos = {**FICHA_ENVIADA, 'foto': foto_png()}
+        response = client.post('/mascotas/admin/nueva', data=datos, content_type='multipart/form-data')
+
+        html = response.data.decode()
+        assert response.status_code == 400
+        assert_error_en_campo(html, 'foto', fotos.MENSAJE_NO_DISPONIBLE)
+        assert 'Quita el archivo y pega el enlace https://' in html
+        assert_conserva(html, FICHA_ENVIADA)
+        assert Mascota.query.count() == 0
+
+    def test_con_url_se_crea(self, client, auth_headers_admin, sin_backend):
+        response = client.post('/mascotas/admin/nueva', data=FICHA_ENVIADA)
+
+        assert response.status_code == 302
+        assert Mascota.query.one().foto_url == FICHA_ENVIADA['foto_url']
+
+
+class TestErrorDeS3:
+
+    @pytest.fixture
+    def s3_que_falla(self, app, monkeypatch):
+        app.config.update(FOTOS_BACKEND='s3', AWS_S3_BUCKET='bucket-test', AWS_S3_ENDPOINT_URL=None)
+
+        class Cliente:
+            def upload_fileobj(self, *args, **kwargs):
+                raise ClientError({'Error': {'Code': 'AccessDenied', 'Message': 'denegado'}}, 'PutObject')
+        monkeypatch.setattr(fotos_s3.boto3, 'client', lambda *args, **kwargs: Cliente())
+
+    def test_client_error_da_error_de_campo_y_se_registra(self, client, auth_headers_admin, s3_que_falla, caplog):
+        datos = {**FICHA_ENVIADA, 'foto': foto_png()}
+        with caplog.at_level(logging.ERROR):
+            response = client.post('/mascotas/admin/nueva', data=datos, content_type='multipart/form-data')
+
+        html = response.data.decode()
+        assert response.status_code == 400
+        assert_error_en_campo(html, 'foto', fotos.MENSAJE_FALLO)
+        assert 'AccessDenied' not in html
+        assert_conserva(html, FICHA_ENVIADA)
+        assert 'AccessDenied' in caplog.text
+        assert Mascota.query.count() == 0
 
 
 class TestEditarMascota:
