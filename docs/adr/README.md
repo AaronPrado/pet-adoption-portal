@@ -9,6 +9,7 @@ Plantilla: [template.md](template.md).
 
 | ADR | Título | Estado | Fecha |
 |-----|--------|--------|-------|
+| [0001](0001-frontend-ssr-sin-bootstrap.md) | Frontend renderizado en servidor con CSS propio, sin Bootstrap, migrado por fases | aceptada | 2026-11-15 |
 | [0002](0002-sistema-de-diseno-tokens-y-macros.md) | Sistema de diseño propio: tokens CSS, macros Jinja e identidad neutra personalizable | aceptada | 2026-11-15 |
 | [0003](0003-almacenamiento-de-fotos.md) | Almacenamiento de fotos con backend local en desarrollo y S3 en producción | aceptada | 2026-11-15 |
 | [0004](0004-solicitudes-en-paralelo.md) | Solicitudes en paralelo y estados de la mascota derivados del flujo | aceptada | 2026-11-15 |
