@@ -1,7 +1,7 @@
 """
 Tests del almacenamiento de fotos (app/fotos): procesado con Pillow y
 variantes WebP, backend local con tmp_path, backend S3 con un cliente boto3
-falso y la ruta GET /fotos/<clave>.
+falso, la ruta GET /fotos/<clave> y el filtro srcset_foto.
 """
 
 import io
@@ -690,3 +690,35 @@ class TestProcesado:
 
         assert getattr(resultado, 'n_frames', 1) == 1
         assert parecido(resultado.getpixel((3, 3)), (255, 0, 0))
+
+
+class TestSrcset:
+
+    def test_variantes_de_una_foto_local(self, directorio):
+        assert fotos.srcset_foto('/fotos/' + VARIANTES[-1]) == (f'/fotos/{BASE}-400.webp 400w, '
+                                                               f'/fotos/{BASE}-800.webp 800w, '
+                                                               f'/fotos/{BASE}-1200.webp 1200w')
+
+    def test_variantes_de_una_foto_en_s3(self, cliente_s3):
+        assert fotos.srcset_foto(BASE_S3 + VARIANTES[0]).startswith(f'{BASE_S3}{BASE}-400.webp 400w, ')
+
+    @pytest.mark.parametrize('url', [
+        None,
+        '',
+        'https://images.unsplash.com/photo-1587300003388-59208cc962cb',
+        'https://ejemplo.com/fotos/' + VARIANTES[-1],
+        '/fotos/' + CLAVE,
+        '/fotos/../' + VARIANTES[-1],
+    ], ids=['none', 'vacia', 'externa', 'externa_con_clave', 'antigua_sin_variantes', 'traversal'])
+    def test_sin_variantes_devuelve_cadena_vacia(self, directorio, url):
+        assert fotos.srcset_foto(url) == ''
+
+    def test_sin_backend_devuelve_cadena_vacia(self, app):
+        app.config['FOTOS_BACKEND'] = ''
+        assert fotos.srcset_foto('/fotos/' + VARIANTES[-1]) == ''
+
+    def test_registrado_como_filtro_jinja(self, app, directorio):
+        plantilla = app.jinja_env.from_string('{{ url | srcset_foto }}')
+
+        assert plantilla.render(url='/fotos/' + VARIANTES[-1]).endswith('1200.webp 1200w')
+        assert plantilla.render(url='https://ejemplo.com/a.jpg') == ''

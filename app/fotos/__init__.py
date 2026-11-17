@@ -12,7 +12,7 @@ una URL externa `https://`, que nunca se borra.
 Cada foto subida se reprocesa (app/fotos/procesado.py) y se guarda como tres
 variantes WebP con el mismo nombre aleatorio: `<hex>-400.webp`,
 `<hex>-800.webp` y `<hex>-1200.webp`. `foto_url` apunta a la de 1200 y
-las otras se deducen de ella. Las fotos anteriores a las variantes
+`srcset_foto` deduce las otras de ella. Las fotos anteriores a las variantes
 (`<hex>.png`, `.jpg`...) siguen siendo válidas y son un único archivo.
 """
 
@@ -176,6 +176,21 @@ def urls_de_la_foto(url):
         return [url]
     prefijo = url[:-len(clave)]
     return [prefijo + c for c in _claves_de_la_foto(clave)]
+
+
+def srcset_foto(url):
+    """
+    Filtro Jinja: el `srcset` de las variantes de una foto propia.
+
+    Devuelve '' para las URLs externas, las fotos anteriores a las variantes
+    o sin foto, así que la plantilla puede omitir el atributo. Las variantes
+    de una imagen más estrecha que su ancho no se amplían, pero se anuncian
+    con el ancho nominal.
+    """
+    clave = _clave_propia(_backend(), url)
+    if clave is None or PATRON_CLAVE.fullmatch(clave)['ancho'] is None:
+        return ''
+    return ', '.join(f'{u} {ancho}w' for u, ancho in zip(urls_de_la_foto(url), procesado.ANCHOS, strict=True))
 
 
 def borrar_foto(url):

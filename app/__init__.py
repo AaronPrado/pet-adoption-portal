@@ -141,6 +141,9 @@ def create_app(config_name='default'):
     # Respuestas del cuestionario con su etiqueta legible en las plantillas
     from app.cuestionario import respuesta_legible
     app.add_template_filter(respuesta_legible)
+    # srcset de las variantes de una foto propia ('' para las URLs externas)
+    from app.fotos import srcset_foto
+    app.add_template_filter(srcset_foto)
 
     # La API se autentica con JWT en la cabecera Authorization (no con cookies),
     # por lo que no necesita token CSRF

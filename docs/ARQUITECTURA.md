@@ -258,7 +258,7 @@ app/
 ├── cuestionario.py      # Preguntas, opciones y validación del cuestionario
 ├── decorators.py        # @admin_required
 ├── fotos/               # Almacenamiento de fotos (ADR-0003)
-│   ├── __init__.py      # guardar_foto, borrar_foto, subida_disponible, urls_de_la_foto
+│   ├── __init__.py      # guardar_foto, borrar_foto, subida_disponible, srcset_foto
 │   ├── procesado.py     # Pillow: tipo real, límite de píxeles, sin EXIF, variantes WebP
 │   ├── local.py         # Backend local: FOTOS_DIR o instance/fotos
 │   └── s3.py            # Backend s3: boto3, endpoint_url opcional
@@ -374,6 +374,9 @@ indica `FOTOS_BACKEND`:
   su tamaño). `foto_url` guarda la de 1200, que hace de foto principal: no
   se conserva el original a resolución completa. Si falla la subida de una
   variante, se borran las ya guardadas.
+- **`srcset_foto`**: filtro Jinja que devuelve el `srcset` de las tres
+  variantes a partir de `foto_url`, sin consultar el almacenamiento, y `''`
+  para las URLs externas y las fotos anteriores a las variantes.
 - **Nombres**: `<uuid hex>-<400|800|1200>.webp` o, en las fotos anteriores a
   las variantes, `<uuid hex>.<ext>`. Solo se sirven o borran claves con ese formato exacto, así que no se puede salir del directorio ni
   tocar otros objetos del bucket. Las URLs externas `https://` nunca se
