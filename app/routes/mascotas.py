@@ -9,6 +9,7 @@ Este módulo maneja:
 
 from flask import Blueprint, abort, current_app, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
+from sqlalchemy import exists, select
 
 from app import adopciones, db, fotos
 from app.adopciones import consulta_mascota_bloqueada
@@ -190,7 +191,7 @@ def admin_nueva():
     """
     if request.method == 'POST':
         valores = _leer_formulario_mascota()
-        errores, datos = _validar_mascota(valores, request.files.get('foto'))
+        errores, datos, foto_subida = _validar_mascota(valores, request.files.get('foto'))
         if errores:
             flash(MENSAJE_REVISAR, 'danger')
             return _formulario_nueva(valores, errores, 400)
@@ -199,13 +200,15 @@ def admin_nueva():
         try:
             db.session.add(nueva_mascota)
             db.session.commit()
-            flash(f'Mascota "{nueva_mascota.nombre}" creada exitosamente.', 'success')
-            return redirect(url_for('mascotas.admin_lista'))
         except Exception:
             db.session.rollback()
+            # Sin mascota, la foto recién subida quedaría huérfana
+            fotos.borrar_foto(foto_subida)
             current_app.logger.exception('Error al crear la mascota')
             flash('No se pudo crear la mascota. Inténtalo de nuevo.', 'danger')
             return _formulario_nueva(valores)
+        flash(f'Mascota "{nueva_mascota.nombre}" creada exitosamente.', 'success')
+        return redirect(url_for('mascotas.admin_lista'))
 
     # GET: Mostrar formulario vacío
     return _formulario_nueva()
@@ -239,9 +242,10 @@ def _validar_mascota(valores, foto, foto_actual=None):
     falla el almacenamiento, el error va al campo de la foto (nunca un 500).
 
     Returns:
-        tuple: (errores, datos). `errores` es un dict campo → mensaje (el
-        contrato `valores`/`errores`); `datos`, los atributos de la mascota,
-        solo válidos si no hay errores.
+        tuple: (errores, datos, foto_subida). `errores` es un dict campo →
+        mensaje (el contrato `valores`/`errores`); `datos`, los atributos de
+        la mascota, solo válidos si no hay errores; `foto_subida`, la URL de
+        la foto guardada en esta petición, o None.
     """
     errores = {}
     if len(valores['nombre']) < 2:
@@ -274,9 +278,10 @@ def _validar_mascota(valores, foto, foto_actual=None):
     elif not hay_archivo and foto_url and not conserva_foto_propia and not fotos.es_url_imagen_valida(foto_url):
         errores['foto_url'] = 'La URL de la foto debe empezar por https://'
 
+    foto_subida = None
     if not errores and hay_archivo:
         try:
-            foto_url = fotos.guardar_foto(foto)
+            foto_subida = foto_url = fotos.guardar_foto(foto)
         except fotos.ErrorAlmacenamiento as error:
             errores['foto'] = error.mensaje
 
@@ -292,7 +297,26 @@ def _validar_mascota(valores, foto, foto_actual=None):
         'vacunado': valores['vacunado'],
         'esterilizado': valores['esterilizado'],
     }
-    return errores, datos
+    return errores, datos, foto_subida
+
+
+def _borrar_foto_si_nadie_la_usa(url):
+    """
+    Borra una foto propia que ya no usa ninguna mascota.
+
+    Se llama después de un commit correcto. Dos fichas pueden compartir
+    foto_url (una URL de S3 pegada a mano), y la otra no debe perder su foto.
+    Un fallo solo se registra: el cambio ya está guardado y la foto, como
+    mucho, queda huérfana.
+    """
+    if not fotos.es_foto_propia(url):
+        return
+    try:
+        if not db.session.scalar(select(exists().where(Mascota.foto_url == url))):
+            fotos.borrar_foto(url)
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception('No se pudo borrar la foto anterior %s', url)
 
 
 def _contexto_formulario(valores, errores):
@@ -356,27 +380,30 @@ def admin_editar(mascota_id):
 
     if request.method == 'POST':
         valores = _leer_formulario_mascota()
-        errores, datos = _validar_mascota(valores, request.files.get('foto'), mascota.foto_url)
+        foto_anterior = mascota.foto_url
+        errores, datos, foto_subida = _validar_mascota(valores, request.files.get('foto'), foto_anterior)
         if errores:
             flash(MENSAJE_REVISAR, 'danger')
             return _formulario_edicion(mascota, valores, errores, 400)
-
-        # Una foto nueva (subida o URL distinta) sustituye a la anterior
-        if datos['foto_url'] != mascota.foto_url:
-            fotos.borrar_foto(mascota.foto_url)
 
         for atributo, valor in datos.items():
             setattr(mascota, atributo, valor)
 
         try:
             db.session.commit()
-            flash(f'Mascota "{datos["nombre"]}" actualizada exitosamente.', 'success')
-            return redirect(url_for('mascotas.admin_lista'))
         except Exception:
             db.session.rollback()
+            # La mascota conserva la foto anterior; la nueva quedaría huérfana
+            fotos.borrar_foto(foto_subida)
             current_app.logger.exception('Error al actualizar la mascota')
             flash('No se pudo actualizar la mascota. Inténtalo de nuevo.', 'danger')
             return _formulario_edicion(mascota, valores)
+
+        # Solo tras guardar: una foto nueva (subida o URL distinta) sustituye a la anterior
+        if datos['foto_url'] != foto_anterior:
+            _borrar_foto_si_nadie_la_usa(foto_anterior)
+        flash(f'Mascota "{datos["nombre"]}" actualizada exitosamente.', 'success')
+        return redirect(url_for('mascotas.admin_lista'))
 
     # GET: Mostrar formulario con datos actuales
     return _formulario_edicion(mascota)
@@ -408,16 +435,19 @@ def admin_eliminar(mascota_id):
         flash(f'No se puede eliminar "{mascota.nombre}" porque tiene solicitudes de adopción asociadas.', 'danger')
         return redirect(url_for('mascotas.admin_lista'))
 
+    nombre = mascota.nombre
+    foto = mascota.foto_url
     try:
-        nombre = mascota.nombre
-        fotos.borrar_foto(mascota.foto_url)
         db.session.delete(mascota)
         db.session.commit()
-        flash(f'Mascota "{nombre}" eliminada exitosamente.', 'success')
     except Exception:
         db.session.rollback()
         current_app.logger.exception('Error al eliminar la mascota')
         flash('No se pudo eliminar la mascota. Inténtalo de nuevo.', 'danger')
+    else:
+        # Solo tras borrar la ficha: si el commit falla, la mascota conserva su foto
+        _borrar_foto_si_nadie_la_usa(foto)
+        flash(f'Mascota "{nombre}" eliminada exitosamente.', 'success')
 
     return redirect(url_for('mascotas.admin_lista'))
 

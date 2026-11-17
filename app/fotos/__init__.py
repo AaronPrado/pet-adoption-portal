@@ -141,8 +141,8 @@ def borrar_foto(url):
     """
     Borra una foto propia; las URLs externas o ajenas se ignoran.
 
-    Un fallo se registra en el log y no se propaga: un problema del
-    almacenamiento no debe impedir guardar la mascota.
+    Un fallo se registra en el log y no se propaga: se llama después de un
+    commit correcto y no debe convertirlo en un error para el usuario.
 
     Returns:
         bool: True si la foto era propia y ya no existe.

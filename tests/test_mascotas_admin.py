@@ -359,6 +359,15 @@ class TestCrearMascota:
         assert 'fallo simulado' not in html
         assert_conserva(html, FICHA_ENVIADA)
 
+    def test_error_de_base_de_datos_borra_la_foto_subida(self, app, client, auth_headers_admin, commit_falla):
+        """Sin mascota guardada, la foto recién subida no debe quedar huérfana."""
+        commit_falla()
+        datos = {**FICHA_ENVIADA, 'foto': foto_png()}
+        response = client.post('/mascotas/admin/nueva', data=datos, content_type='multipart/form-data')
+
+        assert 'No se pudo crear la mascota' in response.data.decode()
+        assert fotos_guardadas(app) == set()
+
 
 class TestSinBackendDeFotos:
     """P-09: sin almacenamiento configurado, un archivo da un error del campo y nunca un 500."""
@@ -491,38 +500,45 @@ class TestEditarMascota:
         campos = campos_del_formulario(client.get(self.url(mascota_sin_opcionales)).data.decode())
         assert campos['edad_aprox'] == '0'
 
-    def test_nueva_foto_borra_la_anterior(self, client, auth_headers_admin, mascota_disponible, s3_falso):
-        foto_anterior = mascota_disponible.foto_url
-        datos = datos_mascota(foto=(io.BytesIO(b'png'), 'nueva.png'))
-        client.post(self.url(mascota_disponible), data=datos, content_type='multipart/form-data')
+    def test_nueva_foto_borra_la_anterior(self, app, client, auth_headers_admin, con_foto_local):
+        foto_anterior = con_foto_local.foto_url
+        datos = datos_mascota(foto=foto_png('nueva.png'))
+        response = client.post(self.url(con_foto_local), data=datos, content_type='multipart/form-data')
 
-        db.session.refresh(mascota_disponible)
-        assert mascota_disponible.foto_url == s3_falso['url']
-        assert s3_falso['borrados'] == [foto_anterior]
+        assert response.status_code == 302
+        db.session.refresh(con_foto_local)
+        assert con_foto_local.foto_url != foto_anterior
+        assert fotos_guardadas(app) == {con_foto_local.foto_url}
 
-    def test_foto_rechazada_conserva_la_anterior(self, client, auth_headers_admin, mascota_disponible, s3_falso):
+    def test_foto_rechazada_conserva_la_anterior(self, app, client, auth_headers_admin, con_foto_local):
         """Regresión P-02: no redirige; muestra lo editado y no toca la foto guardada."""
-        foto_anterior = mascota_disponible.foto_url
-        s3_falso['url'] = None
+        foto_anterior = con_foto_local.foto_url
         enviados = {**FICHA_ENVIADA, 'foto_url': foto_anterior}
         datos = {**enviados, 'foto': (io.BytesIO(b'x'), 'nueva.png')}
-        response = client.post(self.url(mascota_disponible), data=datos, content_type='multipart/form-data')
+        response = client.post(self.url(con_foto_local), data=datos, content_type='multipart/form-data')
 
         html = response.data.decode()
         assert response.status_code == 400
-        assert_error_en_campo(html, 'foto', 'Formato de imagen no permitido')
+        assert_error_en_campo(html, 'foto', fotos.MENSAJE_FORMATO)
         assert_conserva(html, enviados)
-        db.session.refresh(mascota_disponible)
-        assert mascota_disponible.foto_url == foto_anterior
-        assert mascota_disponible.nombre == 'Cerbero'
-        assert s3_falso['borrados'] == []
+        db.session.refresh(con_foto_local)
+        assert con_foto_local.foto_url == foto_anterior
+        assert con_foto_local.nombre == 'Cerbero'
+        assert fotos_guardadas(app) == {foto_anterior}
 
-    def test_cambiar_url_borra_la_foto_anterior(self, client, auth_headers_admin, mascota_disponible, s3_falso):
-        foto_anterior = mascota_disponible.foto_url
-        client.post(self.url(mascota_disponible),
-                    data=datos_mascota(foto_url='https://ejemplo.com/otra.jpg'))
+    def test_cambiar_url_borra_la_foto_anterior(self, app, client, auth_headers_admin, con_foto_local):
+        client.post(self.url(con_foto_local), data=datos_mascota(foto_url='https://ejemplo.com/otra.jpg'))
 
-        assert s3_falso['borrados'] == [foto_anterior]
+        db.session.refresh(con_foto_local)
+        assert con_foto_local.foto_url == 'https://ejemplo.com/otra.jpg'
+        assert fotos_guardadas(app) == set()
+
+    def test_vaciar_la_url_borra_la_foto(self, app, client, auth_headers_admin, con_foto_local):
+        client.post(self.url(con_foto_local), data=datos_mascota(foto_url=''))
+
+        db.session.refresh(con_foto_local)
+        assert con_foto_local.foto_url is None
+        assert fotos_guardadas(app) == set()
 
     def test_reenviar_sin_cambios_conserva_la_foto_local(self, app, client, auth_headers_admin, con_foto_local):
         """La ruta /fotos/<clave> no es https://, pero es la foto actual: se acepta tal cual."""
@@ -547,14 +563,64 @@ class TestEditarMascota:
         assert response.status_code == 400
         assert_error_en_campo(response.data.decode(), 'foto_url', 'La URL de la foto debe empezar por https://')
 
-    def test_misma_url_no_borra_nada(self, client, auth_headers_admin, mascota_disponible, s3_falso):
-        client.post(self.url(mascota_disponible),
-                    data=datos_mascota(foto_url=mascota_disponible.foto_url))
+    def test_foto_compartida_no_se_borra(self, app, client, auth_headers_admin, con_foto_local):
+        """Otra ficha con la misma foto_url la sigue usando."""
+        foto = con_foto_local.foto_url
+        db.session.add(Mascota(nombre='Gemelo', especie='Perro', descripcion='Comparte la foto', foto_url=foto))
+        db.session.commit()
 
-        assert s3_falso['borrados'] == []
+        client.post(self.url(con_foto_local), data=datos_mascota(foto_url='https://ejemplo.com/otra.jpg'))
+
+        assert fotos_guardadas(app) == {foto}
+
+    def test_url_externa_anterior_no_se_toca(self, app, client, auth_headers_admin, mascota_disponible):
+        response = client.post(self.url(mascota_disponible), data=datos_mascota(foto=foto_png()),
+                               content_type='multipart/form-data')
+
+        assert response.status_code == 302
+        db.session.refresh(mascota_disponible)
+        assert fotos_guardadas(app) == {mascota_disponible.foto_url}
+
+    def test_error_de_base_de_datos_con_foto_nueva(self, app, client, auth_headers_admin, con_foto_local,
+                                                   commit_falla):
+        """Si el commit falla, la mascota conserva su foto y la nueva no queda huérfana."""
+        foto_anterior = con_foto_local.foto_url
+        commit_falla()
+        datos = {**FICHA_ENVIADA, 'foto': foto_png('nueva.png')}
+        response = client.post(self.url(con_foto_local), data=datos, content_type='multipart/form-data')
+
+        assert 'No se pudo actualizar la mascota' in response.data.decode()
+        assert fotos_guardadas(app) == {foto_anterior}
+        assert db.session.get(Mascota, con_foto_local.id).foto_url == foto_anterior
+
+    @pytest.mark.parametrize('falla', ['consulta', 'borrado'])
+    def test_fallo_al_borrar_la_anterior_no_da_500(self, app, client, auth_headers_admin, con_foto_local,
+                                                   monkeypatch, caplog, falla):
+        """El cambio ya está guardado: el fallo se registra y la foto queda huérfana."""
+        foto_anterior = con_foto_local.foto_url
+
+        def fallar(*args, **kwargs):
+            raise RuntimeError('fallo simulado')
+        if falla == 'consulta':
+            monkeypatch.setattr(db.session, 'scalar', fallar)
+        else:
+            monkeypatch.setattr(fotos, 'borrar_foto', fallar)
+
+        with caplog.at_level(logging.ERROR):
+            response = client.post(self.url(con_foto_local), data=datos_mascota(foto_url='https://ejemplo.com/b.jpg'))
+
+        assert response.status_code == 302
+        assert 'No se pudo borrar la foto anterior' in caplog.text
+        assert db.session.get(Mascota, con_foto_local.id).foto_url == 'https://ejemplo.com/b.jpg'
+        assert fotos_guardadas(app) == {foto_anterior}
+
+    def test_misma_url_no_borra_nada(self, app, client, auth_headers_admin, con_foto_local):
+        client.post(self.url(con_foto_local), data=datos_mascota(foto_url=con_foto_local.foto_url))
+
+        assert fotos_guardadas(app) == {con_foto_local.foto_url}
 
     @pytest.mark.parametrize('estado', ['adoptado', 'en_proceso', 'inventado'])
-    def test_editar_no_cambia_el_estado(self, client, auth_headers_admin, mascota_disponible, s3_falso, estado):
+    def test_editar_no_cambia_el_estado(self, client, auth_headers_admin, mascota_disponible, estado):
         client.post(self.url(mascota_disponible),
                     data=datos_mascota(estado=estado, foto_url=mascota_disponible.foto_url))
 
@@ -562,7 +628,7 @@ class TestEditarMascota:
         assert mascota_disponible.nombre == 'Rocky'
         assert mascota_disponible.estado == 'disponible'
 
-    def test_editar_una_adoptada_la_deja_adoptada(self, client, auth_headers_admin, mascota_adoptada, s3_falso):
+    def test_editar_una_adoptada_la_deja_adoptada(self, client, auth_headers_admin, mascota_adoptada):
         client.post(self.url(mascota_adoptada), data=datos_mascota(foto_url=mascota_adoptada.foto_url))
 
         db.session.refresh(mascota_adoptada)
@@ -575,7 +641,7 @@ class TestEditarMascota:
         assert 'en_proceso' not in html
 
     def test_error_de_base_de_datos_muestra_mensaje_generico(self, client, auth_headers_admin,
-                                                            mascota_disponible, s3_falso, commit_falla):
+                                                            mascota_disponible, commit_falla):
         commit_falla()
         enviados = {**FICHA_ENVIADA, 'foto_url': mascota_disponible.foto_url}
         response = client.post(self.url(mascota_disponible), data=enviados)
@@ -588,7 +654,7 @@ class TestEditarMascota:
 class TestEliminarMascota:
 
     def test_bloquea_la_mascota_antes_de_comprobar(self, client, auth_headers_admin, mascota_disponible,
-                                                  s3_falso, monkeypatch):
+                                                  monkeypatch):
         bloqueadas = []
         original = rutas_mascotas.consulta_mascota_bloqueada
 
@@ -609,18 +675,30 @@ class TestEliminarMascota:
         assert 'tiene solicitudes de adopción asociadas' in response.data.decode()
         assert db.session.get(Mascota, mascota_id) is not None
 
-    def test_elimina_foto_de_s3(self, client, auth_headers_admin, mascota_disponible, s3_falso):
-        foto = mascota_disponible.foto_url
-        client.post(f'/mascotas/admin/eliminar/{mascota_disponible.id}')
+    def test_elimina_la_foto(self, app, client, auth_headers_admin, con_foto_local):
+        client.post(f'/mascotas/admin/eliminar/{con_foto_local.id}')
 
-        assert s3_falso['borrados'] == [foto]
+        assert db.session.get(Mascota, con_foto_local.id) is None
+        assert fotos_guardadas(app) == set()
 
-    def test_error_de_base_de_datos_muestra_mensaje_generico(self, client, auth_headers_admin,
-                                                            mascota_disponible, s3_falso, commit_falla):
+    def test_foto_compartida_no_se_borra(self, app, client, auth_headers_admin, con_foto_local):
+        foto = con_foto_local.foto_url
+        db.session.add(Mascota(nombre='Gemelo', especie='Perro', descripcion='Comparte la foto', foto_url=foto))
+        db.session.commit()
+
+        client.post(f'/mascotas/admin/eliminar/{con_foto_local.id}')
+
+        assert fotos_guardadas(app) == {foto}
+
+    def test_error_de_base_de_datos_conserva_la_foto(self, app, client, auth_headers_admin,
+                                                    con_foto_local, commit_falla):
+        """La foto se borra después del commit: si falla, la mascota sigue con su foto."""
+        foto = con_foto_local.foto_url
         commit_falla()
-        response = client.post(f'/mascotas/admin/eliminar/{mascota_disponible.id}', follow_redirects=True)
+        response = client.post(f'/mascotas/admin/eliminar/{con_foto_local.id}', follow_redirects=True)
 
         assert 'No se pudo eliminar la mascota' in response.data.decode()
+        assert fotos_guardadas(app) == {foto}
 
     def test_mascota_inexistente_devuelve_404(self, client, auth_headers_admin):
         assert client.post('/mascotas/admin/eliminar/999').status_code == 404
