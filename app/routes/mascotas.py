@@ -276,7 +276,7 @@ def _validar_mascota(valores, foto, foto_actual=None):
     if hay_archivo and not fotos.subida_disponible():
         errores['foto'] = fotos.MENSAJE_NO_DISPONIBLE
     elif not hay_archivo and foto_url and not conserva_foto_propia and not fotos.es_url_imagen_valida(foto_url):
-        errores['foto_url'] = 'La URL de la foto debe empezar por https://'
+        errores['foto_url'] = 'La URL de la foto debe empezar por https://. Copia la dirección completa de la imagen.'
 
     foto_subida = None
     if not errores and hay_archivo:
@@ -323,6 +323,7 @@ def _contexto_formulario(valores, errores):
     """
     Contexto común del formulario de mascota.
 
+    `subida_disponible` oculta el campo de archivo si no hay backend de fotos.
     `foto_descartada` avisa de que hay que volver a elegir la foto: el
     navegador no puede conservar un archivo al volver a pintar el formulario.
     `max_bytes_foto` deja margen bajo MAX_CONTENT_LENGTH, que limita la
@@ -330,10 +331,12 @@ def _contexto_formulario(valores, errores):
     """
     foto = request.files.get('foto')
     limite = current_app.config['MAX_CONTENT_LENGTH']
+    subida_disponible = fotos.subida_disponible()
     return {
         'valores': valores,
         'errores': errores or {},
-        'foto_descartada': bool(foto and foto.filename),
+        'subida_disponible': subida_disponible,
+        'foto_descartada': subida_disponible and bool(foto and foto.filename),
         'max_bytes_foto': limite - MARGEN_PETICION_FOTO,
         'max_mb_foto': limite // (1024 * 1024),
     }

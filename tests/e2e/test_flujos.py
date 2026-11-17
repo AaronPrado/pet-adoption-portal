@@ -3,9 +3,11 @@ Flujos completos en el navegador: comprueban lo que los tests unitarios no
 ven (JavaScript, CSP, CSRF con formularios reales, menú móvil).
 """
 
+import io
 import re
 
 import pytest
+from PIL import Image
 from playwright.sync_api import expect
 
 from tests.e2e.conftest import ADMIN, ADOPTANTE, iniciar_sesion
@@ -134,7 +136,7 @@ def test_foto_demasiado_grande_no_se_envia(page, errores_js):
     assert foto.evaluate('campo => campo.validationMessage') == mensaje
     expect(page.locator('#foto-error')).to_have_text(mensaje)
     expect(foto).to_have_attribute('aria-invalid', 'true')
-    expect(foto).to_have_attribute('aria-describedby', 'foto-error')
+    expect(foto).to_have_attribute('aria-describedby', 'foto-error foto-ayuda')
     page.get_by_role('button', name='Crear Mascota').click()
     expect(page).to_have_url(re.compile(r'/mascotas/admin/nueva$'))
     expect(page.get_by_label('Nombre')).to_have_value('Bolt')
@@ -144,7 +146,7 @@ def test_foto_demasiado_grande_no_se_envia(page, errores_js):
     assert foto.evaluate('campo => campo.validationMessage') == ''
     expect(page.locator('#foto-error')).to_have_count(0)
     expect(foto).not_to_have_attribute('aria-invalid', 'true')
-    expect(foto).not_to_have_attribute('aria-describedby', re.compile('.'))
+    expect(foto).to_have_attribute('aria-describedby', 'foto-ayuda')
 
 
 def test_elegir_otra_foto_quita_el_error_del_servidor(page, errores_js):
@@ -159,15 +161,37 @@ def test_elegir_otra_foto_quita_el_error_del_servidor(page, errores_js):
     foto.set_input_files({'name': 'kira.png', 'mimeType': 'image/png', 'buffer': b'no es una imagen'})
     page.get_by_role('button', name='Crear Mascota').click()
 
-    expect(page.locator('#foto-error')).to_have_text('Formato de imagen no permitido')
+    expect(page.locator('#foto-error')).to_have_text(
+        'No hemos podido usar esa imagen. Sube un archivo JPG, PNG, GIF o WebP.')
     expect(page.locator('#foto-aviso')).to_be_visible()
-    expect(foto).to_have_attribute('aria-describedby', 'foto-error foto-aviso')
+    expect(foto).to_have_attribute('aria-describedby', 'foto-error foto-aviso foto-ayuda')
     expect(page.get_by_label('Nombre')).to_have_value('Kira')
 
     foto.set_input_files({'name': 'otra.png', 'mimeType': 'image/png', 'buffer': b'0' * 10})
     expect(page.locator('#foto-error')).to_have_count(0)
-    expect(foto).to_have_attribute('aria-describedby', 'foto-aviso')
+    expect(foto).to_have_attribute('aria-describedby', 'foto-aviso foto-ayuda')
     expect(foto).not_to_have_attribute('aria-invalid', 'true')
+
+
+def test_foto_subida_se_ve_en_la_ficha(page, errores_js):
+    """Backend local: la foto se guarda y la app la sirve en /fotos/<clave> sin que la CSP la bloquee."""
+    iniciar_sesion(page, *ADMIN)
+
+    page.goto('/mascotas/admin/nueva')
+    page.get_by_label('Nombre').fill('Nala')
+    page.get_by_label('Especie').fill('Gato')
+    page.get_by_label('Descripción').fill('Gata tranquila que busca sofá')
+    buffer = io.BytesIO()
+    Image.new('RGB', (40, 30), 'orange').save(buffer, format='PNG')
+    page.get_by_label('Foto de la mascota').set_input_files(
+        {'name': 'nala.png', 'mimeType': 'image/png', 'buffer': buffer.getvalue()})
+    page.get_by_role('button', name='Crear Mascota').click()
+    expect(page.get_by_text('Mascota "Nala" creada exitosamente.')).to_be_visible()
+
+    page.goto('/mascotas/catalogo')
+    foto = page.locator('img[src^="/fotos/"]')
+    expect(foto).to_have_count(1)
+    expect(foto).to_have_js_property('naturalWidth', 40)
 
 
 def test_cerrar_sesion_desde_el_menu(page, errores_js):
