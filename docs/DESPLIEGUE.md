@@ -124,6 +124,16 @@ rechazaría la especie y no se podrían guardar.
   de unos 100 MB. Calcula unos 450 MB por worker que pueda estar procesando
   una subida a la vez, o baja `FOTOS_MAX_PIXELES` si la máquina va justa
   (la memoria es proporcional: unos 8,5 bytes por píxel en el peor caso).
+- **Copia de seguridad de las fotos.** `flask --app run exportar-fotos
+  <directorio>` copia en un directorio local todas las fotos propias de las
+  mascotas (las variantes y las fotos antiguas sin variantes), desde el
+  backend que esté configurado, `local` o `s3`. Las URLs externas no se
+  copian. Termina con un resumen (`N fotos (M archivos) exportadas`) y avisa
+  de cada archivo que no encuentre; en ese caso sale con código 1, para que
+  una copia programada no falle en silencio. Sobrescribe las copias que ya
+  hubiera en el directorio. Con `s3`, el usuario IAM necesita además
+  `GetObject` sobre `mascotas/*`. En un contenedor, ejecútalo dentro de él y
+  deja el directorio de destino en un volumen.
 - **Backend explícito.** Las variables `AWS_*` no activan nada por sí solas:
   sin `FOTOS_BACKEND=s3`, la subida de fotos queda desactivada y el formulario
   solo admite URLs.

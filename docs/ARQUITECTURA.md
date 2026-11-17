@@ -252,13 +252,13 @@ app/
 │                        # oauth, csrf, limiter), ProxyFix, blueprints,
 │                        # cabeceras de seguridad y /health
 ├── errores.py           # Páginas de error de la web (la API queda fuera)
-├── cli.py               # Comando flask crear-admin
+├── cli.py               # Comandos flask crear-admin y exportar-fotos
 ├── models.py            # Modelos SQLAlchemy (Usuario, Mascota, Solicitud)
 ├── adopciones.py        # Regla de adopción: crear, aprobar y rechazar solicitudes
 ├── cuestionario.py      # Preguntas, opciones y validación del cuestionario
 ├── decorators.py        # @admin_required
 ├── fotos/               # Almacenamiento de fotos (ADR-0003)
-│   ├── __init__.py      # guardar_foto, borrar_foto, subida_disponible, srcset_foto
+│   ├── __init__.py      # guardar_foto, borrar_foto, subida_disponible, srcset_foto, exportar_fotos
 │   ├── procesado.py     # Pillow: tipo real, límite de píxeles, sin EXIF, variantes WebP
 │   ├── local.py         # Backend local: FOTOS_DIR o instance/fotos
 │   └── s3.py            # Backend s3: boto3, endpoint_url opcional
@@ -346,7 +346,7 @@ indica `FOTOS_BACKEND`:
 | vacío | No hay subida: el formulario oculta el archivo y solo admite una URL | URL externa `https://` |
 
 - **Interfaz**: `guardar_foto()`, `borrar_foto()`, `subida_disponible()`,
-  `urls_de_la_foto()` y `ErrorAlmacenamiento`, cuyo
+  `urls_de_la_foto()`, `exportar_fotos()` y `ErrorAlmacenamiento`, cuyo
   `mensaje` (causa y solución) se muestra junto al campo. Sin backend o con
   un fallo del servicio (`ClientError`, error de disco) el formulario
   responde 400 y conserva lo escrito; el fallo se registra en el log.
@@ -378,7 +378,8 @@ indica `FOTOS_BACKEND`:
   variantes a partir de `foto_url`, sin consultar el almacenamiento, y `''`
   para las URLs externas y las fotos anteriores a las variantes.
 - **Nombres**: `<uuid hex>-<400|800|1200>.webp` o, en las fotos anteriores a
-  las variantes, `<uuid hex>.<ext>`. Solo se sirven o borran claves con ese formato exacto, así que no se puede salir del directorio ni
+  las variantes, `<uuid hex>.<ext>`. Solo se sirven, borran o exportan
+  claves con ese formato exacto, así que no se puede salir del directorio ni
   tocar otros objetos del bucket. Las URLs externas `https://` nunca se
   borran.
 - **Regla archivo/URL**: el archivo tiene prioridad. La URL debe ser
@@ -390,6 +391,9 @@ indica `FOTOS_BACKEND`:
   variante de la misma foto; se borran entonces todas sus variantes. Si el
   commit falla, se borra la foto recién subida para que no quede huérfana.
   Un fallo al borrar se registra y no afecta a la respuesta.
+- **Copias de seguridad**: `flask exportar-fotos <directorio>` copia las
+  fotos propias de todas las mascotas, con sus variantes, desde cualquier
+  backend (ver `docs/DESPLIEGUE.md`).
 
 ---
 

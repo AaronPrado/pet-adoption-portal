@@ -60,5 +60,10 @@ def nombre_en_url(url):
     return url[len(base):]
 
 
+def copiar(nombre, destino):
+    """Escribe el contenido del objeto en el archivo abierto `destino`."""
+    _cliente().download_fileobj(current_app.config['AWS_S3_BUCKET'], PREFIJO_FOTOS + nombre, destino)
+
+
 def borrar(nombre):
     _cliente().delete_object(Bucket=current_app.config['AWS_S3_BUCKET'], Key=PREFIJO_FOTOS + nombre)

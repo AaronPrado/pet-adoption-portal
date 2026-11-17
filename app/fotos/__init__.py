@@ -16,9 +16,13 @@ variantes WebP con el mismo nombre aleatorio: `<hex>-400.webp`,
 (`<hex>.png`, `.jpg`...) siguen siendo válidas y son un único archivo.
 """
 
+import contextlib
 import io
+import os
 import re
+import tempfile
 import uuid
+from typing import NamedTuple
 
 from flask import current_app
 
@@ -209,3 +213,80 @@ def borrar_foto(url):
     if clave is None:
         return False
     return _borrar_claves(backend, _claves_de_la_foto(clave))
+
+
+class ResultadoExportacion(NamedTuple):
+    fotos: int
+    archivos: int
+    no_encontradas: list
+
+
+class ErrorExportacion(Exception):
+    """No se puede escribir en el directorio de destino."""
+
+
+def _error_destino(destino, error):
+    return ErrorExportacion(f'No se puede escribir en {destino}: {error.strerror or error}.')
+
+
+def _copiar(backend, clave, destino):
+    """Copia un archivo del backend a `destino/clave`; False si no se ha podido leer."""
+    # Se escribe en un temporal nuevo (O_EXCL, no sigue enlaces) y se
+    # renombra: nunca queda un archivo a medias, ni se trunca el original si
+    # el destino es el propio directorio de las fotos
+    temporal = None
+    try:
+        try:
+            descriptor, temporal = tempfile.mkstemp(dir=destino, prefix=f'.{clave}.', suffix='.parcial')
+        except OSError as error:
+            raise _error_destino(destino, error) from None
+        with os.fdopen(descriptor, 'wb') as salida:
+            try:
+                backend.copiar(clave, salida)
+            except backend.ERRORES:
+                current_app.logger.warning('No se pudo exportar la foto %s', clave, exc_info=True)
+                return False
+        try:
+            os.replace(temporal, os.path.join(destino, clave))
+        except OSError as error:
+            raise _error_destino(destino, error) from None
+        temporal = None
+        return True
+    finally:
+        if temporal is not None:
+            with contextlib.suppress(OSError):
+                os.remove(temporal)
+
+
+def exportar_fotos(urls, destino):
+    """
+    Copia en el directorio `destino` las fotos propias de `urls`, con todas
+    sus variantes. Las URLs externas o no válidas se ignoran.
+
+    Returns:
+        ResultadoExportacion: fotos con algún archivo copiado, archivos
+        copiados y claves que no se han podido leer del backend.
+
+    Raises:
+        ErrorExportacion: no se puede crear el destino o escribir en él.
+    """
+    backend = _backend()
+    # Un dict conserva el orden y quita las fotos repetidas
+    grupos = dict.fromkeys(tuple(_claves_de_la_foto(clave)) for clave in
+                           (_clave_propia(backend, url) for url in urls) if clave)
+    try:
+        os.makedirs(destino, exist_ok=True)
+    except OSError as error:
+        raise _error_destino(destino, error) from None
+    total_fotos = total_archivos = 0
+    no_encontradas = []
+    for claves in grupos:
+        copiadas = 0
+        for clave in claves:
+            if _copiar(backend, clave, destino):
+                copiadas += 1
+            else:
+                no_encontradas.append(clave)
+        total_archivos += copiadas
+        total_fotos += copiadas > 0
+    return ResultadoExportacion(total_fotos, total_archivos, no_encontradas)

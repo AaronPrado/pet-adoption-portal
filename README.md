@@ -104,6 +104,13 @@ desarrollo local: en cualquier otro entorno crea el administrador con
 flask --app run crear-admin
 ```
 
+Para una copia de seguridad de las fotos subidas (con sus variantes), desde
+el backend `local` o `s3`:
+
+```bash
+flask --app run exportar-fotos <directorio>
+```
+
 ### Variables de entorno
 
 `.env.example` trae todas las variables comentadas. Para desarrollar basta con
@@ -220,7 +227,7 @@ app/
 ├── templates/         # Plantillas Jinja2
 ├── static/            # CSS y JavaScript
 ├── fotos/             # Fotos: procesado con Pillow, variantes WebP y backends local y s3 (ADR-0003)
-└── cli.py             # flask crear-admin
+└── cli.py             # flask crear-admin y flask exportar-fotos
 migrations/            # Migraciones de Alembic
 tests/                 # pytest; tests/e2e con Playwright
 docs/                  # Arquitectura, despliegue y capturas

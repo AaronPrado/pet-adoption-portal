@@ -47,6 +47,12 @@ def nombre_en_url(url):
     return url[len(PREFIJO_URL):]
 
 
+def copiar(nombre, destino):
+    """Escribe el contenido de la foto en el archivo abierto `destino`."""
+    with open(os.path.join(directorio(), nombre), 'rb') as origen:
+        shutil.copyfileobj(origen, destino)
+
+
 def borrar(nombre):
     # Ya borrada: el resultado es el mismo
     with contextlib.suppress(FileNotFoundError):
