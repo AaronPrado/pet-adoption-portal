@@ -6,13 +6,16 @@ estilo de ruta `<endpoint>/<bucket>/mascotas/<clave>`; sin él, las de AWS.
 """
 
 import boto3
+from boto3.exceptions import Boto3Error
 from botocore.exceptions import BotoCoreError, ClientError
 from flask import current_app
 
 # Carpeta del bucket donde se guardan las fotos de mascotas
 PREFIJO_FOTOS = 'mascotas/'
 
-ERRORES = (BotoCoreError, ClientError)
+# Boto3Error: p. ej. S3UploadFailedError, que upload_fileobj lanza en lugar
+# del ClientError
+ERRORES = (BotoCoreError, ClientError, Boto3Error)
 
 
 def _cliente():
@@ -55,6 +58,11 @@ def nombre_en_url(url):
     if not url.startswith(base):
         return None
     return url[len(base):]
+
+
+def copiar(nombre, destino):
+    """Escribe el contenido del objeto en el archivo abierto `destino`."""
+    _cliente().download_fileobj(current_app.config['AWS_S3_BUCKET'], PREFIJO_FOTOS + nombre, destino)
 
 
 def borrar(nombre):

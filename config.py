@@ -42,6 +42,9 @@ class Config:
     FOTOS_BACKENDS_VALIDOS = ('', 'local', 's3')
     # Backend local: directorio de las fotos (por defecto, instance/fotos)
     FOTOS_DIR = os.environ.get('FOTOS_DIR') or None
+    # Píxeles máximos de una foto subida: limita la memoria de cada subida
+    # (unos 4 bytes por píxel decodificado; ver docs/DESPLIEGUE.md)
+    FOTOS_MAX_PIXELES = int(os.environ.get('FOTOS_MAX_PIXELES') or 40_000_000)
 
     # AWS S3 (backend 's3'). AWS_S3_ENDPOINT_URL, opcional, para servicios
     # compatibles con S3 (MinIO, Cloudflare R2...)
