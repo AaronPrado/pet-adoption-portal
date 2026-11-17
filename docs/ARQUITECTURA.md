@@ -559,5 +559,8 @@ producción):
   accesibilidad del HTML, recuento de consultas (N+1) y migraciones.
 - **End-to-end** (`tests/e2e/`): Playwright en Chromium con la app real y
   CSRF activado; fallan si hay errores de JavaScript o de CSP.
+  Un módulo por área (`test_navegacion`, `test_catalogo`, `test_solicitud` y
+  `test_admin`), con lo común en `conftest.py`; cada cambio toca solo el de su
+  área y localiza por rol, etiqueta o texto, no por clases de Bootstrap.
 - **GitHub Actions**: tests, `ruff`, `pip-audit`, e2e, migraciones y seed
   contra PostgreSQL 15 y construcción de la imagen Docker.
