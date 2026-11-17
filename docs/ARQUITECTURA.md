@@ -397,6 +397,61 @@ indica `FOTOS_BACKEND`:
 
 ---
 
+## Sistema de diseño
+
+El CSS propio sigue la ADR-0002: tokens en custom properties y una identidad
+neutra en la que el color lo ponen las fotos de los animales. No hay modo
+oscuro. Por ahora ninguna plantilla enlaza estos archivos: la base nueva llega
+en B3.6 y, hasta entonces, la web sigue con `styles.css`.
+
+- `app/static/css/sistema.css` declara `@layer reset, tokens, base,
+  componentes, utilidades` y contiene los tokens comunes: color (`--color-*`),
+  escala tipográfica (`--texto-xs` a `--texto-3xl`, modular 1,25 sobre 16 px),
+  espaciado (`--esp-1` a `--esp-9`, múltiplos de 4 px), radios (`--radio-sm`,
+  `-md`, `-lg`), sombras (`--sombra-1` en reposo y `--sombra-2` elevada), foco
+  (`--foco-anillo`) y tamaño mínimo de objetivo (`--objetivo-min`, 44 px).
+  `--texto-xs` (13 px) es solo para chapas y metadatos, nunca para ayudas ni
+  errores. La base pone el fondo, la tinta y los enlaces subrayados.
+  La capa `componentes` se llena en B3.3 y B3.4.
+- `app/static/css/marca.css`, que se enlaza después, es el único archivo que
+  cambia cada protectora: el acento (`--marca-acento`, `-fuerte` para hover,
+  `-suave` para fondos destacados y `--marca-sobre-acento` para el texto de los
+  botones) y las familias tipográficas, con sus `@font-face`. El foco usa el
+  acento.
+- `app/static/fonts/`: Atkinson Hyperlegible 400 y 700 para el texto y
+  Fraunces variable para nombres y titulares, en WOFF2 latino, autoalojadas,
+  con `font-display: swap` y licencia OFL (origen y versión en su `README.md`).
+
+| Token | Valor | Contraste |
+|-------|-------|-----------|
+| `--color-fondo` / `--color-superficie` | `#f5f6f4` / `#ffffff` | — |
+| `--color-texto` | `#1c2422` | 14,6:1 sobre el fondo |
+| `--color-texto-suave` (y `--color-placeholder`) | `#515b58` | 6,5:1 sobre el fondo; ≥ 5,9:1 sobre los tonos `-suave` |
+| `--color-texto-deshabilitado` | `#848d89` | 3,2:1 (WCAG no lo exige) |
+| `--color-borde-control` | `#737d79` | 3,9:1 sobre el fondo (≥ 3:1, P-13) |
+| `--marca-acento` (y foco) | `#1f5e52` | 7,0:1 sobre el fondo; 7,6:1 con texto blanco |
+| `--color-exito` / `-aviso` / `-error` / `-info` | `#1d6b3b` / `#8a4f00` / `#b3261e` / `#1d5a99` | ≥ 5,5:1 sobre fondo, superficie y su tono `-suave` |
+
+Para adaptar el portal a otra protectora se cambia `marca.css` (color y
+fuentes) y las variables de entorno `MARCA_NOMBRE`, `MARCA_LOGO` (ruta a un SVG
+dentro de `static/`) y `MARCA_CONTACTO` de `config.py`; las plantillas no se
+tocan. `tests/test_tokens.py` lee las custom properties de los dos archivos,
+resuelve los `var()` y calcula el contraste WCAG de cada par (texto ≥ 4,5:1,
+bordes de control y foco ≥ 3:1), así que un acento demasiado claro hace fallar
+los tests. También comprueba que cada `@font-face` usa `swap` y que su WOFF2
+existe.
+
+Nota para B3.6, mientras Bootstrap conviva con el sistema: las reglas sin
+capa ganan siempre a las de cualquier `@layer`. Si Bootstrap se carga sin
+capa (un `<link>` normal), anula la base de `sistema.css` aunque se enlace
+antes. Hay que meterlo en una capa declarada la primera, para que pierda
+frente al sistema: `@layer bootstrap, reset, tokens, base, componentes,
+utilidades;` y `@import url(...) layer(bootstrap);` al principio de la hoja
+que lo cargue, que se enlaza antes que `sistema.css`: el orden de las capas
+lo fija su primera aparición (un `<link>` no admite capa).
+
+---
+
 ## API REST
 
 API RESTful con autenticación JWT y documentación Swagger automática.
