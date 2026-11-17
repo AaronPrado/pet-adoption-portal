@@ -257,10 +257,14 @@ app/
 ├── adopciones.py        # Regla de adopción: crear, aprobar y rechazar solicitudes
 ├── cuestionario.py      # Preguntas, opciones y validación del cuestionario
 ├── decorators.py        # @admin_required
-├── s3.py                # Subida (validada con Pillow) y borrado de fotos en S3
+├── fotos/               # Almacenamiento de fotos (ADR-0003)
+│   ├── __init__.py      # guardar_foto, borrar_foto, subida_disponible, validación con Pillow
+│   ├── local.py         # Backend local: FOTOS_DIR o instance/fotos
+│   └── s3.py            # Backend s3: boto3, endpoint_url opcional
 │
 ├── routes/              # Blueprints
 │   ├── auth.py          # Registro, login, logout, OAuth Google
+│   ├── fotos.py         # GET /fotos/<clave> (fotos del backend local)
 │   ├── mascotas.py      # Catálogo, detalle y CRUD del panel admin
 │   ├── solicitudes.py   # Crear, consultar y revisar solicitudes
 │   └── api/             # API REST (Flask-RESTX)

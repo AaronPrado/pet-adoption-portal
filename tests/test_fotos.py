@@ -1,6 +1,6 @@
 """
-Tests del almacenamiento de fotos (app/fotos): backend S3 con un cliente
-boto3 falso.
+Tests del almacenamiento de fotos (app/fotos): backend local con tmp_path,
+backend S3 con un cliente boto3 falso y la ruta GET /fotos/<clave>.
 """
 
 import io
@@ -26,6 +26,14 @@ def png_valido():
     return buffer.getvalue()
 
 
+@pytest.fixture
+def directorio(app, tmp_path):
+    """Backend local en un directorio temporal propio del test."""
+    ruta = tmp_path / 'fotos-test'
+    app.config.update(FOTOS_BACKEND='local', FOTOS_DIR=str(ruta))
+    return ruta
+
+
 class ClienteS3Falso:
     def __init__(self):
         self.subidas = []
@@ -40,7 +48,8 @@ class ClienteS3Falso:
 
 @pytest.fixture
 def cliente_s3(app, monkeypatch):
-    app.config.update(AWS_S3_BUCKET='bucket-test', AWS_S3_REGION='eu-west-1', AWS_S3_ENDPOINT_URL=None)
+    app.config.update(FOTOS_BACKEND='s3', AWS_S3_BUCKET='bucket-test', AWS_S3_REGION='eu-west-1',
+                      AWS_S3_ENDPOINT_URL=None)
     falso = ClienteS3Falso()
     argumentos = {}
 
@@ -71,6 +80,90 @@ class TestValidacionComun:
         assert fotos.es_url_imagen_valida('HTTPS://ejemplo.com/a.jpg')
         assert not fotos.es_url_imagen_valida('http://ejemplo.com/a.jpg')
         assert not fotos.es_url_imagen_valida('javascript:alert(1)')
+
+
+class TestBackendLocal:
+
+    def test_guarda_en_el_directorio_y_devuelve_la_ruta(self, directorio):
+        contenido = png_valido()
+        url = fotos.guardar_foto(archivo(contenido, 'foto.png', 'text/html'))
+
+        assert url.startswith('/fotos/') and url.endswith('.png')
+        clave = url.removeprefix('/fotos/')
+        assert len(clave) == 32 + len('.png')
+        assert (directorio / clave).read_bytes() == contenido
+        assert fotos.es_foto_propia(url)
+
+    def test_sin_fotos_dir_usa_instance(self, app, monkeypatch, tmp_path):
+        monkeypatch.setattr(app, 'instance_path', str(tmp_path / 'instance'))
+        app.config.update(FOTOS_BACKEND='local', FOTOS_DIR=None)
+
+        url = fotos.guardar_foto(archivo(png_valido()))
+
+        assert (tmp_path / 'instance' / 'fotos' / url.removeprefix('/fotos/')).exists()
+
+    def test_borra_foto_propia(self, directorio):
+        url = fotos.guardar_foto(archivo(png_valido()))
+
+        assert fotos.borrar_foto(url) is True
+        assert list(directorio.iterdir()) == []
+
+    def test_borrar_foto_que_ya_no_existe_no_falla(self, directorio):
+        assert fotos.borrar_foto('/fotos/' + CLAVE) is True
+
+    @pytest.mark.parametrize('url', [
+        None,
+        '',
+        'https://images.unsplash.com/photo.jpg',
+        '/fotos/../config.py',
+        '/fotos/..%2Fconfig.py',
+        '/fotos/' + 'a' * 32 + '.svg',
+        '/fotos/' + 'A' * 32 + '.png',
+        '/fotos/' + 'a' * 31 + '.png',
+        '/fotos/sub/' + CLAVE,
+        '/otra/' + CLAVE,
+        BASE_S3 + CLAVE,
+    ])
+    def test_no_borra_claves_ajenas(self, directorio, url):
+        directorio.mkdir(parents=True)
+        (directorio.parent / 'config.py').write_text('secreto')
+
+        assert fotos.es_foto_propia(url) is False
+        assert fotos.borrar_foto(url) is False
+        assert (directorio.parent / 'config.py').exists()
+
+
+class TestRutaFotos:
+
+    def test_sirve_la_foto_guardada(self, client, directorio):
+        contenido = png_valido()
+        url = fotos.guardar_foto(archivo(contenido))
+
+        response = client.get(url)
+
+        assert response.status_code == 200
+        assert response.data == contenido
+        assert response.mimetype == 'image/png'
+        assert response.headers['X-Content-Type-Options'] == 'nosniff'
+        assert 'max-age' in response.headers['Cache-Control']
+
+    def test_foto_inexistente_404(self, client, directorio):
+        assert client.get('/fotos/' + CLAVE).status_code == 404
+
+    @pytest.mark.parametrize('ruta', [
+        '/fotos/..%2Fsecreto.png',
+        '/fotos/%2E%2E/secreto.png',
+        '/fotos/secreto.png',
+        '/fotos/' + 'a' * 32 + '.html',
+        '/fotos/' + 'a' * 32 + '.PNG',
+    ])
+    def test_clave_no_valida_404(self, client, directorio, ruta):
+        directorio.mkdir(parents=True)
+        (directorio / 'secreto.png').write_bytes(b'x')
+        (directorio.parent / 'secreto.png').write_bytes(b'x')
+        (directorio / ('a' * 32 + '.html')).write_bytes(b'<script></script>')
+
+        assert client.get(ruta).status_code == 404
 
 
 class TestBackendS3:

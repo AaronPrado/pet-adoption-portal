@@ -1,9 +1,12 @@
 """
 Almacenamiento de las fotos de mascotas (ADR-0003).
 
-Interfaz común sobre el backend de almacenamiento (`s3`: AWS S3 o un
-servicio compatible). `foto_url` guarda la URL completa de la foto o una
-URL externa `https://`, que nunca se borra.
+Interfaz común sobre dos backends, elegidos con FOTOS_BACKEND:
+- `local`: archivos en FOTOS_DIR (o instance/fotos), servidos por GET /fotos/<clave>;
+- `s3`: AWS S3 o un servicio compatible (AWS_S3_ENDPOINT_URL).
+
+`foto_url` guarda la ruta `/fotos/<clave>` (local), la URL completa (S3) o
+una URL externa `https://`, que nunca se borra.
 """
 
 import re
@@ -12,7 +15,9 @@ import uuid
 from flask import current_app
 from PIL import Image, UnidentifiedImageError
 
-from app.fotos import s3
+from app.fotos import local, s3
+
+BACKENDS = {'local': local, 's3': s3}
 
 # Nombre de cada foto guardada: 32 hex aleatorios y la extensión del formato
 PATRON_CLAVE = re.compile(r'[0-9a-f]{32}\.(?:png|jpg|gif|webp)')
@@ -47,7 +52,8 @@ def es_url_imagen_valida(url):
 
 
 def _backend():
-    return s3
+    # Hasta que FOTOS_BACKEND sea una opción de config.py, s3 sigue siendo el de siempre
+    return BACKENDS.get(current_app.config.get('FOTOS_BACKEND', 's3'))
 
 
 def _extension_permitida(nombre):
