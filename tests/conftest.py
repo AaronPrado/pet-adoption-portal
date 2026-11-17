@@ -26,7 +26,7 @@ def app(tmp_path):
     """
     # Crear app en modo testing
     app = create_app('testing')
-    app.config.update(FOTOS_BACKEND='local', FOTOS_DIR=str(tmp_path / 'fotos'))
+    app.config['FOTOS_DIR'] = str(tmp_path / 'fotos')
 
     # El contexto de aplicación del fixture sigue activo durante las
     # peticiones del cliente, así que todas comparten `g`. Flask-Login guarda

@@ -36,11 +36,20 @@ class Config:
     GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID')
     GOOGLE_CLIENT_SECRET = os.environ.get('GOOGLE_CLIENT_SECRET')
 
-    # AWS S3
+    # Almacenamiento de fotos (ADR-0003): 'local', 's3' o vacío (sin subida;
+    # el formulario solo admite URLs https://)
+    FOTOS_BACKEND = os.environ.get('FOTOS_BACKEND', '').strip().lower()
+    FOTOS_BACKENDS_VALIDOS = ('', 'local', 's3')
+    # Backend local: directorio de las fotos (por defecto, instance/fotos)
+    FOTOS_DIR = os.environ.get('FOTOS_DIR') or None
+
+    # AWS S3 (backend 's3'). AWS_S3_ENDPOINT_URL, opcional, para servicios
+    # compatibles con S3 (MinIO, Cloudflare R2...)
     AWS_ACCESS_KEY_ID = os.environ.get('AWS_ACCESS_KEY_ID')
     AWS_SECRET_ACCESS_KEY = os.environ.get('AWS_SECRET_ACCESS_KEY')
     AWS_S3_BUCKET = os.environ.get('AWS_S3_BUCKET')
     AWS_S3_REGION = os.environ.get('AWS_S3_REGION', 'eu-west-1')
+    AWS_S3_ENDPOINT_URL = os.environ.get('AWS_S3_ENDPOINT_URL') or None
 
     # JWT (API REST)
     JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY')
@@ -108,6 +117,12 @@ class Config:
     @classmethod
     def init_app(cls, app):
         """Ajustes comunes a todos los entornos según la configuración cargada."""
+        if app.config['FOTOS_BACKEND'] not in cls.FOTOS_BACKENDS_VALIDOS:
+            raise RuntimeError(
+                f"FOTOS_BACKEND no válido: {app.config['FOTOS_BACKEND']!r}. "
+                "Usa 'local', 's3' o déjalo vacío para no permitir subidas."
+            )
+
         uri = app.config.get('SQLALCHEMY_DATABASE_URI') or ''
         if uri.startswith('postgresql'):
             # Sin timeouts, una base de datos inaccesible deja colgadas las
@@ -145,6 +160,9 @@ class DevelopmentConfig(Config):
 
     # Mostrar queries SQL en desarrollo para debugging
     SQLALCHEMY_ECHO = True
+
+    # Fotos en instance/fotos salvo que .env diga otra cosa
+    FOTOS_BACKEND = os.environ.get('FOTOS_BACKEND', 'local').strip().lower()
 
 
 class ProductionConfig(Config):
@@ -206,6 +224,16 @@ class ProductionConfig(Config):
                     'Genera una con: python -c "import secrets; print(secrets.token_hex(32))"'
                 )
 
+        # Un PaaS con disco efímero borra instance/ en cada despliegue: el
+        # backend local solo vale con un volumen persistente indicado a mano
+        if app.config['FOTOS_BACKEND'] == 'local' and not app.config.get('FOTOS_DIR'):
+            raise RuntimeError(
+                "FOTOS_BACKEND='local' exige FOTOS_DIR en producción: la ruta de un "
+                'volumen persistente (ver docs/DESPLIEGUE.md).'
+            )
+        if app.config['FOTOS_BACKEND'] == 's3' and not app.config.get('AWS_S3_BUCKET'):
+            raise RuntimeError("FOTOS_BACKEND='s3' exige AWS_S3_BUCKET en producción.")
+
 
 class TestingConfig(Config):
     """
@@ -234,6 +262,9 @@ class TestingConfig(Config):
 
     # No mostrar queries SQL en tests (ruido en output)
     SQLALCHEMY_ECHO = False
+
+    # Backend local; conftest.py apunta FOTOS_DIR a un directorio temporal
+    FOTOS_BACKEND = 'local'
 
 
 # Diccionario para seleccionar configuración por nombre

@@ -58,8 +58,7 @@ def es_url_imagen_valida(url):
 
 
 def _backend():
-    # Hasta que FOTOS_BACKEND sea una opción de config.py, s3 sigue siendo el de siempre
-    return BACKENDS.get(current_app.config.get('FOTOS_BACKEND', 's3'))
+    return BACKENDS.get(current_app.config.get('FOTOS_BACKEND') or '')
 
 
 def subida_disponible():
