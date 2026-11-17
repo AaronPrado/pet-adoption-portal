@@ -21,6 +21,7 @@ Docker (o, sin Docker, cualquier PaaS compatible con `Procfile`).
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Para login con Google | Añade `https://<tu-dominio>/auth/google/callback` como URI de redirección en Google Cloud Console. |
 | `FOTOS_BACKEND` | Para subir fotos | `s3` o `local`. Sin definir (o vacía), no hay subida y el formulario solo admite URLs `https://`. |
 | `FOTOS_DIR` | Con `FOTOS_BACKEND=local` | Ruta de un volumen persistente. La app no arranca en producción con `local` sin ella. |
+| `FOTOS_MAX_PIXELES` | No | Píxeles máximos de una foto subida (por defecto 40 000 000). Limita la memoria de cada subida: ver «Memoria por worker» en el punto 6. |
 | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_S3_BUCKET`, `AWS_S3_REGION` | Con `FOTOS_BACKEND=s3` | Usuario IAM con `PutObject` y `DeleteObject` sobre `mascotas/*`. Sin `AWS_S3_BUCKET`, la subida se oculta. |
 | `AWS_S3_ENDPOINT_URL` | No | Servicio compatible con S3 (MinIO, Cloudflare R2...). Las URLs de las fotos quedan como `<endpoint>/<bucket>/mascotas/<clave>`, así que el bucket debe ser legible por esa ruta. |
 | `TRUSTED_PROXIES` | Detrás de un proxy | Número de proxies inversos delante de la app (normalmente `1`). |
@@ -109,6 +110,20 @@ rechazaría la especie y no se podrían guardar.
   Solo el proceso de la app debe poder escribir en `FOTOS_DIR` (propietario el
   usuario sin privilegios de la imagen, sin escritura para otros). Incluye ese
   directorio en las copias de seguridad.
+- **Tres objetos por foto.** Cada foto subida se guarda como tres variantes
+  WebP (400, 800 y 1200 px de ancho), así que el número de archivos u
+  objetos del bucket es el triple que el de fotos. Tenlo en cuenta en los
+  límites de objetos o de peticiones del proveedor y en el tamaño del
+  volumen; al ser WebP recodificado, las tres juntas suelen ocupar menos que
+  el original.
+- **Memoria por worker.** Cada foto subida se decodifica entera en memoria
+  para reprocesarla. Con el límite por defecto (`FOTOS_MAX_PIXELES`, 40 MP),
+  el pico medido por subida es de unos 210 MB por encima del consumo base
+  del worker con un PNG RGB y de unos 340 MB con un PNG con transparencia;
+  un JPEG pesa mucho menos porque se decodifica ya reducido. El worker parte
+  de unos 100 MB. Calcula unos 450 MB por worker que pueda estar procesando
+  una subida a la vez, o baja `FOTOS_MAX_PIXELES` si la máquina va justa
+  (la memoria es proporcional: unos 8,5 bytes por píxel en el peor caso).
 - **Backend explícito.** Las variables `AWS_*` no activan nada por sí solas:
   sin `FOTOS_BACKEND=s3`, la subida de fotos queda desactivada y el formulario
   solo admite URLs.

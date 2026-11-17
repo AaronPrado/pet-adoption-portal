@@ -8,31 +8,36 @@ Interfaz común sobre dos backends, elegidos con FOTOS_BACKEND:
 Sin backend, `subida_disponible()` es falso y el formulario solo admite URLs.
 `foto_url` guarda la ruta `/fotos/<clave>` (local), la URL completa (S3) o
 una URL externa `https://`, que nunca se borra.
+
+Cada foto subida se reprocesa (app/fotos/procesado.py) y se guarda como tres
+variantes WebP con el mismo nombre aleatorio: `<hex>-400.webp`,
+`<hex>-800.webp` y `<hex>-1200.webp`. `foto_url` apunta a la de 1200 y
+las otras se deducen de ella. Las fotos anteriores a las variantes
+(`<hex>.png`, `.jpg`...) siguen siendo válidas y son un único archivo.
 """
 
+import io
 import re
 import uuid
 
 from flask import current_app
-from PIL import Image, UnidentifiedImageError
 
-from app.fotos import local, s3
+from app.fotos import local, procesado, s3
 
 BACKENDS = {'local': local, 's3': s3}
 
-# Nombre de cada foto guardada: 32 hex aleatorios y la extensión del formato
-PATRON_CLAVE = re.compile(r'[0-9a-f]{32}\.(?:png|jpg|gif|webp)')
+# Nombre de cada archivo guardado: 32 hex aleatorios y, o bien el sufijo de
+# una variante, o bien la extensión de una foto anterior a las variantes
+PATRON_CLAVE = re.compile(
+    r'(?P<base>[0-9a-f]{32})'
+    r'(?:\.(?:png|jpg|gif|webp)|-(?P<ancho>' + '|'.join(map(str, procesado.ANCHOS)) + r')\.webp)'
+)
 
-# Formatos que detecta Pillow -> (extensión, Content-Type)
-FORMATOS_IMAGEN = {
-    'PNG': ('png', 'image/png'),
-    'JPEG': ('jpg', 'image/jpeg'),
-    'GIF': ('gif', 'image/gif'),
-    'WEBP': ('webp', 'image/webp'),
-}
+CONTENT_TYPE_VARIANTES = 'image/webp'
 
 # Mensajes para el campo de foto: la causa y qué puede hacer el admin (P-32)
 MENSAJE_FORMATO = 'No hemos podido usar esa imagen. Sube un archivo JPG, PNG, GIF o WebP.'
+MENSAJE_DIMENSIONES = f'La imagen es demasiado grande: como máximo {procesado.MAX_LADO} px por lado.'
 MENSAJE_NO_DISPONIBLE = ('La subida de archivos no está disponible en este servidor. '
                          'Quita el archivo y pega el enlace https:// de la imagen.')
 MENSAJE_FALLO = ('No hemos podido guardar la foto por un problema del servidor. '
@@ -71,53 +76,75 @@ def _extension_permitida(nombre):
     return '.' in nombre and nombre.rsplit('.', 1)[1].lower() in current_app.config['ALLOWED_EXTENSIONS']
 
 
-def detectar_formato_imagen(archivo):
-    """
-    Comprueba el contenido real del archivo con Pillow.
+def _clave_variante(base, ancho):
+    return f'{base}-{ancho}.webp'
 
-    Returns:
-        tuple | None: (extensión, Content-Type) o None si no es una imagen
-        permitida. El puntero del archivo queda al principio.
-    """
-    try:
-        with Image.open(archivo.stream) as imagen:
-            formato = imagen.format
-            imagen.verify()
-    except (UnidentifiedImageError, Image.DecompressionBombError, OSError, SyntaxError, ValueError):
-        # DecompressionBombError: más píxeles que Image.MAX_IMAGE_PIXELS
-        return None
-    finally:
-        archivo.stream.seek(0)
-    return FORMATOS_IMAGEN.get(formato)
+
+def _claves_de_la_foto(clave):
+    """Todas las claves de la foto: sus variantes o, si es anterior a ellas, solo la suya."""
+    coincidencia = PATRON_CLAVE.fullmatch(clave)
+    if coincidencia['ancho'] is None:
+        return [clave]
+    return [_clave_variante(coincidencia['base'], ancho) for ancho in procesado.ANCHOS]
+
+
+def _borrar_claves(backend, claves):
+    """Borra cada clave aunque falle alguna; devuelve si se han borrado todas."""
+    borradas = True
+    for clave in claves:
+        try:
+            backend.borrar(clave)
+        except backend.ERRORES:
+            current_app.logger.exception('No se pudo borrar la foto %s', clave)
+            borradas = False
+    return borradas
 
 
 def guardar_foto(archivo):
     """
-    Guarda la foto subida con un nombre aleatorio.
+    Reprocesa la foto subida y guarda sus variantes con un nombre aleatorio.
 
     El tipo se deduce del contenido, no del nombre ni del Content-Type que
-    envía el navegador: así no se puede subir HTML con extensión .png.
+    envía el navegador: así no se puede subir HTML con extensión .png. Lo
+    que se guarda es siempre WebP recodificado, sin metadatos.
 
     Returns:
-        str: el valor para `foto_url`.
+        str: el valor para `foto_url` (la variante de 1200 px).
 
     Raises:
         ErrorAlmacenamiento: sin backend, formato no válido o fallo al guardar
-        (este último se registra en el log).
+        (este último se registra en el log y no deja variantes sueltas).
     """
     if not subida_disponible():
         raise ErrorAlmacenamiento(MENSAJE_NO_DISPONIBLE)
-    formato = detectar_formato_imagen(archivo) if _extension_permitida(archivo.filename or '') else None
-    if formato is None:
+    if not _extension_permitida(archivo.filename or ''):
         raise ErrorAlmacenamiento(MENSAJE_FORMATO)
-    extension, content_type = formato
+    try:
+        variantes = procesado.procesar(archivo.stream, current_app.config.get('FOTOS_MAX_PIXELES'))
+    except procesado.ImagenNoValida as error:
+        current_app.logger.info('Foto rechazada: %s', error)
+        mensaje = MENSAJE_DIMENSIONES if isinstance(error, procesado.ImagenDemasiadoGrande) else MENSAJE_FORMATO
+        raise ErrorAlmacenamiento(mensaje) from None
 
     backend = _backend()
+    base = uuid.uuid4().hex
+    guardadas = []
+    completa = False
     try:
-        return backend.guardar(archivo.stream, f'{uuid.uuid4().hex}.{extension}', content_type)
+        for ancho, contenido in variantes.items():
+            clave = _clave_variante(base, ancho)
+            url = backend.guardar(io.BytesIO(contenido), clave, CONTENT_TYPE_VARIANTES)
+            guardadas.append(clave)
+        completa = True
     except backend.ERRORES:
         current_app.logger.exception('No se pudo guardar la foto (backend %s)', current_app.config.get('FOTOS_BACKEND'))
         raise ErrorAlmacenamiento(MENSAJE_FALLO) from None
+    finally:
+        # Ante cualquier excepción, que no queden variantes sueltas
+        if not completa:
+            _borrar_claves(backend, guardadas)
+    # ANCHOS va de menor a mayor: la última es la principal
+    return url
 
 
 def _clave_propia(backend, url):
@@ -137,23 +164,33 @@ def es_foto_propia(url):
     return _clave_propia(_backend(), url) is not None
 
 
+def urls_de_la_foto(url):
+    """
+    URLs de todos los archivos de la foto, de menor a mayor.
+
+    Para una foto propia con variantes, las de las tres variantes (sea cual
+    sea la que se pase); para cualquier otra, solo la propia `url`.
+    """
+    clave = _clave_propia(_backend(), url)
+    if clave is None:
+        return [url]
+    prefijo = url[:-len(clave)]
+    return [prefijo + c for c in _claves_de_la_foto(clave)]
+
+
 def borrar_foto(url):
     """
-    Borra una foto propia; las URLs externas o ajenas se ignoran.
+    Borra una foto propia con todas sus variantes; las URLs externas o
+    ajenas se ignoran.
 
     Un fallo se registra en el log y no se propaga: se llama después de un
     commit correcto y no debe convertirlo en un error para el usuario.
 
     Returns:
-        bool: True si la foto era propia y ya no existe.
+        bool: True si la foto era propia y ya no existe ninguno de sus archivos.
     """
     backend = _backend()
     clave = _clave_propia(backend, url)
     if clave is None:
         return False
-    try:
-        backend.borrar(clave)
-    except backend.ERRORES:
-        current_app.logger.exception('No se pudo borrar la foto %s', url)
-        return False
-    return True
+    return _borrar_claves(backend, _claves_de_la_foto(clave))

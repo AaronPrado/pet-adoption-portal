@@ -43,9 +43,22 @@ def foto_png(nombre='rocky.png'):
 
 
 def fotos_guardadas(app):
-    """URLs de las fotos que hay en el directorio del backend local."""
+    """
+    foto_url de las fotos que hay en el directorio del backend local.
+
+    Cada archivo cuenta como la foto principal de su grupo de variantes: una
+    variante que quede huérfana aparece como su foto.
+    """
     directorio = Path(app.config['FOTOS_DIR'])
-    return {'/fotos/' + f.name for f in directorio.iterdir()} if directorio.exists() else set()
+    if not directorio.exists():
+        return set()
+    return {fotos.urls_de_la_foto('/fotos/' + f.name)[-1] for f in directorio.iterdir()}
+
+
+def variantes_completas(app, foto_url):
+    """Están en disco todas las variantes de la foto."""
+    directorio = Path(app.config['FOTOS_DIR'])
+    return all((directorio / url.removeprefix('/fotos/')).exists() for url in fotos.urls_de_la_foto(foto_url))
 
 
 @pytest.fixture
@@ -308,9 +321,10 @@ class TestCrearMascota:
 
         assert response.status_code == 302
         foto_url = Mascota.query.one().foto_url
-        assert re.fullmatch(r'/fotos/[0-9a-f]{32}\.png', foto_url)
+        assert re.fullmatch(r'/fotos/[0-9a-f]{32}-1200\.webp', foto_url)
         assert fotos_guardadas(app) == {foto_url}
-        assert client.get(foto_url).data == png()
+        assert variantes_completas(app, foto_url)
+        assert client.get(foto_url).mimetype == 'image/webp'
 
     @pytest.mark.parametrize('nombre, contenido', [
         ('rocky.png', b'no es imagen'),
@@ -574,6 +588,17 @@ class TestEditarMascota:
         client.post(self.url(con_foto_local), data=datos_mascota(foto_url='https://ejemplo.com/otra.jpg'))
 
         assert fotos_guardadas(app) == {foto}
+
+    def test_variante_compartida_no_se_borra(self, app, client, auth_headers_admin, con_foto_local):
+        """Otra ficha usa una variante de la misma foto (p. ej. la URL de S3 de 400 px pegada a mano)."""
+        foto = con_foto_local.foto_url
+        variante = fotos.urls_de_la_foto(foto)[0]
+        db.session.add(Mascota(nombre='Gemelo', especie='Perro', descripcion='Usa la variante', foto_url=variante))
+        db.session.commit()
+
+        client.post(self.url(con_foto_local), data=datos_mascota(foto_url='https://ejemplo.com/otra.jpg'))
+
+        assert variantes_completas(app, foto)
 
     def test_url_externa_anterior_no_se_toca(self, app, client, auth_headers_admin, mascota_disponible):
         response = client.post(self.url(mascota_disponible), data=datos_mascota(foto=foto_png()),

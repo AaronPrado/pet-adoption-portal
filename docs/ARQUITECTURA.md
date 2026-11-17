@@ -258,7 +258,8 @@ app/
 ├── cuestionario.py      # Preguntas, opciones y validación del cuestionario
 ├── decorators.py        # @admin_required
 ├── fotos/               # Almacenamiento de fotos (ADR-0003)
-│   ├── __init__.py      # guardar_foto, borrar_foto, subida_disponible, validación con Pillow
+│   ├── __init__.py      # guardar_foto, borrar_foto, subida_disponible, urls_de_la_foto
+│   ├── procesado.py     # Pillow: tipo real, límite de píxeles, sin EXIF, variantes WebP
 │   ├── local.py         # Backend local: FOTOS_DIR o instance/fotos
 │   └── s3.py            # Backend s3: boto3, endpoint_url opcional
 │
@@ -340,28 +341,50 @@ indica `FOTOS_BACKEND`:
 
 | Backend | Dónde guarda | `foto_url` |
 |---|---|---|
-| `local` | `FOTOS_DIR` o `instance/fotos`; la app las sirve en `GET /fotos/<clave>` | `/fotos/<uuid>.<ext>` |
+| `local` | `FOTOS_DIR` o `instance/fotos`; la app las sirve en `GET /fotos/<clave>` | `/fotos/<uuid>-1200.webp` |
 | `s3` | Bucket `AWS_S3_BUCKET`, carpeta `mascotas/` (`AWS_S3_ENDPOINT_URL` para servicios compatibles) | URL completa del objeto |
 | vacío | No hay subida: el formulario oculta el archivo y solo admite una URL | URL externa `https://` |
 
-- **Interfaz**: `guardar_foto()`, `borrar_foto()`, `subida_disponible()` y
-  `ErrorAlmacenamiento`, cuyo `mensaje` (causa y solución) se muestra junto
-  al campo. Sin backend o con un fallo del servicio (`ClientError`, error de
-  disco) el formulario responde 400 y conserva lo escrito; el fallo se
-  registra en el log.
+- **Interfaz**: `guardar_foto()`, `borrar_foto()`, `subida_disponible()`,
+  `urls_de_la_foto()` y `ErrorAlmacenamiento`, cuyo
+  `mensaje` (causa y solución) se muestra junto al campo. Sin backend o con
+  un fallo del servicio (`ClientError`, error de disco) el formulario
+  responde 400 y conserva lo escrito; el fallo se registra en el log.
 - **Validación**: extensión permitida (png, jpg, jpeg, gif, webp), tamaño
-  máximo de 5 MB y contenido comprobado con Pillow (una imagen por encima de
-  `Image.MAX_IMAGE_PIXELS` es un error de formato). El `Content-Type` se
-  deduce del contenido, no del que envía el navegador.
-- **Nombres**: `<uuid hex>.<ext>`. Solo se sirven o borran claves con ese
-  formato, así que no se puede salir del directorio ni tocar otros objetos
-  del bucket. Las URLs externas `https://` nunca se borran.
+  máximo de 5 MB y tipo real comprobado con Pillow, que solo prueba los
+  decodificadores PNG, JPEG, GIF y WebP. Antes de decodificar se rechaza una
+  imagen con más píxeles que `FOTOS_MAX_PIXELES` (40 MP por defecto) o que
+  `Image.MAX_IMAGE_PIXELS`, que no se modifica y sigue protegiendo por
+  encima. Estos rechazos dan el error de formato en el campo; una imagen con
+  algún lado de más de 16383 px (el máximo de WebP) da un mensaje propio.
+- **Procesado** (`app/fotos/procesado.py`): nunca se guarda el archivo
+  original. Se decodifica, se aplica la orientación EXIF
+  (`ImageOps.exif_transpose`, en el sitio), el perfil ICC se convierte a
+  sRGB con `ImageCms` (si falla, se sigue sin convertir y se registra), los
+  grises de 16 bits se escalan a 8, se pasa a RGB y se vuelve a codificar en
+  WebP sin ningún metadato (EXIF con el GPS, XMP, perfil ICC). La
+  transparencia, también la de un PNG RGB con `tRNS`, se aplana sobre
+  blanco, el fondo de las fichas. De un GIF o WebP animado solo queda la
+  primera imagen. Para contener la memoria, las variantes se generan en
+  cadena (1200 → 800 → 400), reduciendo cada una la anterior, sin copiar el
+  original.
+- **Variantes**: cada foto son tres objetos WebP con el mismo nombre
+  aleatorio, `<uuid hex>-400.webp`, `-800.webp` y `-1200.webp` (anchos
+  máximos; nunca se amplía una imagen más pequeña, que entonces se guarda a
+  su tamaño). `foto_url` guarda la de 1200, que hace de foto principal: no
+  se conserva el original a resolución completa. Si falla la subida de una
+  variante, se borran las ya guardadas.
+- **Nombres**: `<uuid hex>-<400|800|1200>.webp` o, en las fotos anteriores a
+  las variantes, `<uuid hex>.<ext>`. Solo se sirven o borran claves con ese formato exacto, así que no se puede salir del directorio ni
+  tocar otros objetos del bucket. Las URLs externas `https://` nunca se
+  borran.
 - **Regla archivo/URL**: el archivo tiene prioridad. La URL debe ser
   `https://`, salvo que sea la foto propia que ya tiene la mascota
   (`/fotos/...` o la URL de S3), que se acepta tal cual; vaciar el campo deja
   la mascota sin foto.
 - **Limpieza**: la foto anterior se borra solo después de un commit correcto
-  (edición y baja) y si ninguna otra mascota usa la misma `foto_url`. Si el
+  (edición y baja) y si ninguna otra mascota usa la misma `foto_url` ni otra
+  variante de la misma foto; se borran entonces todas sus variantes. Si el
   commit falla, se borra la foto recién subida para que no quede huérfana.
   Un fallo al borrar se registra y no afecta a la respuesta.
 

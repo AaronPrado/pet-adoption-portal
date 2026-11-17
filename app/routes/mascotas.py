@@ -305,14 +305,15 @@ def _borrar_foto_si_nadie_la_usa(url):
     Borra una foto propia que ya no usa ninguna mascota.
 
     Se llama después de un commit correcto. Dos fichas pueden compartir
-    foto_url (una URL de S3 pegada a mano), y la otra no debe perder su foto.
-    Un fallo solo se registra: el cambio ya está guardado y la foto, como
-    mucho, queda huérfana.
+    foto_url (una URL de S3 pegada a mano), o usar variantes distintas de la
+    misma foto, y la otra no debe perder su foto: se borran todas las
+    variantes o ninguna. Un fallo solo se registra: el cambio ya está
+    guardado y la foto, como mucho, queda huérfana.
     """
     if not fotos.es_foto_propia(url):
         return
     try:
-        if not db.session.scalar(select(exists().where(Mascota.foto_url == url))):
+        if not db.session.scalar(select(exists().where(Mascota.foto_url.in_(fotos.urls_de_la_foto(url))))):
             fotos.borrar_foto(url)
     except Exception:
         db.session.rollback()
