@@ -1,0 +1,228 @@
+@layer reset, tokens, base, componentes, utilidades;
+
+/*
+ * Sistema de diseño (ADR-0002).
+ *
+ * Tokens comunes a todas las protectoras. La marca (color de acento y
+ * familias tipográficas) vive en marca.css, que se enlaza después de este
+ * archivo. tests/test_tokens.py comprueba el contraste de cada par de
+ * colores: si cambias un valor, pasa los tests.
+ *
+ * Neutro a propósito: el color de la página lo ponen las fotos de los
+ * animales. Fondo piedra casi blanco, tinta verdosa y grises de la misma
+ * familia, para que la paleta no compita con la foto ni con el acento.
+ */
+
+@layer reset {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  * {
+    margin: 0;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
+  img,
+  picture,
+  svg,
+  video {
+    display: block;
+    max-width: 100%;
+  }
+
+  img {
+    height: auto;
+  }
+
+  input,
+  button,
+  textarea,
+  select {
+    font: inherit;
+    color: inherit;
+  }
+
+  p,
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    overflow-wrap: break-word;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      scroll-behavior: auto !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer tokens {
+  :root {
+    /* Color: superficies y texto */
+    --color-fondo: #f5f6f4;
+    --color-superficie: #ffffff;
+    --color-texto: #1c2422;
+    --color-texto-suave: #515b58;
+    --color-borde: #d9dedb;          /* separadores decorativos, sin requisito */
+    --color-borde-control: #737d79;  /* campos y casillas: ≥ 3:1 (P-13) */
+    --color-placeholder: var(--color-texto-suave); /* ≥ 4,5:1, como el texto */
+    /* Controles deshabilitados: WCAG 1.4.3 no exige contraste, pero se
+       mantienen legibles (unos 3:1) y se acompañan de un cambio de cursor */
+    --color-texto-deshabilitado: #848d89;
+
+    /* Color: acento (definido por la marca) */
+    --color-acento: var(--marca-acento);
+    --color-acento-fuerte: var(--marca-acento-fuerte);
+    --color-acento-suave: var(--marca-acento-suave);
+    --color-sobre-acento: var(--marca-sobre-acento);
+    --color-foco: var(--marca-acento);
+
+    /* Color: estados. Cada uno con su tono suave para fondos de aviso */
+    --color-exito: #1d6b3b;
+    --color-exito-suave: #e4f1e8;
+    --color-aviso: #8a4f00;
+    --color-aviso-suave: #fbefd9;
+    --color-error: #b3261e;
+    --color-error-suave: #fbe7e5;
+    --color-info: #1d5a99;
+    --color-info-suave: #e3edf8;
+
+    /* Tipografía: familias de marca.css */
+    --fuente-texto: var(--marca-fuente-texto);
+    --fuente-titulos: var(--marca-fuente-titulos);
+
+    /* Escala modular 1,25 sobre 16 px; nada por debajo de 13 px (DIS-08) */
+    --texto-xs: 0.8125rem;   /* 13 px: solo chapas y metadatos; nunca ayudas ni errores */
+    --texto-sm: 0.875rem;    /* 14 px: ayudas de campo */
+    --texto-base: 1rem;      /* 16 px */
+    --texto-md: 1.25rem;     /* 20 px */
+    --texto-lg: 1.5625rem;   /* 25 px */
+    --texto-xl: 1.9375rem;   /* 31 px */
+    --texto-2xl: clamp(1.9375rem, 1.5rem + 2vw, 2.4375rem);  /* 31-39 px */
+    --texto-3xl: clamp(2.4375rem, 1.6rem + 3.6vw, 3.0625rem); /* 39-49 px: nombre del animal */
+
+    --peso-normal: 400;
+    --peso-fuerte: 700;
+    --peso-titulos: 600;
+
+    --interlineado-texto: 1.55;
+    --interlineado-titulos: 1.15;
+    --medida-texto: 68ch;
+
+    /* Espaciado: múltiplos de 4 px */
+    --esp-1: 0.25rem;
+    --esp-2: 0.5rem;
+    --esp-3: 0.75rem;
+    --esp-4: 1rem;
+    --esp-5: 1.5rem;
+    --esp-6: 2rem;
+    --esp-7: 3rem;
+    --esp-8: 4rem;
+    --esp-9: 6rem;
+
+    /* Radios por jerarquía: control, tarjeta, foto destacada (DIS-17) */
+    --radio-sm: 6px;
+    --radio-md: 10px;
+    --radio-lg: 16px;
+    --radio-total: 999px;
+
+    /* Sombras con el tono de la tinta: reposo y elevado (DIS-17) */
+    --sombra-1: 0 1px 2px rgb(28 36 34 / 0.06), 0 2px 6px rgb(28 36 34 / 0.06);
+    --sombra-2: 0 2px 4px rgb(28 36 34 / 0.06), 0 10px 24px rgb(28 36 34 / 0.12);
+
+    /* Foco visible: anillo de 3 px separado del elemento (lo aplica B3.3) */
+    --foco-ancho: 3px;
+    --foco-separacion: 2px;
+    --foco-anillo: var(--foco-ancho) solid var(--color-foco);
+
+    /* Enlaces subrayados (A11Y-06) */
+    --enlace-separacion: 0.18em;
+    --enlace-grosor: 1px;
+    --enlace-grosor-hover: 2px;
+
+    /* Tamaño mínimo de objetivos táctiles: 44 px. WCAG 2.5.8 (AA) pide
+       como suelo 24 × 24 px; 44 px es el objetivo de 2.5.5 (AAA) */
+    --objetivo-min: 2.75rem;
+
+    --transicion: 150ms ease-out;
+  }
+}
+
+@layer base {
+  body {
+    min-height: 100vh;   /* respaldo para navegadores sin dvh */
+    min-height: 100dvh;
+    background-color: var(--color-fondo);
+    color: var(--color-texto);
+    font-family: var(--fuente-texto);
+    font-size: var(--texto-base);
+    line-height: var(--interlineado-texto);
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--fuente-titulos);
+    font-weight: var(--peso-titulos);
+    line-height: var(--interlineado-titulos);
+    text-wrap: balance;
+  }
+
+  h1 { font-size: var(--texto-2xl); }
+  h2 { font-size: var(--texto-xl); }
+  h3 { font-size: var(--texto-lg); }
+  h4 { font-size: var(--texto-md); }
+
+  p {
+    max-width: var(--medida-texto);
+    text-wrap: pretty;
+  }
+
+  a {
+    color: var(--color-acento);
+    text-decoration: underline;
+    text-decoration-thickness: var(--enlace-grosor);
+    text-underline-offset: var(--enlace-separacion);
+  }
+
+  a:hover {
+    color: var(--color-acento-fuerte);
+    text-decoration-thickness: var(--enlace-grosor-hover);
+  }
+}
+
+@layer componentes {
+  /* Llegan en B3.3 (formularios) y B3.4 (componentes). */
+}
+
+@layer utilidades {
+  .visualmente-oculto,
+  .visualmente-oculto-enfocable:not(:focus) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+}

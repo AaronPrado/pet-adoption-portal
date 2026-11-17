@@ -1,0 +1,54 @@
+/*
+ * Marca de la protectora (ADR-0002): el único CSS que cambia cada refugio.
+ *
+ * Se enlaza después de sistema.css. Para adaptarla:
+ *   1. Cambia --marca-acento (botones, enlaces y foco) y deriva de él
+ *      --marca-acento-fuerte (hover, más oscuro) y --marca-acento-suave
+ *      (fondos destacados, casi blanco).
+ *   2. Si cambias las fuentes, copia los WOFF2 a app/static/fonts/ con su
+ *      licencia y actualiza los @font-face y --marca-fuente-*.
+ *   3. Pasa tests/test_tokens.py: comprueba que el acento sigue teniendo
+ *      contraste suficiente como texto, como botón y como anillo de foco.
+ *
+ * Nombre, logo y contacto se configuran en el entorno (MARCA_NOMBRE,
+ * MARCA_LOGO, MARCA_CONTACTO; ver config.py).
+ */
+
+/* Atkinson Hyperlegible (Braille Institute): texto. 400 y 700 reales */
+@font-face {
+  font-family: "Atkinson Hyperlegible";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("../fonts/atkinson-hyperlegible-latin-400-normal.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Atkinson Hyperlegible";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("../fonts/atkinson-hyperlegible-latin-700-normal.woff2") format("woff2");
+}
+
+/* Fraunces variable (eje wght): nombres de los animales y titulares */
+@font-face {
+  font-family: "Fraunces";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("../fonts/fraunces-latin-wght-normal.woff2") format("woff2");
+}
+
+@layer tokens {
+  :root {
+    /* Verde pino: sereno, de exterior, no compite con el color de las fotos */
+    --marca-acento: #1f5e52;         /* 7,0:1 sobre el fondo; 7,6:1 con blanco */
+    --marca-acento-fuerte: #164a40;  /* hover y pulsado */
+    --marca-acento-suave: #e2eeea;   /* fondos destacados y seleccionados */
+    --marca-sobre-acento: #ffffff;   /* texto sobre botones de acento */
+
+    --marca-fuente-texto: "Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --marca-fuente-titulos: "Fraunces", Georgia, "Times New Roman", serif;
+  }
+}
