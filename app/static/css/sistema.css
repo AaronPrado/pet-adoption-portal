@@ -222,7 +222,8 @@
 }
 
 @layer componentes {
-  /* Formularios: macros/formulario.html (B3.3). Componentes en B3.4. */
+  /* Formularios: macros/formulario.html (B3.3). Componentes:
+     macros/componentes.html (B3.4), al final de esta capa. */
 
   .campo {
     display: grid;
@@ -469,6 +470,35 @@
   .aviso--info { background-color: var(--color-info-suave); border-color: var(--color-info); }
   .aviso--aviso { background-color: var(--color-aviso-suave); border-color: var(--color-aviso); }
   .aviso--error { background-color: var(--color-error-suave); border-color: var(--color-error); }
+
+  /* --- Componentes: macros/componentes.html (B3.4) --- */
+
+  /* Chapa de estado: texto y punto, con el color de apoyo (DIS-10) */
+  .chapa {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--esp-1);
+    padding: var(--esp-1) var(--esp-2);
+    font-size: var(--texto-xs);
+    font-weight: var(--peso-fuerte);
+    line-height: var(--interlineado-titulos);
+    border: 1px solid currentColor;
+    border-radius: var(--radio-total);
+    white-space: nowrap;
+  }
+
+  .chapa__punto {
+    width: 0.5em;
+    height: 0.5em;
+    background-color: currentColor;
+    border-radius: var(--radio-total);
+  }
+
+  .chapa--exito { color: var(--color-exito); background-color: var(--color-exito-suave); }
+  .chapa--aviso { color: var(--color-aviso); background-color: var(--color-aviso-suave); }
+  .chapa--error { color: var(--color-error); background-color: var(--color-error-suave); }
+  .chapa--info { color: var(--color-info); background-color: var(--color-info-suave); }
+  .chapa--neutro { color: var(--color-texto-suave); background-color: var(--color-fondo); }
 }
 
 @layer utilidades {

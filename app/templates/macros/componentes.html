@@ -1,0 +1,25 @@
+{#
+  Componentes del sistema de diseño (ADR-0002). Uso en docs/ARQUITECTURA.md
+  («Macros de componentes»).
+
+    {% import "macros/componentes.html" as c %}
+
+  Todo el contenido pasa por el escape de Jinja. Las clases son las de la
+  capa `componentes` de sistema.css, no las de Bootstrap.
+#}
+
+{# Tono de cada estado guardado; cualquier otro va en neutro. Las etiquetas
+   salen de app/models.py (ETIQUETAS_ESTADO). #}
+{% set TONOS_ESTADO = {
+  'mascota': {'disponible': 'exito', 'en_proceso': 'aviso', 'adoptado': 'info'},
+  'solicitud': {'pendiente': 'aviso', 'aprobada': 'exito', 'rechazada': 'error'},
+} %}
+
+{#
+  Estado con texto, no solo color: el punto es decorativo. tipo: mascota o
+  solicitud. Un estado desconocido se muestra tal cual, en neutro.
+#}
+{% macro badge_estado(estado, tipo='mascota') -%}
+  {%- set tono = TONOS_ESTADO.get(tipo, {}).get(estado, 'neutro') -%}
+<span class="chapa chapa--{{ tono }}"><span class="chapa__punto" aria-hidden="true"></span>{{ etiqueta_estado(estado, tipo) }}</span>
+{%- endmacro %}

@@ -24,6 +24,27 @@ def utcnow():
     return datetime.now(UTC).replace(tzinfo=None)
 
 
+# Etiquetas legibles de los estados guardados, la única fuente para la web
+# (macro `badge_estado`). Las claves son los valores de la base de datos y no
+# cambian; las etiquetas sí se pueden reescribir.
+ETIQUETAS_ESTADO = {
+    'mascota': {'disponible': 'Disponible', 'en_proceso': 'En proceso', 'adoptado': 'Adoptado'},
+    'solicitud': {'pendiente': 'Pendiente', 'aprobada': 'Aprobada', 'rechazada': 'Rechazada'},
+}
+
+
+def etiqueta_estado(estado, tipo='mascota'):
+    """
+    Etiqueta legible de un estado de mascota o de solicitud.
+
+    Global de Jinja. Un estado desconocido se devuelve tal cual (la plantilla
+    lo escapa) y uno vacío, como 'Sin estado'.
+    """
+    if not estado:
+        return 'Sin estado'
+    return ETIQUETAS_ESTADO.get(tipo, {}).get(estado, estado)
+
+
 class Usuario(UserMixin, db.Model):
     """
     Modelo de Usuario del sistema.
