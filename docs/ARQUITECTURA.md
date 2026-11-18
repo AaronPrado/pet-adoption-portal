@@ -280,6 +280,7 @@ app/
 │   ├── errores/
 │   │   └── error.html   # Página común de error (400, CSRF, 403, 404, 405, 429, 500)
 │   ├── macros/
+│   │   ├── formulario.html  # campo, grupo_opciones, boton, resumen_errores, avisos (ADR-0002)
 │   │   └── paginacion.html
 │   ├── auth/            # login.html, registro.html
 │   ├── mascotas/        # catalogo.html, detalle.html
@@ -412,8 +413,10 @@ en B3.6 y, hasta entonces, la web sigue con `styles.css`.
   `-md`, `-lg`), sombras (`--sombra-1` en reposo y `--sombra-2` elevada), foco
   (`--foco-anillo`) y tamaño mínimo de objetivo (`--objetivo-min`, 44 px).
   `--texto-xs` (13 px) es solo para chapas y metadatos, nunca para ayudas ni
-  errores. La base pone el fondo, la tinta y los enlaces subrayados.
-  La capa `componentes` se llena en B3.3 y B3.4.
+  errores. La base pone el fondo, la tinta, los enlaces subrayados y el anillo
+  `:focus-visible` (`--foco-anillo` separado `--foco-separacion`) en enlaces,
+  botones, campos y todo lo que tenga `tabindex` (P-17). La capa `componentes`
+  tiene los formularios (abajo); los demás componentes llegan en B3.4.
 - `app/static/css/marca.css`, que se enlaza después, es el único archivo que
   cambia cada protectora: el acento (`--marca-acento`, `-fuerte` para hover,
   `-suave` para fondos destacados y `--marca-sobre-acento` para el texto de los
@@ -450,6 +453,78 @@ frente al sistema: `@layer bootstrap, reset, tokens, base, componentes,
 utilidades;` y `@import url(...) layer(bootstrap);` al principio de la hoja
 que lo cargue, que se enlaza antes que `sistema.css`: el orden de las capas
 lo fija su primera aparición (un `<link>` no admite capa).
+
+### Macros de formulario
+
+`app/templates/macros/formulario.html` genera los formularios accesibles con
+las clases del sistema (`campo`, `boton`, `aviso`...), no las de Bootstrap.
+Ninguna página las usa todavía: se migran en la fase 4 del plan de frontend.
+
+```jinja
+{% import "macros/formulario.html" as f %}
+
+<main id="contenido">
+  {{ f.avisos() }}
+  {{ f.resumen_errores(errores) }}
+  <form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {{ f.leyenda_obligatorios() }}
+    {{ f.campo('email', 'Email', valores, errores, tipo='email', obligatorio=true,
+               autocomplete='email', ayuda='Te avisaremos aquí de tu solicitud.') }}
+    {{ f.campo('password', 'Contraseña', valores, errores, tipo='password',
+               obligatorio=true, autocomplete='current-password') }}
+    {{ f.campo('sexo', 'Sexo', valores, errores, tipo='select',
+               opciones=[('Macho', 'Macho'), ('Hembra', 'Hembra')]) }}
+    {{ f.grupo_opciones('jardin', '¿Tienes jardín?', SI_NO, valores, errores, obligatorio=true) }}
+    {{ f.boton('Enviar') }}
+  </form>
+</main>
+```
+
+- **`campo(nombre, etiqueta, valores, errores, tipo, ayuda, obligatorio,
+  autocomplete, opciones, opcion_vacia, id, filas, atributos)`**: `label for`,
+  valor enviado, `required` y asterisco (`aria-hidden`: lo anuncia
+  `required`), `aria-invalid="true"` con error y `aria-describedby` hacia
+  `<id>-error` y `<id>-ayuda` (en ese orden, solo los que existan). Tipos,
+  en lista blanca y sin distinguir mayúsculas: text, email, password, number,
+  tel, url, search, date, textarea y select (`opciones` en pares `(value,
+  etiqueta)`); cualquier otro se pinta como text. **Un `password` nunca se
+  vuelve a rellenar**, ni con `value` en `atributos`. La ayuda es un texto
+  visible: el placeholder no sustituye a las instrucciones. `atributos` añade
+  `min`, `maxlength`, `inputmode`... con `xmlattr`; es para el desarrollador,
+  nunca para datos del usuario, y descarta las claves `on*`.
+- **`leyenda_obligatorios()`**: explica el asterisco; una vez, antes del
+  primer campo obligatorio.
+- **`grupo_opciones(nombre, leyenda, opciones, valores, errores, tipo,
+  ayuda, obligatorio)`**: radios (o `tipo='checkbox'`) en `fieldset` y
+  `legend`; el error y la ayuda describen el `fieldset` y cada opción lleva
+  `aria-invalid`. El `fieldset` tiene id `<nombre>` y `tabindex="-1"`, para
+  ser el destino del resumen. Los ids de las opciones son `<nombre>_<value>`,
+  como los del cuestionario, con los espacios del value cambiados por `-`.
+  Las casillas aceptan una lista en `valores`. `required` solo se pone en
+  radios y en una casilla única: HTML no sabe exigir «al menos una».
+- **`boton(texto, variante, tipo, nombre, valor, atributos)`**: variantes
+  `primario`, `secundario` y `peligro`, siempre con `type` explícito
+  (`submit` por defecto). `atributos`, como en `campo`.
+- **`resumen_errores(errores, titulo, destinos)`**: lista los errores con un
+  enlace `#<campo>` a cada uno, que es el id de `campo` y del `fieldset` de
+  `grupo_opciones`. Si un `campo` lleva un `id` distinto de su nombre, se
+  pasa en `destinos` (`{'edad': 'edad_aprox'}`). Es un `role="group"` con
+  `aria-labelledby` en su título (así se anuncia al recibir el foco),
+  `tabindex="-1"` y `data-resumen-errores`: `app.js` le da el foco al cargar.
+  Con el resumen, los campos ya no llevan `autofocus`.
+- **`avisos(mensajes=None)`**: los mensajes flash (o los pares
+  `(categoría, texto)` que se le pasen). Va dentro de `<main>`. `success` e
+  `info` usan `role="status"`; `warning` y `danger`, `role="alert"`; otra
+  categoría se pinta como información.
+
+Todo el contenido pasa por el escape de Jinja. `tests/test_macros_formulario.py`
+renderiza cada macro y comprueba sus atributos, que la contraseña no se
+rellena y que el contenido se escapa; `tests/test_tokens.py`, que la capa
+`componentes` solo usa tokens de color, el foco visible, los objetivos de
+`--objetivo-min`, los estados hover, active, disabled, `aria-busy` e
+inválido (P-20) y la utilidad `.visually-hidden` (el mismo nombre que en
+Bootstrap), que oculta la región «Enviando…» de `app.js`.
 
 ---
 

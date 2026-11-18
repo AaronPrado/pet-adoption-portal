@@ -1,0 +1,209 @@
+{#
+  Macros de formulario del sistema de diseño (ADR-0002). Uso en
+  docs/ARQUITECTURA.md («Macros de formulario»).
+
+    {% import "macros/formulario.html" as f %}
+
+  Contrato de los formularios: la vista pasa `valores` (campo → valor enviado)
+  y `errores` (campo → mensaje) y responde 400. Las macros aceptan ambos como
+  None en la primera visita. Los ids del error y de la ayuda son
+  `<id>-error` y `<id>-ayuda`. Todo el contenido pasa por el escape de Jinja:
+  no uses `|safe` con datos del usuario.
+
+  Las clases son del sistema nuevo (capa `componentes` de sistema.css), no de
+  Bootstrap.
+
+  `atributos` es para el desarrollador (min, maxlength, inputmode...), nunca
+  para datos del usuario: aun así se descartan las claves `on*` y, en un
+  password, `value`.
+#}
+
+{# Tipos de `campo`; cualquier otro se pinta como text. #}
+{% set TIPOS = ('text', 'email', 'password', 'number', 'tel', 'url', 'search', 'date', 'textarea', 'select') %}
+
+{# Atributos extra sin manejadores `on*` ni las claves de `excluir`. #}
+{% macro _atributos(atributos, excluir=()) -%}
+  {%- set permitidos = {} -%}
+  {%- for clave, valor in (atributos or {}).items() -%}
+    {%- set minuscula = clave|string|lower -%}
+    {%- if not minuscula.startswith('on') and minuscula not in excluir -%}
+      {%- set _ = permitidos.update({clave: valor}) -%}
+    {%- endif -%}
+  {%- endfor -%}
+  {{- permitidos|xmlattr }}
+{%- endmacro %}
+
+{# Un value como parte válida de un id: sin espacios (`8 h` → `8-h`). #}
+{% macro _parte_id(valor) -%}
+  {{- (valor|string).split()|join('-') -}}
+{%- endmacro %}
+
+{# Ids que describen un control: primero el error y después la ayuda. #}
+{% macro _describedby(id, error, ayuda) -%}
+  {%- set ids = [] -%}
+  {%- if error %}{% set _ = ids.append(id ~ '-error') %}{% endif -%}
+  {%- if ayuda %}{% set _ = ids.append(id ~ '-ayuda') %}{% endif -%}
+  {%- if ids %} aria-describedby="{{ ids|join(' ') }}"{% endif -%}
+{%- endmacro %}
+
+{# El asterisco es visual: el atributo `required` ya lo anuncia. #}
+{% macro _asterisco(obligatorio) -%}
+  {%- if obligatorio %} <span class="campo__obligatorio" aria-hidden="true">*</span>{% endif -%}
+{%- endmacro %}
+
+{% macro _error(id, error) -%}
+  {%- if error %}
+  <p id="{{ id }}-error" class="campo__error"><span class="visualmente-oculto">Error: </span>{{ error }}</p>
+  {%- endif %}
+{%- endmacro %}
+
+{% macro _ayuda(id, ayuda) -%}
+  {%- if ayuda %}
+  <p id="{{ id }}-ayuda" class="campo__ayuda">{{ ayuda }}</p>
+  {%- endif %}
+{%- endmacro %}
+
+{#
+  Campo con etiqueta, valor enviado, error y ayuda.
+
+  - tipo: text, email, password, number, tel, url, search, date, textarea o select
+    (en minúsculas o no; cualquier otro se pinta como text).
+  - opciones: pares (value, etiqueta) para select.
+  - opcion_vacia: primera opción sin valor del select (None para quitarla).
+  - autocomplete: token de WCAG 1.3.5 (email, name, tel, current-password...).
+  - atributos: otros atributos del control (min, max, maxlength, inputmode...).
+  - id: si no coincide con `nombre`, pasa `destinos={nombre: id}` al resumen.
+  Un `type="password"` nunca se vuelve a rellenar.
+#}
+{% macro campo(nombre, etiqueta, valores=none, errores=none, tipo='text', ayuda=none, obligatorio=false,
+               autocomplete=none, opciones=(), opcion_vacia='Elige una opción', id=none, filas=4,
+               atributos={}) -%}
+  {%- set tipo = tipo|string|trim|lower -%}
+  {%- set tipo = tipo if tipo in TIPOS else 'text' -%}
+  {%- set id = id or nombre -%}
+  {%- set valor = (valores or {}).get(nombre) -%}
+  {%- set error = (errores or {}).get(nombre) -%}
+  {%- set comunes -%}
+    id="{{ id }}" name="{{ nombre }}"
+    {%- if obligatorio %} required{% endif %}
+    {%- if error %} aria-invalid="true"{% endif %}
+    {{- _describedby(id, error, ayuda) }}
+    {%- if autocomplete %} autocomplete="{{ autocomplete }}"{% endif %}
+    {{- _atributos(atributos, ('value',) if tipo == 'password' else ()) }}
+  {%- endset %}
+<div class="campo{% if error %} campo--invalido{% endif %}">
+  <label class="campo__etiqueta" for="{{ id }}">{{ etiqueta }}{{ _asterisco(obligatorio) }}</label>
+  {%- if tipo == 'textarea' %}
+  <textarea class="campo__control" rows="{{ filas }}" {{ comunes }}>{{ valor if valor is not none }}</textarea>
+  {%- elif tipo == 'select' %}
+  <select class="campo__control" {{ comunes }}>
+    {%- if opcion_vacia is not none %}
+    <option value="">{{ opcion_vacia }}</option>
+    {%- endif %}
+    {%- for valor_opcion, texto in opciones %}
+    <option value="{{ valor_opcion }}"{% if valor is not none and valor|string == valor_opcion|string %} selected{% endif %}>{{ texto }}</option>
+    {%- endfor %}
+  </select>
+  {%- else %}
+  <input class="campo__control" type="{{ tipo }}" {{ comunes }}
+    {%- if tipo != 'password' and valor is not none %} value="{{ valor }}"{% endif %}>
+  {%- endif %}
+  {{- _error(id, error) }}
+  {{- _ayuda(id, ayuda) }}
+</div>
+{%- endmacro %}
+
+{# Explica el asterisco. Va una vez, antes del primer campo obligatorio. #}
+{% macro leyenda_obligatorios() -%}
+<p class="leyenda-obligatorios">Los campos marcados con <span class="campo__obligatorio">*</span> son obligatorios.</p>
+{%- endmacro %}
+
+{#
+  Radios o casillas dentro de fieldset/legend. El error y la ayuda describen
+  el grupo; cada opción se marca como inválida y tiene id `<nombre>_<value>`
+  (sin espacios). El fieldset tiene id `<nombre>` y tabindex="-1": es el
+  destino del enlace del resumen de errores y, al enfocarse, se lee su legend.
+  Para checkbox, `valores[nombre]` puede ser una lista. `required` solo se pone
+  en radios y en una casilla única: HTML no sabe exigir «al menos una».
+#}
+{% macro grupo_opciones(nombre, leyenda, opciones, valores=none, errores=none, tipo='radio', ayuda=none,
+                        obligatorio=false) -%}
+  {%- set tipo = 'checkbox' if tipo == 'checkbox' else 'radio' -%}
+  {%- set valor = (valores or {}).get(nombre) -%}
+  {%- set error = (errores or {}).get(nombre) -%}
+  {%- if valor is none %}{% set seleccion = [] %}
+  {%- elif valor is string or valor is not iterable %}{% set seleccion = [valor|string] %}
+  {%- else %}{% set seleccion = valor|map('string')|list %}{% endif -%}
+  {%- set requerido = obligatorio and (tipo == 'radio' or opciones|length == 1) -%}
+<fieldset id="{{ nombre }}" tabindex="-1" class="grupo-opciones{% if error %} grupo-opciones--invalido{% endif %}"
+  {{- _describedby(nombre, error, ayuda) }}>
+  <legend class="grupo-opciones__leyenda">{{ leyenda }}{{ _asterisco(obligatorio) }}</legend>
+  {{- _error(nombre, error) }}
+  {%- for valor_opcion, texto in opciones %}
+  {%- set id = nombre ~ '_' ~ _parte_id(valor_opcion) %}
+  <div class="opcion">
+    <input class="opcion__control" type="{{ tipo }}" id="{{ id }}" name="{{ nombre }}" value="{{ valor_opcion }}"
+      {%- if valor_opcion|string in seleccion %} checked{% endif %}
+      {%- if requerido %} required{% endif %}
+      {%- if error %} aria-invalid="true"{% endif %}>
+    <label class="opcion__etiqueta" for="{{ id }}">{{ texto }}</label>
+  </div>
+  {%- endfor %}
+  {{- _ayuda(nombre, ayuda) }}
+</fieldset>
+{%- endmacro %}
+
+{#
+  Botón con `type` explícito. variante: primario, secundario o peligro.
+  `nombre`/`valor` se envían con el formulario: app.js no deshabilita el botón
+  que envía, así que su valor llega.
+#}
+{% macro boton(texto, variante='primario', tipo='submit', nombre=none, valor=none, atributos={}) -%}
+  {%- set variante = variante if variante in ('primario', 'secundario', 'peligro') else 'primario' -%}
+  {%- set tipo = tipo if tipo in ('submit', 'button', 'reset') else 'submit' -%}
+<button type="{{ tipo }}" class="boton boton--{{ variante }}"
+  {%- if nombre %} name="{{ nombre }}"{% endif %}
+  {%- if valor is not none %} value="{{ valor }}"{% endif %}
+  {{- _atributos(atributos) }}>{{ texto }}</button>
+{%- endmacro %}
+
+{#
+  Lista de errores con un enlace a cada campo. app.js le da el foco al cargar
+  la página; role="group" con aria-labelledby hace que se anuncie su título.
+  Cada enlace apunta a `#<campo>`: el id de `campo` y el del fieldset de
+  `grupo_opciones`. `destinos` lo cambia cuando el id no es el nombre
+  ({'edad': 'edad_aprox'}).
+#}
+{% macro resumen_errores(errores, titulo='Revisa estos campos antes de continuar', destinos={}) -%}
+  {%- if errores %}
+<div id="resumen-errores" class="resumen-errores" tabindex="-1" role="group" aria-labelledby="resumen-errores-titulo"
+     data-resumen-errores>
+  <h2 id="resumen-errores-titulo" class="resumen-errores__titulo">{{ titulo }}</h2>
+  <ul class="resumen-errores__lista">
+    {%- for campo, mensaje in errores.items() %}
+    <li><a href="#{{ (destinos or {}).get(campo, campo) }}">{{ mensaje }}</a></li>
+    {%- endfor %}
+  </ul>
+</div>
+  {%- endif %}
+{%- endmacro %}
+
+{#
+  Mensajes flash. Va dentro de <main>, antes del contenido. Éxito e
+  información usan role="status"; avisos y errores, role="alert".
+  `mensajes` (pares categoría, texto) es opcional: por defecto, los flash.
+#}
+{% macro avisos(mensajes=none) -%}
+  {%- set mensajes = get_flashed_messages(with_categories=true) if mensajes is none else mensajes -%}
+  {%- set clases = {'success': 'exito', 'info': 'info', 'warning': 'aviso', 'danger': 'error'} -%}
+  {%- if mensajes %}
+<div class="avisos">
+  {%- for categoria, mensaje in mensajes %}
+  {%- set clase = clases.get(categoria, 'info') %}
+  <div class="aviso aviso--{{ clase }}" role="{{ 'alert' if clase in ('aviso', 'error') else 'status' }}">
+    <p>{{ mensaje }}</p>
+  </div>
+  {%- endfor %}
+</div>
+  {%- endif %}
+{%- endmacro %}
