@@ -1,4 +1,7 @@
-"""e2e del panel de administración: alta y baja de mascotas, errores del formulario y fotos."""
+"""
+e2e del panel de administración: alta y baja de mascotas, errores del
+formulario, fotos y revisión de solicitudes (confirmación y doble envío).
+"""
 
 import io
 import re
@@ -7,7 +10,15 @@ import pytest
 from PIL import Image
 from playwright.sync_api import expect
 
-from tests.e2e.conftest import ADMIN, iniciar_sesion
+from app import db
+from app.models import Mascota, Solicitud, Usuario
+from tests.e2e.conftest import (
+    ADMIN,
+    ADOPTANTE,
+    iniciar_sesion,
+    pulsar_seguido,
+    registrar_envios,
+)
 
 pytestmark = pytest.mark.e2e
 
@@ -26,6 +37,8 @@ def test_admin_crea_y_borra_mascota(page, errores_js):
     page.once('dialog', lambda dialog: dialog.dismiss())
     page.get_by_role('button', name='Eliminar Rex').click()
     expect(page.get_by_role('button', name='Eliminar Rex')).to_be_visible()
+    # ... ni deja el formulario bloqueado como «enviando»
+    expect(page.locator('form[aria-busy="true"]')).to_have_count(0)
 
     # Aceptarla envía el formulario (con su token CSRF)
     page.once('dialog', lambda dialog: dialog.accept())
@@ -79,6 +92,8 @@ def test_foto_demasiado_grande_no_se_envia(page, errores_js):
     page.get_by_role('button', name='Crear Mascota').click()
     expect(page).to_have_url(re.compile(r'/mascotas/admin/nueva$'))
     expect(page.get_by_label('Nombre')).to_have_value('Bolt')
+    # El envío no llegó a salir: el formulario no queda bloqueado
+    expect(page.locator('form[aria-busy="true"]')).to_have_count(0)
 
     # Quitar el archivo (para usar una URL) borra el aviso y sus marcas
     foto.set_input_files([])
@@ -133,3 +148,59 @@ def test_foto_subida_se_ve_en_la_ficha(page, errores_js):
     expect(foto).to_have_attribute('src', re.compile(r'^/fotos/'))
     expect(foto).to_have_js_property('naturalWidth', 40)
 
+
+def _solicitud_pendiente(app_e2e, nombre_mascota):
+    """Una mascota nueva con una solicitud pendiente de la adoptante; devuelve su id."""
+    with app_e2e.app_context():
+        mascota = Mascota(nombre=nombre_mascota, especie='Perro', descripcion='Perro sociable con todo el mundo')
+        db.session.add(mascota)
+        db.session.flush()
+        adoptante = db.session.execute(db.select(Usuario).filter_by(email=ADOPTANTE[0])).scalar_one()
+        solicitud = Solicitud(adoptante.id, mascota.id)
+        db.session.add(solicitud)
+        db.session.commit()
+        return solicitud.id
+
+
+def test_aprobar_cancelado_no_bloquea_y_el_doble_clic_envia_una_vez(page, errores_js, app_e2e, retener):
+    """Cancelar la confirmación deja el formulario usable; aceptarla envía una sola vez."""
+    solicitud_id = _solicitud_pendiente(app_e2e, 'Bimba')
+    iniciar_sesion(page, *ADMIN)
+    retencion = retener(f'/solicitudes/admin/revisar/{solicitud_id}')
+    page.goto(f'/solicitudes/admin/revisar/{solicitud_id}')
+    registrar_envios(page)
+    aprobar = page.get_by_role('button', name='Aprobar solicitud')
+    formulario = page.get_by_role('form', name='Aprobar')
+    dialogos = []
+
+    page.once('dialog', lambda dialog: (dialogos.append(dialog.message), dialog.dismiss()))
+    aprobar.click()
+    expect(formulario).not_to_have_attribute('aria-busy', 'true')
+    assert retencion.recibidos == []
+
+    # El segundo clic llega con el formulario enviando: ni se confirma ni se envía
+    boton = aprobar.element_handle()
+    page.on('dialog', lambda dialog: (dialogos.append(dialog.message), dialog.accept()))
+    resultado = pulsar_seguido(formulario.element_handle(), boton, boton)
+
+    assert resultado == {'enviando': [True, True], 'envios': [True, False, True], 'deshabilitados': False}
+    assert len(dialogos) == 2
+    retencion.esperar()
+    retencion.soltar()
+    expect(page.get_by_text('Solicitud aprobada. Ana ha adoptado a Bimba.')).to_be_visible()
+    assert [envio['accion'] for envio in retencion.recibidos] == ['aprobar']
+
+
+def test_rechazar_sin_motivo_no_bloquea_el_formulario(page, errores_js, app_e2e):
+    """La validación HTML5 (motivo obligatorio) impide el envío y no deja el formulario «enviando»."""
+    solicitud_id = _solicitud_pendiente(app_e2e, 'Coco')
+    iniciar_sesion(page, *ADMIN)
+    page.goto(f'/solicitudes/admin/revisar/{solicitud_id}')
+    formulario = page.get_by_role('form', name='Rechazar')
+
+    page.get_by_role('button', name='Rechazar solicitud').click()
+    expect(formulario).not_to_have_attribute('aria-busy', 'true')
+
+    page.get_by_label('Motivo del rechazo').fill('Buscamos una casa con jardín')
+    page.get_by_role('button', name='Rechazar solicitud').click()
+    expect(page.get_by_text('Solicitud rechazada.')).to_be_visible()
