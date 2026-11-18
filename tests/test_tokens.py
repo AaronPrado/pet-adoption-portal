@@ -17,7 +17,9 @@ CSS = RAIZ / 'app' / 'static' / 'css'
 FUENTES = RAIZ / 'app' / 'static' / 'fonts'
 ARCHIVOS_CSS = ('sistema.css', 'marca.css')
 
-PROPIEDAD = re.compile(r'(--[\w-]+)\s*:\s*([^;}]+)')
+# El lookbehind evita confundir un modificador BEM (`.boton--primario:hover`)
+# con una custom property
+PROPIEDAD = re.compile(r'(?<![\w-])(--[\w-]+)\s*:\s*([^;}]+)')
 VAR = re.compile(r'^var\(\s*(--[\w-]+)\s*(?:,\s*(.+))?\)$')
 HEX = re.compile(r'^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$')
 
@@ -116,6 +118,11 @@ def test_resolver_sigue_var_y_valores_por_defecto():
 
 def test_extraer_quita_important():
     assert _extraer([('x.css', ':root { --a: #fff !important; }')]) == {'--a': '#fff'}
+
+
+def test_extraer_ignora_modificadores_bem():
+    css = ':root { --a: #fff; } .boton--a:hover { color: var(--a); }'
+    assert _extraer([('x.css', css)]) == {'--a': '#fff'}
 
 
 def test_extraer_detecta_redefiniciones():
