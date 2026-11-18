@@ -1,0 +1,184 @@
+{#
+  Componentes del sistema de diseño (ADR-0002). Uso en docs/ARQUITECTURA.md
+  («Macros de componentes»).
+
+    {% import "macros/componentes.html" as c %}
+
+  Todo el contenido pasa por el escape de Jinja. Las clases son las de la
+  capa `componentes` de sistema.css, no las de Bootstrap. Las URLs que
+  reciben pasan por `url_segura` (app/enlaces.py): rutas propias, http,
+  https o mailto; con cualquier otra (javascript:, //otro.sitio...) el enlace
+  no se pinta.
+#}
+
+{% set VARIANTES_BOTON = ('primario', 'secundario', 'peligro') %}
+
+{# Tono de cada estado guardado; cualquier otro va en neutro. Las etiquetas
+   salen de app/models.py (ETIQUETAS_ESTADO). #}
+{% set TONOS_ESTADO = {
+  'mascota': {'disponible': 'exito', 'en_proceso': 'aviso', 'adoptado': 'info'},
+  'solicitud': {'pendiente': 'aviso', 'aprobada': 'exito', 'rechazada': 'error'},
+} %}
+
+{% macro _nivel(nivel) -%}
+  {{- nivel if nivel in (2, 3, 4, 5, 6) else 2 -}}
+{%- endmacro %}
+
+{#
+  Enlace con aspecto de botón (P-15): mismas clases que `boton` de
+  formulario.html. Para navegar; una acción que cambia datos es un `boton`
+  dentro de un formulario POST. variante: primario, secundario o peligro.
+#}
+{% macro enlace_boton(texto, url, variante='primario') -%}
+  {%- set variante = variante if variante in VARIANTES_BOTON else 'primario' -%}
+  {%- set href = url|url_segura -%}
+  {%- if href -%}
+<a class="boton boton--{{ variante }}" href="{{ href }}">{{ texto }}</a>
+  {%- endif -%}
+{%- endmacro %}
+
+{#
+  Estado con texto, no solo color: el punto es decorativo. tipo: mascota o
+  solicitud. Un estado desconocido se muestra tal cual, en neutro.
+#}
+{% macro badge_estado(estado, tipo='mascota') -%}
+  {%- set tono = TONOS_ESTADO.get(tipo, {}).get(estado, 'neutro') -%}
+<span class="chapa chapa--{{ tono }}"><span class="chapa__punto" aria-hidden="true"></span>{{ etiqueta_estado(estado, tipo) }}</span>
+{%- endmacro %}
+
+{#
+  Cabecera de página: enlace de volver opcional encima, h1, entradilla
+  opcional y, con {% call %}, un hueco para acciones (enlace_boton, boton).
+  `volver_texto` dice adónde vuelve («Volver al catálogo»): fuera de contexto,
+  «Volver» no se entiende en la lista de enlaces de un lector de pantalla.
+#}
+{% macro cabecera_pagina(titulo, entradilla=none, volver_url=none, volver_texto='Volver') -%}
+<header class="cabecera-pagina">
+  {%- set volver_href = volver_url|url_segura %}
+  {%- if volver_href %}
+  <a class="cabecera-pagina__volver" href="{{ volver_href }}">{{ volver_texto }}</a>
+  {%- endif %}
+  <div class="cabecera-pagina__texto">
+    <h1>{{ titulo }}</h1>
+    {%- if entradilla %}
+    <p class="cabecera-pagina__entradilla">{{ entradilla }}</p>
+    {%- endif %}
+  </div>
+  {%- if caller is defined %}
+  <div class="cabecera-pagina__acciones">{{ caller() }}</div>
+  {%- endif %}
+</header>
+{%- endmacro %}
+
+{#
+  Tarjeta de una mascota (P-19). Va en una `ul.rejilla-tarjetas`, una por
+  `li`. Toda la tarjeta es pulsable a través de su único enlace.
+  - nivel: del título (2-6), según la jerarquía de la página.
+  - diferida: false en la primera fila (la que se ve sin desplazar), para no
+    retrasar el LCP.
+  - sizes: ancho con el que se pinta la foto en la rejilla.
+#}
+{% macro tarjeta_mascota(mascota, nivel=2, diferida=true,
+                         sizes='(min-width: 72rem) 22rem, (min-width: 36rem) 50vw, 100vw') -%}
+  {%- set h = 'h' ~ _nivel(nivel) -%}
+  {%- set id_titulo = 'mascota-' ~ mascota.id ~ '-nombre' -%}
+  {%- set edad = mascota.edad_aprox -%}
+<article class="tarjeta-mascota" aria-labelledby="{{ id_titulo }}">
+  <div class="tarjeta-mascota__cuerpo">
+    <{{ h }} id="{{ id_titulo }}" class="tarjeta-mascota__nombre">{{ mascota.nombre }}</{{ h }}>
+    {{ badge_estado(mascota.estado) }}
+    <ul class="tarjeta-mascota__datos">
+      <li>{{ mascota.especie }}</li>
+      {%- if mascota.raza %}<li>{{ mascota.raza }}</li>{% endif %}
+      {%- if edad is not none %}<li>{{ 'Menos de 1 año' if edad == 0 else edad ~ (' año' if edad == 1 else ' años') }}</li>{% endif %}
+      {%- if mascota.tamano %}<li>{{ mascota.tamano }}</li>{% endif %}
+    </ul>
+    <a class="boton boton--secundario tarjeta-mascota__enlace"
+       href="{{ url_for('mascotas.detalle', mascota_id=mascota.id) }}">Ver a {{ mascota.nombre }}</a>
+  </div>
+  {%- if mascota.foto_url %}
+  {%- set srcset = mascota.foto_url|srcset_foto %}
+  <img class="tarjeta-mascota__foto" src="{{ mascota.foto_url }}"
+       {%- if srcset %} srcset="{{ srcset }}" sizes="{{ sizes }}"{% endif %}
+       width="800" height="600" alt="Foto de {{ mascota.nombre }}, {{ mascota.especie|lower }}" decoding="async"
+       {%- if diferida %} loading="lazy"{% else %} fetchpriority="high"{% endif %}>
+  {%- else %}
+  <div class="tarjeta-mascota__foto tarjeta-mascota__foto--vacia" role="img"
+       aria-label="{{ mascota.nombre }} todavía no tiene foto">
+    <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" width="48" height="48" fill="currentColor">
+      <ellipse cx="6" cy="9" rx="2" ry="2.6"/><ellipse cx="10" cy="5.5" rx="2" ry="2.6"/>
+      <ellipse cx="14" cy="5.5" rx="2" ry="2.6"/><ellipse cx="18" cy="9" rx="2" ry="2.6"/>
+      <path d="M12 11c-3 0-6 4.2-6 6.6 0 1.6 1.3 2.4 2.8 2.4 1.3 0 2.1-.7 3.2-.7s1.9.7 3.2.7c1.5 0 2.8-.8 2.8-2.4 0-2.4-3-6.6-6-6.6z"/>
+    </svg>
+  </div>
+  {%- endif %}
+</article>
+{%- endmacro %}
+
+{#
+  Tabla accesible para los listados (P-23), dentro de una región desplazable
+  con nombre y tabindex="0" para recorrerla con el teclado en el móvil.
+  - id: prefijo único; el caption es `<id>-titulo` y nombra la región.
+  - columnas: dicts con `titulo` y, opcionales, `clave` (parámetro de orden),
+    `ordenable`, `numerica` (alineada a la derecha y con cifras tabulares) y
+    `oculto` (título solo para lectores de pantalla, p. ej. «Acciones»).
+  - orden: (clave, 'asc'|'desc') de la columna ordenada, que lleva aria-sort.
+  - endpoint: con él, las cabeceras ordenables enlazan a `?orden=&dir=`
+    (url_orden: conserva los filtros y vuelve a la primera página). Su
+    nombre accesible dice qué hará el clic: «Nombre, ordenar ascendente».
+  - Las filas van en {% call %}: `<tr>` con la primera celda como
+    `<th scope="row">` y `class="tabla__columna--numerica"` en las numéricas.
+    Sin filas, se pinta `vacia`.
+#}
+{% macro tabla(id, caption, columnas, orden=none, endpoint=none, vacia='No hay resultados.',
+               caption_oculto=false) -%}
+  {%- set filas = caller() if caller is defined else '' -%}
+  {%- set clave_orden, dir_orden = orden if orden else (none, none) -%}
+<div class="tabla" role="region" aria-labelledby="{{ id }}-titulo" tabindex="0">
+  <table class="tabla__tabla">
+    <caption id="{{ id }}-titulo"{% if caption_oculto %} class="visualmente-oculto"{% endif %}>{{ caption }}</caption>
+    <thead>
+      <tr>
+        {%- for col in columnas %}
+        {%- set activa = col.clave and col.clave == clave_orden %}
+        <th scope="col"
+          {%- if col.numerica %} class="tabla__columna--numerica"{% endif %}
+          {%- if activa %} aria-sort="{{ 'descending' if dir_orden == 'desc' else 'ascending' }}"{% endif %}>
+          {%- if col.oculto -%}
+          <span class="visualmente-oculto">{{ col.titulo }}</span>
+          {%- elif col.ordenable and endpoint -%}
+          {%- set siguiente = 'desc' if activa and dir_orden != 'desc' else 'asc' -%}
+          <a class="tabla__ordenar" href="{{ url_orden(endpoint, col.clave, siguiente) }}">{{ col.titulo }}
+            {#- #}<span class="tabla__orden" aria-hidden="true">{{ ('▼' if dir_orden == 'desc' else '▲') if activa else '⇅' }}</span>
+            {#- #}<span class="visualmente-oculto">, ordenar {{ 'descendente' if siguiente == 'desc' else 'ascendente' }}</span></a>
+          {%- else -%}
+          {{ col.titulo }}
+          {%- endif -%}
+        </th>
+        {%- endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {%- if filas|trim %}
+      {{ filas }}
+      {%- else %}
+      <tr><td class="tabla__vacia" colspan="{{ columnas|length }}">{{ vacia }}</td></tr>
+      {%- endif %}
+    </tbody>
+  </table>
+</div>
+{%- endmacro %}
+
+{# Lista o búsqueda sin resultados: título, texto y una acción opcional. #}
+{% macro estado_vacio(titulo, texto=none, accion_url=none, accion_texto=none, nivel=2) -%}
+  {%- set h = 'h' ~ _nivel(nivel) -%}
+<div class="estado-vacio">
+  <{{ h }} class="estado-vacio__titulo">{{ titulo }}</{{ h }}>
+  {%- if texto %}
+  <p>{{ texto }}</p>
+  {%- endif %}
+  {%- if accion_url|url_segura and accion_texto %}
+  {{ enlace_boton(accion_texto, accion_url, 'secundario') }}
+  {%- endif %}
+</div>
+{%- endmacro %}

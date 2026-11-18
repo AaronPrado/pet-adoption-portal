@@ -146,6 +146,13 @@ def create_app(config_name='default'):
     # srcset de las variantes de una foto propia ('' para las URLs externas)
     from app.fotos import srcset_foto
     app.add_template_filter(srcset_foto)
+    # Etiqueta legible de un estado (macro badge_estado)
+    from app.models import etiqueta_estado
+    app.add_template_global(etiqueta_estado)
+    # Enlaces de orden de la macro tabla y href admitidos en las macros
+    from app.enlaces import url_orden, url_segura
+    app.add_template_global(url_orden)
+    app.add_template_filter(url_segura)
 
     # La API se autentica con JWT en la cabecera Authorization (no con cookies),
     # por lo que no necesita token CSRF

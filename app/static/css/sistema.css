@@ -124,6 +124,9 @@
     --interlineado-titulos: 1.15;
     --medida-texto: 68ch;
 
+    /* Ancho mínimo de una tarjeta en la rejilla: 1 columna a 375 px y 3 a 1280 */
+    --ancho-tarjeta-min: 16rem;
+
     /* Espaciado: múltiplos de 4 px */
     --esp-1: 0.25rem;
     --esp-2: 0.5rem;
@@ -222,7 +225,8 @@
 }
 
 @layer componentes {
-  /* Formularios: macros/formulario.html (B3.3). Componentes en B3.4. */
+  /* Formularios: macros/formulario.html (B3.3). Componentes:
+     macros/componentes.html (B3.4), al final de esta capa. */
 
   .campo {
     display: grid;
@@ -469,6 +473,268 @@
   .aviso--info { background-color: var(--color-info-suave); border-color: var(--color-info); }
   .aviso--aviso { background-color: var(--color-aviso-suave); border-color: var(--color-aviso); }
   .aviso--error { background-color: var(--color-error-suave); border-color: var(--color-error); }
+
+  /* --- Componentes: macros/componentes.html (B3.4) --- */
+
+  /* Chapa de estado: texto y punto, con el color de apoyo (DIS-10) */
+  .chapa {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--esp-1);
+    padding: var(--esp-1) var(--esp-2);
+    font-size: var(--texto-xs);
+    font-weight: var(--peso-fuerte);
+    line-height: var(--interlineado-titulos);
+    border: 1px solid currentColor;
+    border-radius: var(--radio-total);
+    white-space: nowrap;
+  }
+
+  .chapa__punto {
+    width: 0.5em;
+    height: 0.5em;
+    background-color: currentColor;
+    border-radius: var(--radio-total);
+  }
+
+  .chapa--exito { color: var(--color-exito); background-color: var(--color-exito-suave); }
+  .chapa--aviso { color: var(--color-aviso); background-color: var(--color-aviso-suave); }
+  .chapa--error { color: var(--color-error); background-color: var(--color-error-suave); }
+  .chapa--info { color: var(--color-info); background-color: var(--color-info-suave); }
+  .chapa--neutro { color: var(--color-texto-suave); background-color: var(--color-fondo); }
+
+  /* Rejilla de tarjetas: columnas que llenan el contenedor (DIS-11, QA-13) */
+  .rejilla-tarjetas {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(var(--ancho-tarjeta-min), 100%), 1fr));
+    gap: var(--esp-5);
+    padding: 0;
+    list-style: none;
+  }
+
+  .rejilla-tarjetas > li {
+    display: grid;
+  }
+
+  /* Tarjeta de mascota (DIS-05, DIS-07): la foto va arriba aunque el título
+     vaya antes en el HTML, y el enlace queda al pie en todas las tarjetas */
+  .tarjeta-mascota {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background-color: var(--color-superficie);
+    border-radius: var(--radio-md);
+    box-shadow: var(--sombra-1);
+    transition: box-shadow var(--transicion);
+  }
+
+  .tarjeta-mascota:hover,
+  .tarjeta-mascota:focus-within {
+    box-shadow: var(--sombra-2);
+  }
+
+  .tarjeta-mascota__foto {
+    order: -1;
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    object-fit: cover;
+    background-color: var(--color-acento-suave);
+  }
+
+  .tarjeta-mascota__foto--vacia {
+    display: grid;
+    place-items: center;
+    color: var(--color-acento);
+  }
+
+  .tarjeta-mascota__cuerpo {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--esp-2);
+    padding: var(--esp-4);
+  }
+
+  .tarjeta-mascota__nombre {
+    font-size: var(--texto-lg);
+  }
+
+  /* Por encima del ::after del enlace: el texto se puede seleccionar */
+  .tarjeta-mascota__nombre,
+  .tarjeta-mascota__datos {
+    position: relative;
+    z-index: 1;
+  }
+
+  .tarjeta-mascota__datos {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--esp-1) var(--esp-2);
+    padding: 0;
+    list-style: none;
+    color: var(--color-texto-suave);
+  }
+
+  .tarjeta-mascota__datos li + li::before {
+    content: "·" / "";
+    margin-inline-end: var(--esp-2);
+  }
+
+  .tarjeta-mascota__enlace {
+    margin-block-start: auto;
+  }
+
+  /* Toda la tarjeta es objetivo del único enlace */
+  .tarjeta-mascota__enlace::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+  }
+
+  /* Foco de tarjeta completa; sin :has queda el foco del propio enlace */
+  .tarjeta-mascota:has(:focus-visible) {
+    outline: var(--foco-anillo);
+    outline-offset: var(--foco-separacion);
+  }
+
+  @supports selector(:has(*)) {
+    .tarjeta-mascota__enlace:focus-visible {
+      outline: none;
+    }
+  }
+
+  /* Cabecera de página (DIS-09): título a la izquierda y acciones a su
+     derecha; en móvil, las acciones bajan y ocupan el ancho (DIS-14) */
+  .cabecera-pagina {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: var(--esp-3) var(--esp-5);
+    margin-block-end: var(--esp-6);
+  }
+
+  .cabecera-pagina__volver {
+    flex-basis: 100%;
+  }
+
+  .cabecera-pagina__volver::before {
+    content: "← " / "";
+  }
+
+  .cabecera-pagina__texto {
+    flex: 1 1 20rem;
+    display: grid;
+    gap: var(--esp-2);
+  }
+
+  .cabecera-pagina__entradilla {
+    font-size: var(--texto-md);
+    color: var(--color-texto-suave);
+  }
+
+  .cabecera-pagina__acciones {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--esp-3);
+  }
+
+  @media (max-width: 40rem) {
+    .cabecera-pagina__acciones {
+      flex-basis: 100%;
+    }
+
+    .cabecera-pagina__acciones > .boton {
+      flex: 1;
+    }
+  }
+
+  /* Tabla en una región desplazable (P-23, DIS-12) */
+  .tabla {
+    overflow-x: auto;
+    background-color: var(--color-superficie);
+    border: 1px solid var(--color-borde);
+    border-radius: var(--radio-md);
+  }
+
+  .tabla__tabla {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .tabla__tabla caption {
+    padding: var(--esp-3) var(--esp-4);
+    font-weight: var(--peso-fuerte);
+    text-align: start;
+  }
+
+  .tabla__tabla th,
+  .tabla__tabla td {
+    padding: var(--esp-3) var(--esp-4);
+    text-align: start;
+    vertical-align: middle;
+    border-block-start: 1px solid var(--color-borde);
+  }
+
+  .tabla__tabla thead th {
+    font-size: var(--texto-sm);
+    color: var(--color-texto-suave);
+    white-space: nowrap;
+    background-color: var(--color-fondo);
+  }
+
+  .tabla__tabla tbody tr:hover {
+    background-color: var(--color-acento-suave);
+  }
+
+  .tabla__tabla .tabla__columna--numerica {
+    text-align: end;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .tabla__ordenar {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--esp-1);
+    min-height: var(--objetivo-min);
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .tabla__ordenar:hover {
+    color: var(--color-texto);
+    text-decoration: underline;
+  }
+
+  /* Sin opacidad: hereda --color-texto-suave (≥ 3:1). La columna activa se
+     distingue por la flecha (▲/▼ frente a ⇅) */
+  .tabla__orden {
+    font-size: var(--texto-xs);
+  }
+
+  .tabla__tabla .tabla__vacia {
+    padding-block: var(--esp-6);
+    text-align: center;
+    color: var(--color-texto-suave);
+  }
+
+  /* Estado vacío: listado o búsqueda sin resultados */
+  .estado-vacio {
+    display: grid;
+    justify-items: center;
+    gap: var(--esp-3);
+    padding: var(--esp-7) var(--esp-5);
+    text-align: center;
+    background-color: var(--color-superficie);
+    border: 1px dashed var(--color-borde-control);
+    border-radius: var(--radio-md);
+  }
+
+  .estado-vacio__titulo {
+    font-size: var(--texto-lg);
+  }
 }
 
 @layer utilidades {

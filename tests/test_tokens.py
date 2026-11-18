@@ -257,7 +257,8 @@ def test_foco_visible_en_controles_y_botones():
         assert any('outline-offset: var(--foco-separacion)' in c for c in cuerpos), selector
 
 
-@pytest.mark.parametrize('selector', ['.campo__control', '.boton', '.opcion', '.opcion__etiqueta'])
+@pytest.mark.parametrize('selector', ['.campo__control', '.boton', '.opcion', '.opcion__etiqueta',
+                                      '.tabla__ordenar'])
 def test_objetivos_tactiles_minimos(selector):
     """Controles y botones de al menos --objetivo-min (WCAG 2.5.8)."""
     cuerpos = _cuerpos(_capa(_leer('sistema.css'), 'componentes'), selector)
