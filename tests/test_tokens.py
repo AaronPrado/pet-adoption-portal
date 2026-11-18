@@ -173,7 +173,7 @@ def test_texto_sobre_boton_de_acento(props, fondo):
     assert ratio >= 4.5, f'--color-sobre-acento sobre {fondo}: {ratio:.2f}:1'
 
 
-@pytest.mark.parametrize('texto', ['--color-texto', '--color-texto-suave', '--color-acento'])
+@pytest.mark.parametrize('texto', ['--color-texto', '--color-texto-suave', '--color-acento', '--color-acento-fuerte'])
 def test_texto_sobre_acento_suave(props, texto):
     """El fondo suave del acento (seleccionado, destacado) admite texto."""
     ratio = contraste(_resolver(props, texto), _resolver(props, '--color-acento-suave'))
@@ -221,6 +221,69 @@ def test_enlaces_subrayados():
     cuerpos = [cuerpo for selectores, cuerpo in _reglas(_leer('sistema.css')) if 'a' in selectores]
     assert cuerpos, 'No hay ninguna regla para el selector a'
     assert any(re.search(r'text-decoration(-line)?\s*:\s*underline', c) for c in cuerpos)
+
+
+def _capa(css, nombre):
+    """Contenido de una `@layer nombre { ... }`, con sus llaves anidadas."""
+    inicio = css.index(f'@layer {nombre} {{') + len(f'@layer {nombre} {{')
+    profundidad = 1
+    for i in range(inicio, len(css)):
+        profundidad += {'{': 1, '}': -1}.get(css[i], 0)
+        if profundidad == 0:
+            return css[inicio:i]
+    raise ValueError(f'Capa {nombre} sin cerrar')
+
+
+def _cuerpos(css, selector):
+    """Cuerpos de las reglas cuya lista de selectores incluye `selector`."""
+    return [cuerpo for selectores, cuerpo in _reglas(css) if selector in selectores]
+
+
+def test_componentes_solo_usan_tokens_de_color():
+    """La capa componentes no escribe colores a mano: todo sale de los tokens (ADR-0002)."""
+    componentes = _capa(_leer('sistema.css'), 'componentes')
+    assert componentes.strip(), 'La capa componentes está vacía'
+    assert not re.search(r'#[0-9a-fA-F]{3,8}\b|\b(rgb|hsl|oklch)a?\(', componentes)
+    assert not PROPIEDAD.search(componentes), 'Los tokens se definen en la capa tokens'
+
+
+def test_foco_visible_en_controles_y_botones():
+    """Anillo de foco con el token en enlaces, botones y campos (P-17)."""
+    base = _capa(_leer('sistema.css'), 'base')
+    for selector in ('a:focus-visible', 'button:focus-visible', 'input:focus-visible',
+                     'select:focus-visible', 'textarea:focus-visible'):
+        cuerpos = _cuerpos(base, selector)
+        assert any('outline: var(--foco-anillo)' in c for c in cuerpos), selector
+        assert any('outline-offset: var(--foco-separacion)' in c for c in cuerpos), selector
+
+
+@pytest.mark.parametrize('selector', ['.campo__control', '.boton', '.opcion', '.opcion__etiqueta'])
+def test_objetivos_tactiles_minimos(selector):
+    """Controles y botones de al menos --objetivo-min (WCAG 2.5.8)."""
+    cuerpos = _cuerpos(_capa(_leer('sistema.css'), 'componentes'), selector)
+    assert any('min-height: var(--objetivo-min)' in c for c in cuerpos), selector
+
+
+@pytest.mark.parametrize('selector', [
+    '.boton--primario:hover', '.boton--secundario:hover', '.boton--peligro:hover', '.boton:active',
+    '.boton:disabled', '.boton[aria-disabled="true"]', 'form[aria-busy="true"]',
+    '.campo__control:disabled', '.campo__control[aria-invalid="true"]',
+])
+def test_estados_de_interaccion(selector):
+    """Hover, pulsado, deshabilitado, enviando e inválido tienen estilo propio (P-20)."""
+    assert _cuerpos(_capa(_leer('sistema.css'), 'componentes'), selector), selector
+
+
+@pytest.mark.parametrize('clase', ['.visualmente-oculto', '.visually-hidden'])
+def test_utilidad_visualmente_oculto(clase):
+    """La región «Enviando…» de app.js usa .visually-hidden: tiene que existir sin Bootstrap."""
+    cuerpos = _cuerpos(_capa(_leer('sistema.css'), 'utilidades'), clase)
+    assert any('clip-path: inset(50%)' in c for c in cuerpos), clase
+
+
+def test_capa_sin_cerrar():
+    with pytest.raises(ValueError):
+        _capa('@layer x { a { b: c; }', 'x')
 
 
 # --- Fuentes autoalojadas ----------------------------------------------------
