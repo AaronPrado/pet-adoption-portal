@@ -205,14 +205,277 @@
     color: var(--color-acento-fuerte);
     text-decoration-thickness: var(--enlace-grosor-hover);
   }
+
+  /* Foco visible en todo lo enfocable (P-17). Solo con teclado: el clic no
+     pinta el anillo. Bootstrap, mientras conviva, tiene que cargarse en una
+     @layer anterior o su `outline: 0` pisará esta regla. */
+  a:focus-visible,
+  button:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible,
+  summary:focus-visible,
+  [tabindex]:focus-visible {
+    outline: var(--foco-anillo);
+    outline-offset: var(--foco-separacion);
+  }
 }
 
 @layer componentes {
-  /* Llegan en B3.3 (formularios) y B3.4 (componentes). */
+  /* Formularios: macros/formulario.html (B3.3). Componentes en B3.4. */
+
+  .campo {
+    display: grid;
+    gap: var(--esp-1);
+    margin-block-end: var(--esp-5);
+  }
+
+  .campo__etiqueta,
+  .grupo-opciones__leyenda {
+    font-weight: var(--peso-fuerte);
+  }
+
+  .campo__obligatorio {
+    color: var(--color-error);
+  }
+
+  .campo__control {
+    width: 100%;
+    min-height: var(--objetivo-min);
+    padding: var(--esp-2) var(--esp-3);
+    background-color: var(--color-superficie);
+    border: 1px solid var(--color-borde-control);
+    border-radius: var(--radio-sm);
+    transition: border-color var(--transicion);
+  }
+
+  .campo__control::placeholder {
+    color: var(--color-placeholder);
+  }
+
+  .campo__control:hover {
+    border-color: var(--color-texto);
+  }
+
+  .campo__control:disabled {
+    color: var(--color-texto-deshabilitado);
+    background-color: var(--color-fondo);
+    border-color: var(--color-borde);
+    cursor: not-allowed;
+  }
+
+  textarea.campo__control {
+    resize: vertical;
+  }
+
+  /* El borde rojo acompaña al mensaje, que es lo que informa (WCAG 1.4.1) */
+  .campo__control[aria-invalid="true"] {
+    border-color: var(--color-error);
+    border-width: 2px;
+  }
+
+  .campo__ayuda {
+    font-size: var(--texto-sm);
+    color: var(--color-texto-suave);
+  }
+
+  .campo__error {
+    font-size: var(--texto-sm);
+    font-weight: var(--peso-fuerte);
+    color: var(--color-error);
+  }
+
+  .leyenda-obligatorios {
+    margin-block-end: var(--esp-4);
+    font-size: var(--texto-sm);
+    color: var(--color-texto-suave);
+  }
+
+  .grupo-opciones {
+    display: grid;
+    gap: var(--esp-1);
+    margin-block-end: var(--esp-5);
+    padding: 0;
+    border: 0;
+    min-width: 0;
+  }
+
+  .grupo-opciones__leyenda {
+    margin-block-end: var(--esp-1);
+    padding: 0;
+  }
+
+  /* Toda la fila es objetivo táctil: la etiqueta marca la opción */
+  .opcion {
+    display: flex;
+    align-items: center;
+    gap: var(--esp-2);
+    min-height: var(--objetivo-min);
+  }
+
+  .opcion__control {
+    flex: none;
+    width: 1.25rem;
+    height: 1.25rem;
+    accent-color: var(--color-acento);
+  }
+
+  .opcion__control[aria-invalid="true"] {
+    outline: 2px solid var(--color-error);
+    outline-offset: 1px;
+  }
+
+  .opcion__etiqueta {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    min-height: var(--objetivo-min);
+    cursor: pointer;
+  }
+
+  /* Botones: primario (acento), secundario (contorno) y peligro */
+  .boton {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--esp-2);
+    min-height: var(--objetivo-min);
+    min-width: var(--objetivo-min);
+    padding: var(--esp-2) var(--esp-5);
+    border: 2px solid transparent;
+    border-radius: var(--radio-sm);
+    font-weight: var(--peso-fuerte);
+    line-height: var(--interlineado-titulos);
+    text-decoration: none;
+    cursor: pointer;
+    transition: background-color var(--transicion), border-color var(--transicion), color var(--transicion);
+  }
+
+  .boton--primario {
+    color: var(--color-sobre-acento);
+    background-color: var(--color-acento);
+  }
+
+  .boton--primario:hover {
+    background-color: var(--color-acento-fuerte);
+  }
+
+  .boton--secundario {
+    color: var(--color-acento);
+    background-color: var(--color-superficie);
+    border-color: var(--color-acento);
+  }
+
+  .boton--secundario:hover {
+    color: var(--color-acento-fuerte);
+    background-color: var(--color-acento-suave);
+    border-color: var(--color-acento-fuerte);
+  }
+
+  .boton--peligro {
+    color: var(--color-error);
+    background-color: var(--color-superficie);
+    border-color: var(--color-error);
+  }
+
+  .boton--peligro:hover {
+    background-color: var(--color-error-suave);
+  }
+
+  /* Pulsado: se hunde un píxel y toma el tono fuerte */
+  .boton:active {
+    transform: translateY(1px);
+  }
+
+  .boton--primario:active {
+    background-color: var(--color-acento-fuerte);
+  }
+
+  .boton--secundario:active,
+  .boton--peligro:active {
+    border-color: currentColor;
+  }
+
+  .boton:disabled,
+  .boton[aria-disabled="true"] {
+    color: var(--color-texto-deshabilitado);
+    background-color: var(--color-fondo);
+    border-color: var(--color-borde);
+    transform: none;
+    cursor: not-allowed;
+  }
+
+  /* Envío en curso (app.js marca el formulario con aria-busy) */
+  form[aria-busy="true"] {
+    cursor: progress;
+  }
+
+  form[aria-busy="true"] .boton[type="submit"] {
+    cursor: progress;
+  }
+
+  form[aria-busy="true"] .boton[type="submit"]::after {
+    content: "";
+    width: 1em;
+    height: 1em;
+    border: 2px solid currentColor;
+    border-inline-end-color: transparent;
+    border-radius: var(--radio-total);
+    animation: girar 0.8s linear infinite;
+  }
+
+  @keyframes girar {
+    to { transform: rotate(360deg); }
+  }
+
+  .resumen-errores {
+    margin-block-end: var(--esp-5);
+    padding: var(--esp-4) var(--esp-5);
+    background-color: var(--color-error-suave);
+    border-inline-start: 4px solid var(--color-error);
+    border-radius: var(--radio-sm);
+  }
+
+  .resumen-errores__titulo {
+    margin-block-end: var(--esp-2);
+    font-size: var(--texto-md);
+  }
+
+  .resumen-errores__lista {
+    display: grid;
+    gap: var(--esp-1);
+    padding-inline-start: var(--esp-5);
+  }
+
+  .resumen-errores__lista a {
+    color: var(--color-error);
+  }
+
+  /* Mensajes flash: el color acompaña al texto, no lo sustituye */
+  .avisos {
+    display: grid;
+    gap: var(--esp-3);
+    margin-block-end: var(--esp-5);
+  }
+
+  .aviso {
+    padding: var(--esp-3) var(--esp-4);
+    color: var(--color-texto);
+    border-inline-start: 4px solid;
+    border-radius: var(--radio-sm);
+  }
+
+  .aviso--exito { background-color: var(--color-exito-suave); border-color: var(--color-exito); }
+  .aviso--info { background-color: var(--color-info-suave); border-color: var(--color-info); }
+  .aviso--aviso { background-color: var(--color-aviso-suave); border-color: var(--color-aviso); }
+  .aviso--error { background-color: var(--color-error-suave); border-color: var(--color-error); }
 }
 
 @layer utilidades {
+  /* .visually-hidden: el mismo nombre que Bootstrap, porque app.js la usa en
+     la región que anuncia «Enviando…» y tiene que seguir oculta sin él */
   .visualmente-oculto,
+  .visually-hidden,
   .visualmente-oculto-enfocable:not(:focus) {
     position: absolute;
     width: 1px;
