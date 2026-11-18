@@ -290,7 +290,8 @@ app/
 │
 └── static/
     ├── css/styles.css   # Todos los estilos propios (las plantillas no llevan `style=` ni `<style>`)
-    ├── js/app.js        # Confirmaciones `data-confirmar` y límite de tamaño de la foto (sin JavaScript inline)
+    ├── js/app.js        # Confirmaciones `data-confirmar`, límite de tamaño de la foto, doble envío
+    │                    # y foco en el resumen de errores (sin JavaScript inline)
     └── vendor/bootstrap/5.3.0/  # Bootstrap CSS y bundle JS con su LICENSE (ADR-0001), sin CDN
 
 config.py                # Configuración por entornos
@@ -332,6 +333,42 @@ El token CSRF no caduca por tiempo (`WTF_CSRF_TIME_LIMIT = None`): dura lo que
 la sesión, para que quien tarde en rellenar el cuestionario no pierda el envío.
 Por eso se renueva al iniciar sesión (formulario, registro y Google) y al
 cerrarla (`renovar_token_csrf()` en `app/routes/auth.py`).
+
+### Envío de formularios en `app.js`
+
+`app/static/js/app.js` actúa sobre todos los formularios de la web, sin
+cambiar las plantillas:
+
+- **Doble envío (P-20):** un formulario POST que se envía de verdad recibe
+  `aria-busy="true"` y sus envíos siguientes se cancelan antes de llegar a
+  `data-confirmar`, así que tampoco se repite la confirmación. No se
+  deshabilita ningún botón, para que llegue al servidor el `name`/`value` del
+  que envía. La marca se pone al final de la propagación (en `window`) y solo
+  si nadie canceló el evento: cancelar la confirmación no bloquea el
+  formulario. Si falla la validación HTML5 (campo obligatorio vacío, foto
+  mayor que `data-max-bytes`), el navegador no lanza el evento `submit` y
+  tampoco se bloquea. Los formularios GET y los que se abren en otra ventana
+  (`target`) no se tocan.
+- **Anuncio:** `aria-busy` no lo leen los lectores de pantalla. «Enviando…» se
+  escribe en una región `role="status"` con la clase `visually-hidden`, que
+  se crea vacía al cargar (una región viva tiene que existir antes de
+  cambiar). Un segundo intento se ignora, pero se vuelve a anunciar.
+- **Liberación:** si la respuesta no llega (red caída, envío detenido o una
+  descarga que no cambia de página), el formulario se libera a los 10 s
+  (`LIBERAR_TRAS_MS`) para poder reintentar. Al volver con «Atrás» desde la
+  bfcache (`pageshow`) se libera enseguida.
+- **Foco:** si la página tiene un `[data-resumen-errores]` (con
+  `tabindex="-1"`), recibe el foco al cargar.
+
+Los e2e están en `tests/e2e/test_navegacion.py` y `test_admin.py`. Usan
+`/_pruebas/formulario`, una página en HTML plano que solo registra
+`tests/e2e/conftest.py`: `test_seguridad.py` comprueba que la app real da 404
+ahí. La fixture `retener` deja en espera en el servidor los POST a una ruta,
+como un servidor lento, y avisa con un semáforo cuando llegan, sin sondear.
+Mientras hay un envío en marcha, Playwright espera a la navegación antes de
+cualquier acción o consulta. Por eso `pulsar_seguido` hace los clics y sus
+comprobaciones en una sola llamada a `evaluate`. La liberación por tiempo se
+prueba con `page.clock` y un envío cancelado (`route.abort`).
 
 ---
 
