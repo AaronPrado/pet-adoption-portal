@@ -111,3 +111,9 @@ class TestXSS:
         # El nombre ya no se interpola en JavaScript inline, solo en un atributo escapado
         assert 'onclick' not in html
         assert 'data-confirmar="¿Estás seguro de eliminar a x&#39;);alert(1);//?"' in html
+
+
+@pytest.mark.parametrize('metodo', ['get', 'post'])
+def test_la_pagina_de_prueba_de_los_e2e_no_existe_en_la_app(client, metodo):
+    """`/_pruebas/formulario` solo se registra en tests/e2e/conftest.py, nunca en la app real."""
+    assert getattr(client, metodo)('/_pruebas/formulario').status_code == 404
