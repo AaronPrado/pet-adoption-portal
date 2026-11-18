@@ -453,7 +453,7 @@ en B3.6 y, hasta entonces, la web sigue con `styles.css`.
   errores. La base pone el fondo, la tinta, los enlaces subrayados y el anillo
   `:focus-visible` (`--foco-anillo` separado `--foco-separacion`) en enlaces,
   botones, campos y todo lo que tenga `tabindex` (P-17). La capa `componentes`
-  tiene los formularios (abajo); los demás componentes llegan en B3.4.
+  tiene los formularios y los componentes (abajo).
 - `app/static/css/marca.css`, que se enlaza después, es el único archivo que
   cambia cada protectora: el acento (`--marca-acento`, `-fuerte` para hover,
   `-suave` para fondos destacados y `--marca-sobre-acento` para el texto de los
@@ -562,6 +562,108 @@ rellena y que el contenido se escapa; `tests/test_tokens.py`, que la capa
 `--objetivo-min`, los estados hover, active, disabled, `aria-busy` e
 inválido (P-20) y la utilidad `.visually-hidden` (el mismo nombre que en
 Bootstrap), que oculta la región «Enviando…» de `app.js`.
+
+### Macros de componentes
+
+`app/templates/macros/componentes.html` tiene el resto de piezas de las
+páginas, con su CSS al final de la capa `componentes`. Como las de
+formulario, ninguna página las usa todavía: se adoptan en las fases 4 y 5.
+
+```jinja
+{% import "macros/componentes.html" as c %}
+
+{% call c.cabecera_pagina('Mascotas', 'Altas, cambios y estados.', volver_url=url_for('index'),
+                          volver_texto='Volver a la portada') %}
+  {{ c.enlace_boton('Nueva mascota', url_for('mascotas.admin_nueva')) }}
+{% endcall %}
+
+{% if mascotas %}
+<ul class="rejilla-tarjetas">
+  {% for m in mascotas %}
+  <li>{{ c.tarjeta_mascota(m, diferida=loop.index > 3) }}</li>
+  {% endfor %}
+</ul>
+{% else %}
+{{ c.estado_vacio('No hay mascotas con esos filtros', 'Prueba a quitar alguno.',
+                  url_for('mascotas.catalogo'), 'Ver todas') }}
+{% endif %}
+
+{% call c.tabla('mascotas', 'Mascotas del refugio', columnas, orden=(orden_campo, orden_dir),
+                endpoint='mascotas.admin_lista', vacia='No hay mascotas.') %}
+  {% for m in mascotas %}
+  <tr>
+    <td class="tabla__columna--numerica">{{ m.id }}</td>
+    <th scope="row">{{ m.nombre }}</th>
+    <td>{{ c.badge_estado(m.estado) }}</td>
+  </tr>
+  {% endfor %}
+{% endcall %}
+```
+
+- **`tarjeta_mascota(mascota, nivel=2, diferida=true, sizes)`**: `article`
+  nombrado por su título (`h2` por defecto; `nivel` de 2 a 6), la chapa de
+  estado, los datos (especie, raza, edad y tamaño, los que haya) y un único
+  enlace «Ver a {nombre}», con aspecto de botón secundario, que hace pulsable
+  toda la tarjeta (el nombre y los datos quedan por encima, seleccionables, y
+  la tarjeta entera pinta el foco con `:has(:focus-visible)`). La foto lleva `width`/`height`, `srcset_foto` + `sizes`
+  (solo en fotos propias con variantes), `alt` «Foto de {nombre}, {especie}» y
+  `loading="lazy"`; con `diferida=false` (la primera fila) va sin `lazy` y con
+  `fetchpriority="high"`. Sin foto, un marcador propio (huella SVG con
+  `role="img"` y `aria-label`), sin imágenes de terceros. La foto va en una
+  proporción 4:3 con `object-fit: cover`, sin altos fijos (DIS-07), y las
+  tarjetas van en `ul.rejilla-tarjetas`, cuyas columnas llenan el contenedor
+  (`minmax(min(--ancho-tarjeta-min, 100%), 1fr)`, QA-13).
+- **`badge_estado(estado, tipo='mascota')`**: el estado con texto y un punto
+  decorativo; `tipo` es `mascota` o `solicitud`. Las etiquetas salen de
+  `ETIQUETAS_ESTADO` en `app/models.py` (la única fuente, a través del global
+  de Jinja `etiqueta_estado`), cuyas claves son los valores guardados. El tono
+  (`exito`, `aviso`, `error`, `info`) se decide en la macro; un estado
+  desconocido se muestra tal cual, escapado y en `neutro`.
+- **`cabecera_pagina(titulo, entradilla, volver_url, volver_texto)`**: `h1`,
+  entradilla opcional, enlace de volver encima (DIS-09) y, con `{% call %}`,
+  un hueco para acciones que en móvil baja y ocupa el ancho (DIS-14).
+  `volver_texto` tiene que decir adónde vuelve («Volver al catálogo»): un
+  «Volver» suelto no se entiende en la lista de enlaces de un lector de
+  pantalla.
+- **`tabla(id, caption, columnas, orden, endpoint, vacia, caption_oculto)`**:
+  región desplazable con `role="region"`, `aria-labelledby` hacia el
+  `caption` (`<id>-titulo`) y `tabindex="0"` (P-23); cabeceras con
+  `scope="col"`. Cada columna es un dict con `titulo` y, opcionales, `clave`,
+  `ordenable`, `numerica` (cifras tabulares a la derecha) y `oculto` (título
+  solo para lectores de pantalla). La columna de `orden=(clave, 'asc'|'desc')`
+  lleva `aria-sort`; con `endpoint`, las ordenables enlazan a `?orden=&dir=`
+  (los parámetros que ya usa el admin) y su nombre accesible dice qué hará el
+  clic («Nombre, ordenar ascendente»). La flecha es decorativa y sin
+  opacidad, para no bajar de 3:1. Las filas van en `{% call %}`, con la celda que identifica
+  la fila como `<th scope="row">`; sin filas se pinta `vacia`.
+- **`estado_vacio(titulo, texto, accion_url, accion_texto, nivel=2)`**:
+  título, texto y una acción secundaria opcional.
+- **`enlace_boton(texto, url, variante)`** (P-15): un `<a>` con las clases de
+  `boton`, para que las llamadas a la acción que navegan midan y pesen lo
+  mismo que los botones. Lo que cambia datos sigue siendo un `boton` en un
+  formulario POST.
+
+**URLs de las macros (`app/enlaces.py`).**
+- `url_orden(endpoint, clave, direccion)`, global de Jinja, construye en
+  Python los enlaces de orden de `tabla`. Conserva los filtros de la
+  petición, también los repetidos (`request.args.lists()`), quita `page`
+  (vuelve a la primera página) y descarta las claves que empiezan por `_`
+  (`_external`, `_scheme`, `_anchor`...) y `endpoint`, que chocan con
+  `url_for`: `?endpoint=1` daba un 500.
+- El filtro `url_segura` valida `enlace_boton`, `volver_url` y `accion_url`.
+  Solo admite rutas propias (`/...`, pero no `//` ni `/\`) y `http:`,
+  `https:` y `mailto:`, sin distinguir mayúsculas ni tener en cuenta los
+  espacios y controles que el navegador ignora (`java\tscript:`). Con
+  cualquier otra URL devuelve `''` y **la macro no pinta el enlace**: un `#`
+  dejaría un enlace muerto que parece funcionar.
+
+`tests/test_macros_componentes.py` renderiza cada macro y comprueba sus
+atributos de accesibilidad, el escape y los casos límite (sin foto, nombre
+con caracteres especiales, tabla vacía, estado desconocido), que
+`ETIQUETAS_ESTADO` cubre los valores del CHECK de cada tabla y las reglas
+clave del CSS (rejilla, proporción de la foto, tonos de chapa, foco de la
+tarjeta). `tests/test_enlaces.py` cubre `url_orden` y `url_segura`, con una
+petición real a una página con la tabla y `?endpoint=1`.
 
 ---
 
