@@ -11,12 +11,16 @@ from pathlib import Path
 import pytest
 
 RAIZ_APP = Path(__file__).resolve().parent.parent / 'app'
-BASE_HTML = RAIZ_APP / 'templates' / 'base.html'
+
+BASE_BOOTSTRAP = RAIZ_APP / 'templates' / 'base_bootstrap.html'
+# Bases que se comprueban: sin terceros ni crossorigin
+BASES = [BASE_BOOTSTRAP]
 FICHEROS_BOOTSTRAP = ['bootstrap.min.css', 'bootstrap.bundle.min.js']
 
 
 def _texto_base():
-    return BASE_HTML.read_text(encoding='utf-8')
+    """La base con Bootstrap vendorizado, la única que lo carga (ADR-0001)."""
+    return BASE_BOOTSTRAP.read_text(encoding='utf-8')
 
 
 def _etiquetas_recurso(texto):
@@ -25,33 +29,35 @@ def _etiquetas_recurso(texto):
 
 def _ruta_vendor(texto, fichero):
     """Ruta dentro de static/ (vendor/bootstrap/<versión>/<fichero>) que
-    base.html pasa a url_for, o None si no lo carga desde ahí."""
+    base_bootstrap.html pasa a url_for, o None si no lo carga desde ahí."""
     patron = rf"filename='(vendor/bootstrap/[^/']+/{re.escape(fichero)})'"
     coincidencia = re.search(patron, texto)
     return coincidencia.group(1) if coincidencia else None
 
 
-def test_base_no_referencia_cdn():
-    """base.html carga CSS y JS solo desde /static (sin URL absolutas)."""
-    texto = _texto_base()
+@pytest.mark.parametrize('base', BASES, ids=lambda ruta: ruta.name)
+def test_base_no_referencia_cdn(base):
+    """Las bases cargan CSS y JS solo desde /static (sin URL absolutas)."""
+    texto = base.read_text(encoding='utf-8')
     externos = [
         e for e in _etiquetas_recurso(texto)
         if re.search(r'(?:href|src)\s*=\s*["\'](?:https?:)?//', e)
     ]
-    assert not externos, f'base.html carga recursos de terceros: {externos}'
+    assert not externos, f'{base.name} carga recursos de terceros: {externos}'
     assert 'jsdelivr' not in texto
 
 
-def test_base_sin_crossorigin():
+@pytest.mark.parametrize('base', BASES, ids=lambda ruta: ruta.name)
+def test_base_sin_crossorigin(base):
     """En el mismo origen crossorigin sobra para SRI."""
-    assert 'crossorigin' not in _texto_base()
+    assert 'crossorigin' not in base.read_text(encoding='utf-8')
 
 
 @pytest.mark.parametrize('fichero', FICHEROS_BOOTSTRAP)
 def test_bootstrap_vendorizado_coincide_con_su_sri(fichero):
-    """El hash SRI de base.html coincide con el fichero al que apunta."""
+    """El hash SRI de base_bootstrap.html coincide con el fichero al que apunta."""
     etiqueta = next((e for e in _etiquetas_recurso(_texto_base()) if fichero in e), None)
-    assert etiqueta, f'base.html no carga {fichero}'
+    assert etiqueta, f'base_bootstrap.html no carga {fichero}'
     ruta = _ruta_vendor(etiqueta, fichero)
     assert ruta, f'{fichero} no se sirve desde static/vendor/bootstrap/<versión>/'
     contenido = (RAIZ_APP / 'static' / ruta).read_bytes()
@@ -61,7 +67,7 @@ def test_bootstrap_vendorizado_coincide_con_su_sri(fichero):
 
 def test_bootstrap_vendorizado_con_licencia():
     ruta = _ruta_vendor(_texto_base(), 'bootstrap.min.css')
-    assert ruta, 'base.html no carga bootstrap.min.css desde static/vendor/'
+    assert ruta, 'base_bootstrap.html no carga bootstrap.min.css desde static/vendor/'
     licencia = (RAIZ_APP / 'static' / ruta).parent / 'LICENSE'
     assert 'MIT' in licencia.read_text(encoding='utf-8')
 

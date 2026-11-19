@@ -1,10 +1,11 @@
 """
 Páginas de error de la web.
 
-Todas renderizan errores/error.html, que extiende base.html (lang="es" y
-navegación), con su código de estado, un h1 en español y al menos una
-salida. Las rutas de /api/ conservan su respuesta: devolver la propia
-excepción deja que Werkzeug o flask-restx la formateen ({"error": ...}).
+Todas renderizan errores/error.html, que extiende base_bootstrap.html
+(lang="es" y navegación), con su código de estado, un h1 en español y al
+menos una salida. Las rutas de /api/ conservan su respuesta: devolver la
+propia excepción deja que Werkzeug o flask-restx la formateen
+({"error": ...}).
 """
 
 import math
@@ -19,8 +20,8 @@ from markupsafe import escape
 from app import db, limiter
 from app.routes.auth import es_redireccion_segura
 
-# Página de reserva si la plantilla de error también falla (p. ej. si la base
-# de datos no responde, base.html no puede cargar el usuario)
+# Página de reserva si la plantilla de error también falla (p. ej. si la
+# base de datos no responde, base_bootstrap.html no puede cargar el usuario)
 PAGINA_ERROR_MINIMA = (
     '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">'
     '<meta name="viewport" content="width=device-width, initial-scale=1">'
