@@ -9,6 +9,8 @@ import re
 import pytest
 from playwright.sync_api import expect
 
+from app import db
+from app.models import Usuario
 from tests.e2e.conftest import ADOPTANTE, iniciar_sesion, pulsar_seguido, registrar_envios
 
 pytestmark = pytest.mark.e2e
@@ -181,3 +183,155 @@ def test_pagina_404_con_salida(page, errores_js):
     expect(page.get_by_role('heading', name='No encontramos esta página')).to_be_visible()
     page.get_by_role('link', name='Ver mascotas disponibles').click()
     expect(page).to_have_url(re.compile(r'/mascotas/catalogo$'))
+
+
+# --- Base sin Bootstrap (base.html): de momento solo la usan las páginas de error ---
+
+def test_base_nueva_menu_movil_con_teclado(page, errores_js):
+    """A 375 px el menú se abre con Enter o Espacio y se cierra con Escape,
+    que devuelve el foco al botón. El primer Tab llega al salto al contenido."""
+    page.set_viewport_size({'width': 375, 'height': 800})
+    page.goto('/no-existe')
+    menu = page.get_by_role('button', name='Menú')
+    mascotas = page.get_by_role('link', name='Mascotas', exact=True)
+
+    page.keyboard.press('Tab')
+    salto = page.get_by_role('link', name='Saltar al contenido')
+    expect(salto).to_be_focused()
+    expect(salto).to_be_visible()
+    page.keyboard.press('Enter')
+    expect(page.get_by_role('main')).to_be_focused()
+
+    page.goto('/no-existe')
+    expect(menu).to_have_attribute('aria-expanded', 'false')
+    expect(mascotas).to_be_hidden()
+    menu.focus()
+    page.keyboard.press('Enter')
+    expect(menu).to_have_attribute('aria-expanded', 'true')
+    expect(mascotas).to_be_visible()
+    page.keyboard.press('Escape')
+    expect(mascotas).to_be_hidden()
+    expect(menu).to_be_focused()
+
+    page.keyboard.press('Space')
+    expect(mascotas).to_be_visible()
+    page.keyboard.press('Tab')
+    expect(page.get_by_role('link', name='Inicio', exact=True)).to_be_focused()
+    page.keyboard.press('Escape')
+    expect(menu).to_be_focused()
+    expect(menu).to_have_attribute('aria-expanded', 'false')
+
+    # Sin scroll horizontal ni a 320 px, con el menú abierto
+    page.set_viewport_size({'width': 320, 'height': 800})
+    menu.click()
+    expect(mascotas).to_be_visible()
+    assert page.evaluate('document.documentElement.scrollWidth') <= 320
+
+
+def test_base_nueva_sin_javascript(browser, base_url):
+    """Sin JS la navegación se ve abierta, sin botón de menú, y funciona."""
+    contexto = browser.new_context(java_script_enabled=False, base_url=base_url,
+                                   viewport={'width': 375, 'height': 800})
+    page = contexto.new_page()
+    try:
+        page.goto('/no-existe')
+
+        expect(page.get_by_role('button', name='Menú')).to_be_hidden()
+        for nombre in ('Inicio', 'Iniciar Sesión', 'Registrarse'):
+            expect(page.get_by_role('link', name=nombre, exact=True)).to_be_visible()
+        page.get_by_role('link', name='Mascotas', exact=True).click()
+        expect(page).to_have_url(re.compile(r'/mascotas/catalogo$'))
+    finally:
+        contexto.close()
+
+
+def test_base_nueva_desplegable_de_usuario(page, errores_js):
+    iniciar_sesion(page, *ADOPTANTE)
+    page.goto('/no-existe')
+    usuario = page.get_by_role('button', name='Ana')
+    mis_solicitudes = page.get_by_role('link', name='Mis Solicitudes')
+
+    expect(usuario).to_have_attribute('aria-expanded', 'false')
+    expect(mis_solicitudes).to_be_hidden()
+
+    # Clic fuera cierra
+    usuario.click()
+    expect(mis_solicitudes).to_be_visible()
+    page.get_by_role('heading', name='No encontramos esta página').click()
+    expect(mis_solicitudes).to_be_hidden()
+
+    # Escape cierra y devuelve el foco
+    usuario.focus()
+    page.keyboard.press('Enter')
+    page.keyboard.press('Tab')
+    expect(mis_solicitudes).to_be_focused()
+    page.keyboard.press('Escape')
+    expect(mis_solicitudes).to_be_hidden()
+    expect(usuario).to_be_focused()
+
+    # Si el foco sale del menú, se cierra
+    page.keyboard.press('Enter')
+    page.keyboard.press('Tab')
+    page.keyboard.press('Tab')
+    expect(page.get_by_role('button', name='Cerrar Sesión')).to_be_focused()
+    page.keyboard.press('Tab')
+    expect(mis_solicitudes).to_be_hidden()
+    expect(usuario).to_have_attribute('aria-expanded', 'false')
+
+    # Cerrar sesión por POST con su token CSRF
+    usuario.click()
+    page.get_by_role('button', name='Cerrar Sesión').click()
+    expect(page.get_by_text('Has cerrado sesión correctamente.')).to_be_visible()
+
+
+NOMBRE_LARGO = 'Maximilianaconunnombrelarguisimoquenocabeenningunapantalla'
+
+
+@pytest.fixture
+def usuario_de_nombre_largo(app_e2e):
+    """Un adoptante con un nombre sin espacios más ancho que la pantalla y una
+    marca igual de larga, para comprobar el reflow (WCAG 1.4.10)."""
+    email, clave = 'largo@e2e.test', 'clave-largo-e2e'
+    with app_e2e.app_context():
+        if not db.session.execute(db.select(Usuario).filter_by(email=email)).scalar():
+            db.session.add(Usuario(email=email, nombre=NOMBRE_LARGO, password=clave))
+            db.session.commit()
+    nombre_marca = app_e2e.config['MARCA_NOMBRE']
+    app_e2e.config['MARCA_NOMBRE'] = 'Asociación protectora de animales abandonados de la comarca'
+    yield email, clave
+    app_e2e.config['MARCA_NOMBRE'] = nombre_marca
+
+
+@pytest.mark.parametrize('ancho', [320, 800])
+def test_base_nueva_sin_scroll_horizontal_con_textos_largos(page, errores_js, usuario_de_nombre_largo, ancho):
+    iniciar_sesion(page, *usuario_de_nombre_largo)
+    page.set_viewport_size({'width': ancho, 'height': 800})
+    page.goto('/no-existe')
+
+    if ancho < 768:
+        page.get_by_role('button', name='Menú').click()
+    page.get_by_role('button', name=NOMBRE_LARGO).click()
+    expect(page.get_by_role('link', name='Mis Solicitudes')).to_be_visible()
+
+    assert page.evaluate('document.documentElement.scrollWidth') <= ancho
+
+
+def test_base_nueva_aria_controls_roto_no_da_errores(page, errores_js):
+    """Un desplegable cuyo aria-controls no existe se ignora sin errores de
+    JavaScript y el resto sigue funcionando."""
+    def con_id_roto(ruta):
+        respuesta = ruta.fetch()
+        html = respuesta.text().replace('aria-controls="menu-usuario"', 'aria-controls="no-existe"', 1)
+        ruta.fulfill(response=respuesta, body=html)
+
+    iniciar_sesion(page, *ADOPTANTE)
+    page.route('**/no-existe', con_id_roto)
+    page.goto('/no-existe')
+
+    page.get_by_role('button', name='Ana').click()
+    page.keyboard.press('Escape')
+    page.get_by_role('heading', name='No encontramos esta página').click()
+    page.set_viewport_size({'width': 375, 'height': 800})
+    menu = page.get_by_role('button', name='Menú')
+    menu.click()
+    expect(menu).to_have_attribute('aria-expanded', 'true')

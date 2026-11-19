@@ -26,7 +26,7 @@ def h1(html):
 
 def enlaces(html):
     """Pares (href, texto) de los enlaces de salida de la página de error."""
-    bloque = re.search(r'<div class="salidas-error[^"]*">(.*?)</div>', html, re.S).group(1)
+    bloque = re.search(r'<div class="cabecera-pagina__acciones">(.*?)</div>', html, re.S).group(1)
     return [(href, texto.strip()) for href, texto in re.findall(r'<a [^>]*href="([^"]*)"[^>]*>(.*?)</a>', bloque, re.S)]
 
 

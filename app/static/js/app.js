@@ -146,3 +146,66 @@ document.addEventListener('change', function (event) {
         campo.reportValidity();
     }
 });
+
+// Navegación de base.html: menú móvil y menú de usuario con el patrón
+// disclosure (un botón con aria-expanded y aria-controls). El HTML llega
+// cerrado y con-js.js ya ha marcado <html> con .con-js, que activa el CSS
+// que oculta el panel que sigue a un botón cerrado.
+function panelDe(boton) {
+    return document.getElementById(boton.getAttribute('aria-controls') || '');
+}
+
+// Un botón sin panel (aria-controls roto) se ignora
+var desplegables = Array.prototype.filter.call(document.querySelectorAll('[data-desplegable]'), panelDe);
+
+function estaAbierto(boton) {
+    return boton.getAttribute('aria-expanded') === 'true';
+}
+
+function contiene(boton, nodo) {
+    var panel = panelDe(boton);
+    return Boolean(nodo) && (boton.contains(nodo) || Boolean(panel && panel.contains(nodo)));
+}
+
+function abrir(boton, abierto) {
+    boton.setAttribute('aria-expanded', String(abierto));
+}
+
+desplegables.forEach(function (boton) {
+    boton.addEventListener('click', function () {
+        abrir(boton, !estaAbierto(boton));
+    });
+    // Se cierra cuando el foco sale del botón y de su panel (relatedTarget
+    // es null si la ventana pierde el foco: entonces se deja como está)
+    [boton, panelDe(boton)].forEach(function (zona) {
+        zona.addEventListener('focusout', function (event) {
+            if (event.relatedTarget && !contiene(boton, event.relatedTarget)) {
+                abrir(boton, false);
+            }
+        });
+    });
+});
+
+// Clic fuera: cierra los desplegables abiertos que no contienen el clic
+document.addEventListener('click', function (event) {
+    desplegables.forEach(function (boton) {
+        if (estaAbierto(boton) && !contiene(boton, event.target)) {
+            abrir(boton, false);
+        }
+    });
+});
+
+// Escape cierra el desplegable abierto más interno que tiene el foco (el de
+// usuario va dentro del menú móvil) y devuelve el foco a su botón
+document.addEventListener('keydown', function (event) {
+    if (event.key !== 'Escape') {
+        return;
+    }
+    var boton = desplegables.slice().reverse().filter(function (candidato) {
+        return estaAbierto(candidato) && contiene(candidato, document.activeElement);
+    })[0];
+    if (boton) {
+        abrir(boton, false);
+        boton.focus();
+    }
+});
