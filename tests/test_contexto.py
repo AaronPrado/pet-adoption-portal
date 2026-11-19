@@ -3,10 +3,13 @@ Tests de `app/contexto.py`:
 - `usuario_nav()`: el usuario que ven la navegación y las salidas de las
   páginas de error. Nunca lanza, para que un 500 con la base de datos caída
   no se quede sin página.
+- `contexto_marca`: la marca de la protectora y el año del pie.
 """
 
 import logging
+from datetime import UTC, datetime
 
+import pytest
 from flask_login import login_user
 
 from app import contexto, errores
@@ -75,3 +78,35 @@ def test_salidas_de_error_del_adoptante(app, usuario_adoptante):
         salidas = errores.resolver_salidas((errores.INICIAR_SESION, errores.MIS_SOLICITUDES))
 
     assert salidas == [('Ver mis solicitudes', '/solicitudes/mis-solicitudes')]
+
+
+# utcnow() devuelve UTC sin zona
+EN_2031 = datetime(2031, 5, 1, tzinfo=UTC).replace(tzinfo=None)
+
+
+class TestContextoDeMarca:
+
+    def test_valores_por_defecto(self, app, monkeypatch):
+        monkeypatch.setattr(contexto, 'utcnow', lambda: EN_2031)
+        with app.test_request_context('/'):
+            assert contexto.contexto_marca() == {
+                'marca_nombre': 'Portal de Adopción', 'marca_logo': '', 'marca_contacto': '',
+                'marca_credito': 'Desarrollado por Aarón Prado', 'anio_actual': 2031}
+
+    def test_logo_dentro_de_static(self, app):
+        app.config.update(MARCA_NOMBRE='Protectora Ejemplo', MARCA_LOGO='img/logo.svg',
+                          MARCA_CONTACTO='hola@protectora.example', MARCA_CREDITO='')
+        with app.test_request_context('/'):
+            marca = contexto.contexto_marca()
+        assert {clave: marca[clave] for clave in ('marca_nombre', 'marca_logo', 'marca_contacto', 'marca_credito')} == {
+            'marca_nombre': 'Protectora Ejemplo', 'marca_logo': '/static/img/logo.svg',
+            'marca_contacto': 'hola@protectora.example', 'marca_credito': ''}
+
+    @pytest.mark.parametrize('logo', ['https://cdn.example/logo.svg', '/logo.svg', 'javascript:alert(1)'])
+    def test_url_o_ruta_absoluta_se_deja_para_url_segura(self, app, logo):
+        app.config['MARCA_LOGO'] = logo
+        with app.test_request_context('/'):
+            assert contexto.contexto_marca()['marca_logo'] == logo
+
+    def test_registrado_en_la_factory(self, app):
+        assert contexto.contexto_marca in app.template_context_processors[None]

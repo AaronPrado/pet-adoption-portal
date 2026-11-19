@@ -153,6 +153,9 @@ def create_app(config_name='default'):
     from app.enlaces import url_orden, url_segura
     app.add_template_global(url_orden)
     app.add_template_filter(url_segura)
+    # Marca de la protectora y usuario de la navegación (base.html)
+    from app.contexto import registrar_contexto
+    registrar_contexto(app)
 
     # La API se autentica con JWT en la cabecera Authorization (no con cookies),
     # por lo que no necesita token CSRF
