@@ -13,11 +13,11 @@ import time
 from urllib.parse import urlsplit
 
 from flask import current_app, flash, redirect, render_template, request, url_for
-from flask_login import current_user
 from flask_wtf.csrf import CSRFError
 from markupsafe import escape
 
 from app import db, limiter
+from app.contexto import usuario_nav
 from app.routes.auth import es_redireccion_segura
 
 # Página de reserva si la plantilla de error también falla (p. ej. si la
@@ -37,12 +37,13 @@ MENSAJE_500 = (
 )
 
 
+# Las condiciones reciben el usuario de usuario_nav(): None si es anónimo
 def es_anonimo(usuario):
-    return not usuario.is_authenticated
+    return usuario is None
 
 
 def es_adoptante(usuario):
-    return usuario.is_authenticated and not usuario.is_admin()
+    return usuario is not None and not usuario.admin
 
 
 # Salidas: (texto, endpoint) o (texto, endpoint, condición sobre el usuario)
@@ -72,9 +73,13 @@ def es_peticion_api():
 
 
 def resolver_salidas(salidas):
-    """Convierte las salidas en pares (texto, url), quitando las que no aplican al usuario."""
+    """
+    Convierte las salidas en pares (texto, url), quitando las que no aplican
+    al usuario. Si no se puede cargar, se usan las de un anónimo.
+    """
+    usuario = usuario_nav()
     return [(texto, url_for(endpoint)) for texto, endpoint, *condicion in salidas
-            if not condicion or condicion[0](current_user)]
+            if not condicion or condicion[0](usuario)]
 
 
 def pagina_error(codigo, titulo, mensaje, salidas=(INICIO,), primera=None, cabeceras=None):
