@@ -228,7 +228,8 @@ solo `app/adopciones.py`, que usan las rutas web y la API:
   `is_active` para que las cuentas desactivadas no puedan iniciar sesión
 - **Configuración:** `DevelopmentConfig`, `TestingConfig` y `ProductionConfig`
   heredan de `Config` y redefinen `init_app()`
-- **Templates Jinja2:** `base_bootstrap.html` es extendido por otras plantillas
+- **Templates Jinja2:** las páginas extienden `base.html` o, hasta su
+  migración, `base_bootstrap.html`
 
 ### 5. Decoradores
 - **@admin_required:** Decorador personalizado en `app/decorators.py`
@@ -252,6 +253,7 @@ app/
 │                        # oauth, csrf, limiter), ProxyFix, blueprints,
 │                        # cabeceras de seguridad y /health
 ├── errores.py           # Páginas de error de la web (la API queda fuera)
+├── contexto.py          # Marca (context processor) y usuario de la navegación
 ├── cli.py               # Comandos flask crear-admin y exportar-fotos
 ├── models.py            # Modelos SQLAlchemy (Usuario, Mascota, Solicitud)
 ├── adopciones.py        # Regla de adopción: crear, aprobar y rechazar solicitudes
@@ -274,8 +276,9 @@ app/
 │       ├── mascotas.py  # Listado paginado y detalle (público)
 │       └── solicitudes.py # Crear y consultar solicitudes (JWT)
 │
-├── templates/           # Plantillas Jinja2 (heredan de base_bootstrap.html)
-│   ├── base_bootstrap.html  # Navegación, avisos, salto al contenido
+├── templates/           # Plantillas Jinja2 (heredan de una de las dos bases)
+│   ├── base.html        # Base sin Bootstrap (sistema de diseño): páginas migradas
+│   ├── base_bootstrap.html  # Base con Bootstrap: páginas aún sin migrar
 │   ├── index.html
 │   ├── errores/
 │   │   └── error.html   # Página común de error (400, CSRF, 403, 404, 405, 429, 500)
@@ -290,9 +293,14 @@ app/
 │       └── admin/       # lista.html, revisar.html
 │
 └── static/
-    ├── css/styles.css   # Todos los estilos propios (las plantillas no llevan `style=` ni `<style>`)
-    ├── js/app.js        # Confirmaciones `data-confirmar`, límite de tamaño de la foto, doble envío
-    │                    # y foco en el resumen de errores (sin JavaScript inline)
+    ├── css/
+    │   ├── sistema.css  # Sistema de diseño (ADR-0002): tokens, base y componentes
+    │   ├── marca.css    # Marca de la protectora: acento y fuentes (solo tokens)
+    │   └── styles.css   # Estilos de base_bootstrap.html (se retira con Bootstrap)
+    ├── fonts/           # Atkinson Hyperlegible y Fraunces en WOFF2 (OFL)
+    ├── js/app.js        # Confirmaciones `data-confirmar`, límite de tamaño de la foto, doble envío,
+    │                    # foco en el resumen de errores y menús de base.html (sin JavaScript inline)
+    ├── js/con-js.js     # Marca <html> con .con-js antes del primer pintado (head de base.html)
     └── vendor/bootstrap/5.3.0/  # Bootstrap CSS y bundle JS con su LICENSE (ADR-0001), sin CDN
 
 config.py                # Configuración por entornos
@@ -312,9 +320,10 @@ tiene menos de 32 bytes.
 
 `app/errores.py` registra los manejadores de 400, `CSRFError`, 403, 404, 405,
 413, 429 y 500. Salvo el 413, todos renderizan `errores/error.html`, que
-extiende `base_bootstrap.html` (`lang="es"`, navegación), con su código de
-estado, un `h1` en español y al menos una salida. 400, 403 y 404 se declaran en la tabla
-`ERRORES_SIMPLES`; el resto tiene lógica propia.
+extiende la base sin Bootstrap, `base.html` (`lang="es"`, navegación), con su
+código de estado, un `h1` en español (`cabecera_pagina`) y al menos una salida
+(`enlace_boton`). 400, 403 y 404 se declaran en la tabla `ERRORES_SIMPLES`;
+el resto tiene lógica propia.
 
 | Error | Comportamiento |
 |-------|----------------|
@@ -324,7 +333,7 @@ estado, un `h1` en español y al menos una salida. 400, 403 y 404 se declaran en
 | 405 | Conserva la cabecera `Allow` |
 | 413 | Vuelve al formulario (302) con un aviso: el navegador no sigue un `Location` con estado 413. El servidor no lee el cuerpo, así que no puede conservar lo escrito; por eso `app.js` rechaza antes de enviar los archivos que superan `data-max-bytes` (`MAX_CONTENT_LENGTH`) |
 | 429 | Añade `Retry-After` calculado con el límite superado (`limiter.current_limit`) y dice cuántos minutos esperar. No se activa `RATELIMIT_HEADERS_ENABLED` para no añadir cabeceras `X-RateLimit-*` a todas las respuestas |
-| 500 | Mensaje genérico, sin detalles, y «Ver mis solicitudes» al adoptante. Deshace la transacción. Flask ya registra las excepciones no controladas; el manejador solo registra un `abort(500)` explícito. Si la propia plantilla falla (p. ej. sin base de datos), responde una página mínima en español |
+| 500 | Mensaje genérico, sin detalles, y «Ver mis solicitudes» al adoptante. Deshace la transacción. Flask ya registra las excepciones no controladas; el manejador solo registra un `abort(500)` explícito. Si no se puede cargar el usuario (p. ej. sin base de datos), `usuario_nav()` lo trata como anónimo y la página sale completa; si aun así falla la plantilla, responde una página mínima en español |
 
 Las rutas de `/api/` no pasan por estas páginas: el manejador devuelve la
 excepción tal cual y la API mantiene su formato `{"error": ...}`. El 413 es la
@@ -440,8 +449,8 @@ indica `FOTOS_BACKEND`:
 
 El CSS propio sigue la ADR-0002: tokens en custom properties y una identidad
 neutra en la que el color lo ponen las fotos de los animales. No hay modo
-oscuro. Por ahora ninguna plantilla enlaza estos archivos: la base nueva llega
-en B3.6 y, hasta entonces, la web sigue con `styles.css`.
+oscuro. Lo enlaza la base sin Bootstrap, `base.html` (abajo); las páginas aún
+sin migrar siguen con `base_bootstrap.html` y `styles.css`.
 
 - `app/static/css/sistema.css` declara `@layer reset, tokens, base,
   componentes, utilidades` y contiene los tokens comunes: color (`--color-*`),
@@ -475,27 +484,76 @@ en B3.6 y, hasta entonces, la web sigue con `styles.css`.
 
 Para adaptar el portal a otra protectora se cambia `marca.css` (color y
 fuentes) y las variables de entorno `MARCA_NOMBRE`, `MARCA_LOGO` (ruta a un SVG
-dentro de `static/`) y `MARCA_CONTACTO` de `config.py`; las plantillas no se
-tocan. `tests/test_tokens.py` lee las custom properties de los dos archivos,
+dentro de `static/`), `MARCA_CONTACTO` y `MARCA_CREDITO` de `config.py`; las
+plantillas no se tocan. `tests/test_tokens.py` lee las custom properties de los dos archivos,
 resuelve los `var()` y calcula el contraste WCAG de cada par (texto ≥ 4,5:1,
 bordes de control y foco ≥ 3:1), así que un acento demasiado claro hace fallar
 los tests. También comprueba que cada `@font-face` usa `swap` y que su WOFF2
 existe.
 
-Nota para B3.6, mientras Bootstrap conviva con el sistema: las reglas sin
-capa ganan siempre a las de cualquier `@layer`. Si Bootstrap se carga sin
-capa (un `<link>` normal), anula la base de `sistema.css` aunque se enlace
-antes. Hay que meterlo en una capa declarada la primera, para que pierda
-frente al sistema: `@layer bootstrap, reset, tokens, base, componentes,
-utilidades;` y `@import url(...) layer(bootstrap);` al principio de la hoja
-que lo cargue, que se enlaza antes que `sistema.css`: el orden de las capas
-lo fija su primera aparición (un `<link>` no admite capa).
+Bootstrap y el sistema no conviven en la misma página: cada una carga una
+base distinta, así que no hace falta meter Bootstrap en una `@layer`. Si
+alguna vez tuvieran que convivir, habría que hacerlo, porque las reglas sin
+capa ganan siempre a las de cualquier `@layer` (`@import url(...)
+layer(bootstrap);` en una capa declarada la primera).
+
+### Las dos bases (B3.6)
+
+Durante la migración por fases (ADR-0001) hay dos plantillas base. Cada
+página extiende una sola; `tests/test_base.py` comprueba cuáles usan la nueva.
+
+| Base | Carga | Quién la usa |
+|------|-------|--------------|
+| `base.html` | `sistema.css`, `marca.css` y `app.js` | Las páginas migradas al sistema de diseño (hoy, las de error). Toda página nueva o migrada |
+| `base_bootstrap.html` | Bootstrap vendorizado con SRI, `styles.css` y `app.js` | Las que aún no se han migrado. Se borra en B5.4, con Bootstrap |
+
+`base.html` tiene los mismos bloques que la antigua (`title`, `extra_css`,
+`content` y `extra_js`), así que migrar una página empieza por cambiar su
+`{% extends %}`. Lleva:
+
+- **Salto al contenido** hacia `<main id="contenido" tabindex="-1">`, y los
+  avisos flash (macro `avisos`) dentro de `<main>`.
+- **Marca** de `app/contexto.py`: el context processor `contexto_marca` da
+  `marca_nombre` (también en el `<title>`), `marca_logo` y `marca_contacto`.
+  Sin `MARCA_LOGO` se pinta una huella SVG con `currentColor`; con él, esa
+  imagen (`<img alt="">`, el nombre ya está al lado): una ruta relativa se
+  sirve desde `static/` y la URL resultante pasa por `url_segura`.
+- **Navegación** con los mismos enlaces que la antigua (anónimo, adoptante y
+  admin), `aria-current="page"` en la página actual y «Cerrar Sesión» por
+  POST con `csrf_token`. El usuario sale de `usuario_nav()`, que nunca lanza:
+  si no se puede cargar (base de datos caída en un 500), se trata como
+  anónimo y la traza se registra una sola vez por petición (marca en `g`).
+  `errores.py` usa la misma función para elegir las salidas.
+- **Menú móvil y menú de usuario** con el patrón *disclosure*: un `<button
+  data-desplegable aria-expanded aria-controls>` seguido de su panel. El
+  HTML llega cerrado (`aria-expanded="false"`). `con-js.js`, un script
+  externo en `<head>` sin `defer`, añade `.con-js` a `<html>` antes del
+  primer pintado, y solo entonces el CSS oculta el panel que sigue a un
+  botón cerrado: sin JS no se pliega nada, el botón «Menú» no se ve y todo
+  funciona. `app.js` abre y cierra los menús: se cierran con `Escape` (el
+  foco vuelve al botón), con un clic fuera y cuando el foco sale del botón y
+  su panel. Un botón cuyo `aria-controls` no existe se ignora.
+  Por debajo de 48 rem la navegación se pliega tras «Menú»; por encima, el
+  menú de usuario flota bajo su botón.
+- **Pie** que baja al fondo en las páginas cortas (`body.pagina` en flex),
+  con «© {año} {marca}» (el año, de `utcnow()`), el contacto si
+  `MARCA_CONTACTO` está definido (enlace `mailto:` si es un email) y, debajo,
+  el crédito de `MARCA_CREDITO`. Sin definir, el crédito es «Desarrollado
+  por Aarón Prado»; vacío, no aparece.
+
+El CSS de la base (`.pagina`, `.contenedor`, `.cabecera-sitio`, `.marca`,
+`.navegacion`, `.menu-usuario`, `.pie-sitio`) está al final de la capa
+`componentes` de `sistema.css`. A 320 px no hay scroll horizontal, tampoco
+con una marca o un nombre de usuario largos, y todos los objetivos miden al
+menos `--objetivo-min`. Los e2e de teclado, sin JS, del menú de usuario y del
+reflow con textos largos están en `tests/e2e/test_navegacion.py`.
 
 ### Macros de formulario
 
 `app/templates/macros/formulario.html` genera los formularios accesibles con
 las clases del sistema (`campo`, `boton`, `aviso`...), no las de Bootstrap.
-Ninguna página las usa todavía: se migran en la fase 4 del plan de frontend.
+De momento solo `base.html` usa `avisos`: los formularios se migran en la
+fase 4 del plan de frontend.
 
 ```jinja
 {% import "macros/formulario.html" as f %}
@@ -566,8 +624,9 @@ Bootstrap), que oculta la región «Enviando…» de `app.js`.
 ### Macros de componentes
 
 `app/templates/macros/componentes.html` tiene el resto de piezas de las
-páginas, con su CSS al final de la capa `componentes`. Como las de
-formulario, ninguna página las usa todavía: se adoptan en las fases 4 y 5.
+páginas, con su CSS al final de la capa `componentes`. De momento solo las
+usa la página de error (`cabecera_pagina` y `enlace_boton`); el resto de
+páginas las adoptan en las fases 4 y 5.
 
 ```jinja
 {% import "macros/componentes.html" as c %}
@@ -834,12 +893,14 @@ base-uri 'none'; form-action 'self'; frame-ancestors 'none'
 - **Sin terceros para CSS, JS ni fuentes.** Bootstrap 5.3.0 se sirve desde
   `app/static/vendor/bootstrap/5.3.0/` (ADR-0001), marcado como
   `linguist-vendored` en `.gitattributes`. Mientras dure la migración por
-  fases lo sigue usando todo el sitio; se retira en B5.4.
+  fases lo cargan las páginas que extienden `base_bootstrap.html`; se retira
+  en B5.4.
 - **SRI también en local.** `base_bootstrap.html` mantiene `integrity` (el mismo hash que
   publicaba jsDelivr) sin `crossorigin`, que sobra en el mismo origen: si el
   fichero vendorizado cambia o se corrompe, el navegador no lo aplica.
   `tests/test_plantillas.py` comprueba que el hash coincide con el fichero.
-- **Sin `'unsafe-inline'`.** Los estilos van en `app/static/css/styles.css`;
+- **Sin `'unsafe-inline'`.** Los estilos van en `app/static/css/` (`sistema.css`,
+  `marca.css` y, en las páginas sin migrar, `styles.css`);
   `tests/test_plantillas.py` falla si una plantilla tiene `style=` o
   `<style>`. Bootstrap JS (menú móvil, desplegables) aplica estilos con el
   CSSOM (`element.style`), que la CSP no bloquea.

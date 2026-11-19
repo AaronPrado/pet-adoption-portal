@@ -12,9 +12,10 @@ import pytest
 
 RAIZ_APP = Path(__file__).resolve().parent.parent / 'app'
 
+BASE_HTML = RAIZ_APP / 'templates' / 'base.html'
 BASE_BOOTSTRAP = RAIZ_APP / 'templates' / 'base_bootstrap.html'
 # Bases que se comprueban: sin terceros ni crossorigin
-BASES = [BASE_BOOTSTRAP]
+BASES = [BASE_HTML, BASE_BOOTSTRAP]
 FICHEROS_BOOTSTRAP = ['bootstrap.min.css', 'bootstrap.bundle.min.js']
 
 

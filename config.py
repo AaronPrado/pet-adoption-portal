@@ -97,10 +97,12 @@ class Config:
     # Marca de la protectora (ADR-0002). El color y las fuentes están en
     # app/static/css/marca.css. MARCA_LOGO es una ruta dentro de static/ a un
     # SVG (vacío: isotipo genérico); MARCA_CONTACTO, un email o teléfono
-    # público (vacío: no se muestra)
+    # público (vacío: no se muestra). MARCA_CREDITO es la línea discreta del
+    # pie: sin definir, el texto por defecto; vacía, no se muestra
     MARCA_NOMBRE = os.environ.get('MARCA_NOMBRE') or 'Portal de Adopción'
     MARCA_LOGO = os.environ.get('MARCA_LOGO') or ''
     MARCA_CONTACTO = os.environ.get('MARCA_CONTACTO') or ''
+    MARCA_CREDITO = os.environ.get('MARCA_CREDITO', 'Desarrollado por Aarón Prado')
 
     # Paginación de listados web
     CATALOGO_POR_PAGINA = 12

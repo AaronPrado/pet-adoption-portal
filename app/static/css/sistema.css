@@ -123,6 +123,7 @@
     --interlineado-texto: 1.55;
     --interlineado-titulos: 1.15;
     --medida-texto: 68ch;
+    --ancho-contenido: 72rem;  /* cabecera, contenido y pie de base.html */
 
     /* Ancho mínimo de una tarjeta en la rejilla: 1 columna a 375 px y 3 a 1280 */
     --ancho-tarjeta-min: 16rem;
@@ -210,8 +211,8 @@
   }
 
   /* Foco visible en todo lo enfocable (P-17). Solo con teclado: el clic no
-     pinta el anillo. Bootstrap, mientras conviva, tiene que cargarse en una
-     @layer anterior o su `outline: 0` pisará esta regla. */
+     pinta el anillo. Bootstrap no se carga en las páginas que usan este
+     archivo (base.html), así que su `outline: 0` no llega aquí. */
   a:focus-visible,
   button:focus-visible,
   input:focus-visible,
@@ -734,6 +735,258 @@
 
   .estado-vacio__titulo {
     font-size: var(--texto-lg);
+  }
+
+  /* --- Base de página: base.html (B3.6) --- */
+
+  /* El pie baja al fondo en las páginas cortas (DIS-16) */
+  .pagina {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .contenedor {
+    width: 100%;
+    max-width: var(--ancho-contenido);
+    margin-inline: auto;
+    padding-inline: var(--esp-4);
+  }
+
+  .contenido {
+    flex: 1 0 auto;
+    padding-block: var(--esp-6) var(--esp-8);
+  }
+
+  /* Recibe el foco desde «Saltar al contenido», pero no es un control */
+  .contenido:focus {
+    outline: none;
+  }
+
+  .salto-contenido {
+    position: absolute;
+    inset-block-start: var(--esp-2);
+    inset-inline-start: var(--esp-2);
+    z-index: 10;
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--objetivo-min);
+    padding: var(--esp-2) var(--esp-4);
+    color: var(--color-sobre-acento);
+    background-color: var(--color-acento);
+    border-radius: var(--radio-sm);
+    font-weight: var(--peso-fuerte);
+  }
+
+  .salto-contenido:hover {
+    color: var(--color-sobre-acento);
+  }
+
+  /* Cabecera: marca y navegación. A 320 px la barra envuelve y el nombre de
+     la marca también, sin scroll horizontal (A11Y-21) */
+  .cabecera-sitio {
+    background-color: var(--color-superficie);
+    border-block-end: 1px solid var(--color-borde);
+  }
+
+  .cabecera-sitio__barra {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--esp-2) var(--esp-4);
+    padding-block: var(--esp-2);
+  }
+
+  /* Base 0: en móvil la marca comparte fila con «Menú» y su nombre envuelve */
+  .marca {
+    flex: 1 1 0%;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--esp-2);
+    min-width: 0;
+    min-height: var(--objetivo-min);
+    color: var(--color-acento);
+    font-family: var(--fuente-titulos);
+    font-size: var(--texto-md);
+    font-weight: var(--peso-titulos);
+    line-height: var(--interlineado-titulos);
+    text-decoration: none;
+  }
+
+  .marca:hover {
+    color: var(--color-acento-fuerte);
+  }
+
+  .marca__logo {
+    flex-shrink: 0;
+  }
+
+  .marca__nombre {
+    min-width: 0;
+    color: var(--color-texto);
+    overflow-wrap: anywhere;
+  }
+
+  /* Sin JS no hay nada que plegar: el botón del menú solo aparece con .con-js */
+  .cabecera-sitio__alternar {
+    display: none;
+    align-items: center;
+    gap: var(--esp-2);
+    min-height: var(--objetivo-min);
+    min-width: var(--objetivo-min);
+    margin-inline-start: auto;
+    padding: var(--esp-2) var(--esp-3);
+    background-color: transparent;
+    border: 1px solid var(--color-borde-control);
+    border-radius: var(--radio-sm);
+    font-weight: var(--peso-fuerte);
+    cursor: pointer;
+  }
+
+  .con-js .cabecera-sitio__alternar {
+    display: inline-flex;
+  }
+
+  .navegacion {
+    flex-basis: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: var(--esp-2);
+  }
+
+  .navegacion__lista,
+  .menu-usuario__lista {
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    list-style: none;
+  }
+
+  .menu-usuario__lista {
+    padding-inline-start: var(--esp-4);
+  }
+
+  .navegacion__enlace,
+  .menu-usuario__opcion {
+    display: flex;
+    align-items: center;
+    gap: var(--esp-2);
+    width: 100%;
+    min-height: var(--objetivo-min);
+    padding: var(--esp-2) var(--esp-3);
+    color: var(--color-texto);
+    background-color: transparent;
+    border: 0;
+    border-radius: var(--radio-sm);
+    text-align: start;
+    text-decoration: none;
+    cursor: pointer;
+  }
+
+  /* Un nombre de usuario largo envuelve en vez de desbordar (WCAG 1.4.10) */
+  .menu-usuario__boton {
+    overflow-wrap: anywhere;
+  }
+
+  .navegacion__enlace:hover,
+  .menu-usuario__opcion:hover {
+    color: var(--color-texto);
+    background-color: var(--color-acento-suave);
+  }
+
+  /* La página actual se marca con peso y subrayado, no solo con color */
+  .navegacion__enlace[aria-current="page"],
+  .menu-usuario__opcion[aria-current="page"] {
+    color: var(--color-acento);
+    font-weight: var(--peso-fuerte);
+    text-decoration: underline;
+    text-decoration-thickness: var(--enlace-grosor-hover);
+    text-underline-offset: var(--enlace-separacion);
+  }
+
+  .menu-usuario__boton[aria-expanded="true"] .menu-usuario__flecha {
+    transform: rotate(180deg);
+  }
+
+  .menu-usuario__separado {
+    margin-block-start: var(--esp-1);
+    padding-block-start: var(--esp-1);
+    border-block-start: 1px solid var(--color-borde);
+  }
+
+  /* Disclosure: con aria-expanded="false" se oculta el panel que sigue al
+     botón. Solo con .con-js (con-js.js): sin JS la navegación se ve entera */
+  .con-js .menu-usuario__boton[aria-expanded="false"] + .menu-usuario__lista {
+    display: none;
+  }
+
+  @media (max-width: 47.99rem) {
+    .con-js .cabecera-sitio__alternar[aria-expanded="false"] + .navegacion {
+      display: none;
+    }
+  }
+
+  @media (min-width: 48rem) {
+    .con-js .cabecera-sitio__alternar {
+      display: none;
+    }
+
+    /* Puede encoger: una marca o un nombre largos envuelven sin desbordar */
+    .marca {
+      flex: 0 1 auto;
+    }
+
+    .navegacion {
+      flex: 1 1 auto;
+      flex-direction: row;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .navegacion__lista {
+      flex-direction: row;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--esp-1);
+    }
+
+    .con-js .menu-usuario {
+      position: relative;
+    }
+
+    .con-js .menu-usuario__lista {
+      position: absolute;
+      inset-block-start: 100%;
+      inset-inline-end: 0;
+      z-index: 10;
+      min-width: max-content;
+      margin-block-start: var(--esp-1);
+      padding: var(--esp-2);
+      background-color: var(--color-superficie);
+      border: 1px solid var(--color-borde);
+      border-radius: var(--radio-md);
+      box-shadow: var(--sombra-2);
+    }
+  }
+
+  .pie-sitio {
+    padding-block: var(--esp-5);
+    color: var(--color-texto-suave);
+    font-size: var(--texto-sm);
+    background-color: var(--color-superficie);
+    border-block-start: 1px solid var(--color-borde);
+  }
+
+  .pie-sitio .contenedor {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: var(--esp-2) var(--esp-5);
+  }
+
+  /* Crédito discreto (MARCA_CREDITO), en su propia línea */
+  .pie-sitio__credito {
+    flex-basis: 100%;
   }
 }
 

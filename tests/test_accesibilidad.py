@@ -129,6 +129,12 @@ def test_pagina_de_error_con_sesion_iniciada(client, auth_headers_adoptante):
     assert problemas(client, '/no-existe', 404) == []
 
 
+def test_pagina_de_error_como_admin(client, auth_headers_admin):
+    """Las páginas de error usan la base sin Bootstrap (base.html): su
+    navegación, con el menú de admin, también se comprueba."""
+    assert problemas(client, '/no-existe', 404) == []
+
+
 def test_pagina_de_sesion_caducada(app, client):
     app.config['WTF_CSRF_ENABLED'] = True
     response = client.post('/auth/login', data={}, headers={'Referer': 'http://localhost/auth/login'})

@@ -166,3 +166,25 @@ def test_marca_configurable_por_entorno():
         MARCA_CONTACTO='hola@protectora.example',
     )
     assert (nombre, logo, contacto) == ('Protectora Ejemplo', 'img/logo.svg', 'hola@protectora.example')
+
+
+def _credito(**entorno):
+    """MARCA_CREDITO en un proceso nuevo. Sin la variable vale el texto por
+    defecto; vacía oculta el crédito, así que no se anula como las demás."""
+    env = {clave: valor for clave, valor in os.environ.items() if clave != 'MARCA_CREDITO'}
+    codigo = 'import config; print(repr(config.Config.MARCA_CREDITO))'
+    raiz = Path(__file__).resolve().parent.parent
+    salida = subprocess.run([sys.executable, '-c', codigo], cwd=raiz, env={**env, **entorno},
+                            capture_output=True, text=True)
+    assert salida.returncode == 0, f'config.py falló al importarse:\n{salida.stderr}'
+    return ast.literal_eval(salida.stdout.strip())
+
+
+@pytest.mark.parametrize('entorno, esperado', [
+    ({}, 'Desarrollado por Aarón Prado'),
+    ({'MARCA_CREDITO': 'Hecho por la protectora'}, 'Hecho por la protectora'),
+    ({'MARCA_CREDITO': ''}, ''),
+])
+def test_marca_credito(entorno, esperado):
+    """El crédito del pie es configurable y, vacío, desaparece."""
+    assert _credito(**entorno) == esperado
