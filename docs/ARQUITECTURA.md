@@ -228,7 +228,7 @@ solo `app/adopciones.py`, que usan las rutas web y la API:
   `is_active` para que las cuentas desactivadas no puedan iniciar sesión
 - **Configuración:** `DevelopmentConfig`, `TestingConfig` y `ProductionConfig`
   heredan de `Config` y redefinen `init_app()`
-- **Templates Jinja2:** `base.html` es extendido por otras plantillas
+- **Templates Jinja2:** `base_bootstrap.html` es extendido por otras plantillas
 
 ### 5. Decoradores
 - **@admin_required:** Decorador personalizado en `app/decorators.py`
@@ -274,8 +274,8 @@ app/
 │       ├── mascotas.py  # Listado paginado y detalle (público)
 │       └── solicitudes.py # Crear y consultar solicitudes (JWT)
 │
-├── templates/           # Plantillas Jinja2 (heredan de base.html)
-│   ├── base.html        # Navegación, avisos, salto al contenido
+├── templates/           # Plantillas Jinja2 (heredan de base_bootstrap.html)
+│   ├── base_bootstrap.html  # Navegación, avisos, salto al contenido
 │   ├── index.html
 │   ├── errores/
 │   │   └── error.html   # Página común de error (400, CSRF, 403, 404, 405, 429, 500)
@@ -312,8 +312,8 @@ tiene menos de 32 bytes.
 
 `app/errores.py` registra los manejadores de 400, `CSRFError`, 403, 404, 405,
 413, 429 y 500. Salvo el 413, todos renderizan `errores/error.html`, que
-extiende `base.html` (`lang="es"`, navegación), con su código de estado, un
-`h1` en español y al menos una salida. 400, 403 y 404 se declaran en la tabla
+extiende `base_bootstrap.html` (`lang="es"`, navegación), con su código de
+estado, un `h1` en español y al menos una salida. 400, 403 y 404 se declaran en la tabla
 `ERRORES_SIMPLES`; el resto tiene lógica propia.
 
 | Error | Comportamiento |
@@ -835,7 +835,7 @@ base-uri 'none'; form-action 'self'; frame-ancestors 'none'
   `app/static/vendor/bootstrap/5.3.0/` (ADR-0001), marcado como
   `linguist-vendored` en `.gitattributes`. Mientras dure la migración por
   fases lo sigue usando todo el sitio; se retira en B5.4.
-- **SRI también en local.** `base.html` mantiene `integrity` (el mismo hash que
+- **SRI también en local.** `base_bootstrap.html` mantiene `integrity` (el mismo hash que
   publicaba jsDelivr) sin `crossorigin`, que sobra en el mismo origen: si el
   fichero vendorizado cambia o se corrompe, el navegador no lo aplica.
   `tests/test_plantillas.py` comprueba que el hash coincide con el fichero.
@@ -848,9 +848,9 @@ base-uri 'none'; form-action 'self'; frame-ancestors 'none'
   `bootstrap.bundle.min.js` de la nueva versión a
   `app/static/vendor/bootstrap/<versión>/` (con su `LICENSE`), calcular el
   hash con `openssl dgst -sha384 -binary <fichero> | openssl base64 -A` y
-  cambiar en `base.html` la ruta y el `integrity` (`sha384-<hash>`). Después
+  cambiar en `base_bootstrap.html` la ruta y el `integrity` (`sha384-<hash>`). Después
   borrar la carpeta de la versión anterior. El test de SRI saca la ruta de
-  `base.html`, así que falla si el hash no coincide con el fichero.
+  `base_bootstrap.html`, así que falla si el hash no coincide con el fichero.
 
 ---
 
