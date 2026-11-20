@@ -140,7 +140,9 @@ def test_los_formularios_get_no_se_bloquean(page, errores_js):
 
 
 def test_cerrar_sesion_desde_el_menu(page, errores_js):
-    iniciar_sesion(page, *ADOPTANTE)
+    iniciar_sesion(page, *ADOPTANTE)  # termina en la portada
+    expect(page.get_by_role('heading', level=1, name='Encuentra a tu compañero')).to_be_visible()
+    expect(page.get_by_role('link', name='Crear mi cuenta')).to_have_count(0)
 
     page.get_by_role('button', name='Ana').click()
     page.get_by_role('button', name='Cerrar Sesión').click()
@@ -149,13 +151,13 @@ def test_cerrar_sesion_desde_el_menu(page, errores_js):
     expect(page.get_by_role('link', name='Iniciar Sesión')).to_be_visible()
 
 
-def test_menu_movil(page, errores_js):
+def test_menu_movil_en_la_portada(page, errores_js):
     page.set_viewport_size({'width': 375, 'height': 800})
     page.goto('/')
 
     enlace = page.get_by_role('link', name='Mascotas', exact=True)
     expect(enlace).to_be_hidden()
-    page.get_by_role('button', name='Mostrar u ocultar la navegación').click()
+    page.get_by_role('button', name='Menú').click()
     expect(enlace).to_be_visible()
 
 
@@ -335,3 +337,38 @@ def test_base_nueva_aria_controls_roto_no_da_errores(page, errores_js):
     menu = page.get_by_role('button', name='Menú')
     menu.click()
     expect(menu).to_have_attribute('aria-expanded', 'true')
+
+
+# --- Portada (B4.1) ---
+
+def test_portada_imagen_principal_del_propio_origen(page, errores_js, base_url):
+    """El hero carga desde /static (nada de terceros), en la variante que toca."""
+    peticiones = []
+    page.on('request', lambda peticion: peticiones.append(peticion.url))
+    page.set_viewport_size({'width': 375, 'height': 800})
+    page.goto('/')
+
+    imagen = page.locator('img.inicio-hero__imagen')
+    expect(imagen).to_be_visible()
+    page.wait_for_function('document.querySelector("img.inicio-hero__imagen").complete')
+    assert page.evaluate('document.querySelector("img.inicio-hero__imagen").naturalWidth') > 0
+    actual = page.evaluate('document.querySelector("img.inicio-hero__imagen").currentSrc')
+    assert actual == f'{base_url}/static/img/hero-640.webp'
+    hero = [url for url in peticiones if 'hero' in url or 'photo-1450778869180' in url]
+    assert hero == [f'{base_url}/static/img/hero-640.webp']
+
+
+def test_portada_un_h1_y_recorrido_de_adopcion(page, errores_js):
+    page.goto('/')
+
+    expect(page.get_by_role('heading', level=1)).to_have_count(1)
+    pasos = page.get_by_role('list').filter(has=page.get_by_role('heading', name='Crea tu cuenta'))
+    expect(pasos.get_by_role('listitem')).to_have_count(4)
+
+
+@pytest.mark.parametrize('ancho', [320, 375, 1280])
+def test_portada_sin_scroll_horizontal(page, errores_js, ancho):
+    page.set_viewport_size({'width': ancho, 'height': 800})
+    page.goto('/')
+
+    assert page.evaluate('document.documentElement.scrollWidth') <= ancho

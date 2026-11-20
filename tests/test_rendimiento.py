@@ -112,6 +112,20 @@ class TestNMasUno:
         assert consultas_en(client, '/mascotas/catalogo') == con_1
 
 
+    def test_portada_no_crece_con_las_mascotas(self, client):
+        """Tres contadores y las destacadas: cuatro consultas, sean cuantas sean las mascotas."""
+        for i in range(2):
+            db.session.add(Mascota(nombre=f'P{i}', especie='Perro', descripcion='Descripción larga'))
+        db.session.commit()
+        con_2 = consultas_en(client, '/')
+
+        for i in range(10):
+            db.session.add(Mascota(nombre=f'Q{i}', especie='Gato', descripcion='Descripción larga'))
+        db.session.commit()
+
+        assert consultas_en(client, '/') == con_2 == 4
+
+
 class TestPaginacion:
 
     @pytest.fixture
