@@ -187,6 +187,18 @@ def test_tarjeta_mascota_adoptada(ctx):
     assert con_clase(html, 'span', 'chapa--info')[0]['texto'].strip() == 'Adoptado'
 
 
+def test_tarjeta_mascota_nota(ctx):
+    html = renderizar('{{ c.tarjeta_mascota(m, nota=n) }}', m=mascota(), n='Aún <puedes>')
+
+    nota = uno(html, 'p')
+    assert nota['attrs']['class'] == 'tarjeta-mascota__nota'
+    assert nota['texto'] == 'Aún <puedes>' and '<puedes>' not in html
+
+
+def test_tarjeta_mascota_sin_nota(ctx):
+    assert 'tarjeta-mascota__nota' not in renderizar('{{ c.tarjeta_mascota(m) }}', m=mascota())
+
+
 def test_tarjetas_con_ids_distintos(ctx):
     html = renderizar('{% for m in ms %}{{ c.tarjeta_mascota(m) }}{% endfor %}',
                       ms=[mascota(id=1), mascota(id=2, nombre='Luna')])

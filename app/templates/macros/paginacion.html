@@ -1,6 +1,12 @@
 {#
   Navegación entre páginas de un resultado de Flask-SQLAlchemy (.paginate()).
   Conserva los filtros actuales de la URL y solo cambia el parámetro page.
+
+  Dos variantes con la misma firma (pagina, endpoint):
+  - `paginacion`: con clases de Bootstrap, para las páginas de base_bootstrap.html
+    (panel admin). Se borra con ellas en B5.4.
+  - `paginacion_sistema`: para la base nueva. Sus clases (`paginacion*`) están
+    en la capa `componentes` de sistema.css.
 #}
 {% macro paginacion(pagina, endpoint) %}
 {% if pagina.pages > 1 %}
@@ -31,6 +37,48 @@
             <a class="page-link" href="{{ url_for(endpoint, **args) }}" rel="next">Siguiente</a>
             {% else %}
             <span class="page-link">Siguiente</span>
+            {% endif %}
+        </li>
+    </ul>
+</nav>
+{% endif %}
+{% endmacro %}
+
+{#
+  Paginación de la base nueva. La página actual es un `span` con
+  aria-current="page" (en el elemento con el texto, no en el `li`) y un texto
+  oculto «Página N, actual»; los enlaces numéricos se llaman «Página N».
+  «Anterior» y «Siguiente» sin destino son un `span` atenuado: un `span` sin
+  rol no admite aria-disabled ni aria-label. Las URL las construye
+  `url_pagina` (app/enlaces.py), que descarta los argumentos de url_for.
+#}
+{% macro paginacion_sistema(pagina, endpoint) %}
+{% if pagina.pages > 1 %}
+<nav class="paginacion" aria-label="Paginación">
+    <ul class="paginacion__lista">
+        <li>
+            {% if pagina.has_prev %}
+            <a class="paginacion__enlace" href="{{ url_pagina(endpoint, pagina.prev_num) }}" rel="prev">Anterior</a>
+            {% else %}
+            <span class="paginacion__enlace paginacion__enlace--inactivo">Anterior</span>
+            {% endif %}
+        </li>
+        {% for numero in pagina.iter_pages(left_edge=1, left_current=2, right_current=2, right_edge=1) %}
+        <li>
+            {% if numero is none %}
+            <span class="paginacion__puntos" aria-hidden="true">…</span>
+            {% elif numero == pagina.page %}
+            <span class="paginacion__enlace paginacion__enlace--actual" aria-current="page"><span class="visualmente-oculto">Página </span>{{ numero }}<span class="visualmente-oculto">, actual</span></span>
+            {% else %}
+            <a class="paginacion__enlace" href="{{ url_pagina(endpoint, numero) }}" aria-label="Página {{ numero }}">{{ numero }}</a>
+            {% endif %}
+        </li>
+        {% endfor %}
+        <li>
+            {% if pagina.has_next %}
+            <a class="paginacion__enlace" href="{{ url_pagina(endpoint, pagina.next_num) }}" rel="next">Siguiente</a>
+            {% else %}
+            <span class="paginacion__enlace paginacion__enlace--inactivo">Siguiente</span>
             {% endif %}
         </li>
     </ul>
