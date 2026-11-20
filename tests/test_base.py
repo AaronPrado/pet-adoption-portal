@@ -55,7 +55,7 @@ class TestPlantillas:
                 bases[ruta.relative_to(PLANTILLAS).as_posix()] = coincidencia.group(1)
 
         assert bases.pop('errores/error.html') == 'base.html'
-        assert set(bases.values()) == {'base_bootstrap.html'}
+        assert set(bases.values()) <= {'base.html', 'base_bootstrap.html'}
 
     def test_la_base_nueva_no_carga_bootstrap(self):
         texto = re.sub(r'{#.*?#}', '', (PLANTILLAS / 'base.html').read_text(encoding='utf-8'), flags=re.S)

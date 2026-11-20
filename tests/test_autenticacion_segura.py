@@ -73,7 +73,8 @@ class TestRedireccionNext:
         assert 'evil.com' not in html
 
     @pytest.mark.parametrize('destino', NEXT_PELIGROSOS)
-    def test_google_no_guarda_next_peligroso(self, client, destino, monkeypatch):
+    def test_google_no_guarda_next_peligroso(self, app, client, destino, monkeypatch):
+        app.config.update(GOOGLE_CLIENT_ID='id-de-prueba', GOOGLE_CLIENT_SECRET='secreto-de-prueba')
         google = oauth.create_client('google')
         monkeypatch.setattr(google, 'load_server_metadata', lambda: {
             'authorization_endpoint': 'https://accounts.google.com/o/oauth2/v2/auth'})
@@ -227,7 +228,7 @@ class TestLimiteIntentos:
 
     def test_login_web_bloquea_tras_5_intentos(self, client_con_limite):
         codigos = [login(client_con_limite, 'a@test.com', 'mala').status_code for _ in range(6)]
-        assert codigos[:5] == [200] * 5
+        assert codigos[:5] == [400] * 5
         assert codigos[5] == 429
 
     def test_login_api_bloquea_tras_5_intentos(self, client_con_limite):

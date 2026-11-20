@@ -1,0 +1,54 @@
+/*
+  Login y registro (B4.3). Solo tokens de sistema.css. Va en la capa
+  `componentes`, ya declarada por sistema.css, porque son reglas de una página
+  que se apoyan en sus componentes (.campo, .boton, .opcion) sin sustituirlos.
+*/
+
+@layer componentes {
+  /* Columna estrecha y centrada: un formulario de una columna se lee mejor
+     (y a 320 px ocupa todo el ancho) */
+  .auth {
+    width: 100%;
+    max-width: 30rem;
+    margin-inline: auto;
+  }
+
+  .auth__panel {
+    padding: var(--esp-5);
+    background-color: var(--color-superficie);
+    border: 1px solid var(--color-borde);
+    border-radius: var(--radio-md);
+    box-shadow: var(--sombra-1);
+  }
+
+  .auth__panel > .boton {
+    width: 100%;
+  }
+
+  .auth__recordar {
+    margin-block-end: var(--esp-4);
+  }
+
+  .auth__alternativa {
+    display: grid;
+    gap: var(--esp-3);
+    justify-items: center;
+    margin-block: var(--esp-5);
+  }
+
+  .auth__alternativa > .boton {
+    width: 100%;
+    gap: var(--esp-3);
+  }
+
+  .auth__separador,
+  .auth__cambio {
+    color: var(--color-texto-suave);
+    text-align: center;
+  }
+
+  .auth__cambio {
+    margin-block-start: var(--esp-5);
+    margin-inline: auto;
+  }
+}

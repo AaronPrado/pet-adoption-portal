@@ -78,7 +78,8 @@ def redirigir_tras_login(destino, por_defecto='index'):
 # Clave de la sesión donde se guarda `next` durante el login con Google
 SESION_NEXT_GOOGLE = 'next_google'
 
-# Mensaje general cuando el formulario tiene errores en sus campos
+# Mensaje general cuando el formulario tiene errores en sus campos. Auth ya no
+# lo usa (el resumen de errores lo sustituye); lo siguen usando otras vistas.
 MENSAJE_REVISAR = 'Revisa los campos marcados.'
 
 # Campos del registro que se vuelven a mostrar tras un error (nunca la contraseña)
@@ -89,20 +90,36 @@ CAMPOS_REGISTRO = ('email', 'nombre', 'apellidos', 'telefono', 'direccion')
 bp = Blueprint('auth', __name__, url_prefix='/auth')
 
 
+def texto_contacto():
+    """Cómo escribir al refugio: su contacto de la marca o, si no hay, un texto alternativo."""
+    contacto = current_app.config.get('MARCA_CONTACTO')
+    return f'escríbenos a {contacto}' if contacto else 'contacta con el refugio'
+
+
+def google_configurado():
+    """True si hay credenciales de Google OAuth (el botón y la ruta solo existen entonces)."""
+    config = current_app.config
+    return bool(config.get('GOOGLE_CLIENT_ID') and config.get('GOOGLE_CLIENT_SECRET'))
+
+
+def avisar_cuenta_desactivada():
+    flash(f'Tu cuenta está desactivada. Si crees que es un error, {texto_contacto()}.', 'warning')
+
+
 def mostrar_formulario(plantilla, valores=None, errores=None, next_page=None, codigo=200):
     """
     Renderiza un formulario de autenticación con los valores enviados, los
     errores por campo (contrato `valores`/`errores`) y el `next` seguro.
     """
     return render_template(plantilla, valores=valores or {}, errores=errores or {},
-                           next=next_page), codigo
+                           next=next_page, google_activo=google_configurado()), codigo
 
 
 def validar_registro(valores, password, password_confirm):
     """Devuelve un dict campo → mensaje con los errores del registro."""
     errores = {}
     if not valores['email']:
-        errores['email'] = 'El email es obligatorio.'
+        errores['email'] = 'El correo electrónico es obligatorio.'
     if not valores['nombre']:
         errores['nombre'] = 'El nombre es obligatorio.'
     if not password:
@@ -143,12 +160,11 @@ def registro():
 
         errores = validar_registro(valores, password, password_confirm)
         if errores:
-            flash(MENSAJE_REVISAR, 'danger')
             return mostrar_formulario('auth/registro.html', valores, errores, next_page, 400)
 
         # Verificar si el email ya existe
         if Usuario.query.filter_by(email=valores['email']).first():
-            flash('El email ya está registrado. Intenta iniciar sesión.', 'warning')
+            flash('Ese correo ya está registrado. Inicia sesión para continuar.', 'warning')
             return redirect(url_for('auth.login', next=next_page))
 
         # Crear nuevo usuario
@@ -169,12 +185,12 @@ def registro():
         except Exception:
             db.session.rollback()
             current_app.logger.exception('Error al crear usuario')
-            flash('No se pudo crear el usuario. Inténtalo de nuevo.', 'danger')
+            flash('No hemos podido crear tu cuenta. Inténtalo de nuevo.', 'danger')
             return mostrar_formulario('auth/registro.html', valores, next_page=next_page)
 
         renovar_token_csrf()
         login_user(nuevo_usuario)
-        flash(f'¡Registro exitoso! Bienvenido, {nuevo_usuario.nombre}.', 'success')
+        flash(f'Cuenta creada. ¡Hola, {nuevo_usuario.nombre}!', 'success')
         return redirigir_tras_login(next_page)
 
     # GET: Mostrar formulario
@@ -191,9 +207,10 @@ def login():
     (lo añade login_required), lo guarda en un campo oculto.
     POST: Autentica al usuario y redirige a `next` (si es seguro) o al
     inicio. Si falta el email o la contraseña, vuelve a mostrar el
-    formulario con el email y el error de cada campo y responde 400. Con
-    credenciales incorrectas o una cuenta desactivada lo muestra de nuevo
-    con el email y un mensaje general.
+    formulario con el correo y el error de cada campo y responde 400. Con
+    credenciales incorrectas lo muestra de nuevo (400) con el correo y un error
+    en el campo de la contraseña (mensaje común, que no revela si el correo
+    existe); con una cuenta desactivada, con un aviso.
 
     Returns:
         Template renderizado o redirección
@@ -214,11 +231,10 @@ def login():
         # Validaciones básicas
         errores = {}
         if not email:
-            errores['email'] = 'El email es obligatorio.'
+            errores['email'] = 'El correo electrónico es obligatorio.'
         if not password:
             errores['password'] = 'La contraseña es obligatoria.'
         if errores:
-            flash(MENSAJE_REVISAR, 'danger')
             return mostrar_formulario('auth/login.html', valores, errores, next_page, 400)
 
         # Buscar usuario por email
@@ -226,18 +242,20 @@ def login():
 
         # Verificar credenciales (mensaje común: no revela si el email existe)
         if usuario is None or not usuario.check_password(password):
-            flash('Email o contraseña incorrectos.', 'danger')
-            return mostrar_formulario('auth/login.html', valores, next_page=next_page)
+            # Un solo mensaje para correo inexistente y contraseña errónea: así
+            # no se revela qué correos tienen cuenta (enumeración de usuarios).
+            errores = {'password': 'Correo o contraseña incorrectos.'}
+            return mostrar_formulario('auth/login.html', valores, errores, next_page, 400)
 
         # Verificar si la cuenta está activa
         if not usuario.activo:
-            flash('Tu cuenta ha sido desactivada. Contacta al administrador.', 'warning')
+            avisar_cuenta_desactivada()
             return mostrar_formulario('auth/login.html', valores, next_page=next_page)
 
         # Login exitoso
         renovar_token_csrf()
         login_user(usuario, remember=remember)
-        flash(f'¡Bienvenido, {usuario.nombre}!', 'success')
+        flash(f'¡Hola, {usuario.nombre}!', 'success')
 
         # Redirigir a la página que intentaba acceder o al inicio
         return redirigir_tras_login(next_page)
@@ -267,6 +285,9 @@ def logout():
 def google_login():
     """Inicia el flujo OAuth con Google y guarda `next` (si es seguro) en la sesión."""
     next_page = next_seguro()
+    if not google_configurado():
+        flash('Ahora mismo no se puede iniciar sesión con Google. Usa tu correo y tu contraseña.', 'warning')
+        return redirect(url_for('auth.login', next=next_page))
     if next_page:
         session[SESION_NEXT_GOOGLE] = next_page
     else:
@@ -292,13 +313,15 @@ def google_callback():
     user_info = token.get('userinfo')
 
     if not user_info or not user_info.get('email'):
-        flash('Error al obtener información de Google', 'danger')
+        flash('No hemos podido obtener tus datos de Google. '
+              'Inténtalo de nuevo o inicia sesión con tu correo.', 'danger')
         return redirect(url_for('auth.login', next=next_page))
 
     # Solo se confía en el email si Google lo ha verificado: se usa para
     # enlazar la cuenta de Google con una cuenta local existente
     if not user_info.get('email_verified'):
-        flash('Tu email de Google no está verificado.', 'danger')
+        flash('Tu cuenta de Google no tiene el correo verificado. '
+              'Verifícalo en Google o regístrate con tu correo.', 'danger')
         return redirect(url_for('auth.login', next=next_page))
 
     email = user_info['email'].strip().lower()
@@ -309,7 +332,7 @@ def google_callback():
 
     if usuario:
         if not usuario.activo:
-            flash('Tu cuenta ha sido desactivada. Contacta al administrador.', 'warning')
+            avisar_cuenta_desactivada()
             return redirect(url_for('auth.login', next=next_page))
 
         # Usuario existente - enlazar con Google si aún no lo está
@@ -331,5 +354,5 @@ def google_callback():
 
     renovar_token_csrf()
     login_user(usuario)
-    flash(f'Bienvenido, {usuario.nombre}!', 'success')
+    flash(f'¡Hola, {usuario.nombre}!', 'success')
     return redirigir_tras_login(next_page, por_defecto='mascotas.catalogo')

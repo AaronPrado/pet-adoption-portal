@@ -209,7 +209,7 @@ def registrar_envios(page):
 
 def iniciar_sesion(page, email, password):
     page.goto('/auth/login')
-    page.get_by_label('Email').fill(email)
+    page.get_by_label('Correo electrónico').fill(email)
     page.get_by_label('Contraseña').fill(password)
     page.get_by_role('button', name='Iniciar Sesión').click()
     page.wait_for_url('**/')

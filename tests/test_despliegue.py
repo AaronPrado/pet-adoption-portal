@@ -58,7 +58,7 @@ class TestProxyInverso:
         try:
             assert self.intentos_fallidos(client, '203.0.113.1', 6)[-1] == 429
             # Otra IP real detrás del mismo proxy no está bloqueada
-            assert self.intentos_fallidos(client, '203.0.113.2', 1) == [200]
+            assert self.intentos_fallidos(client, '203.0.113.2', 1) == [400]
         finally:
             db.drop_all()
             ctx.pop()

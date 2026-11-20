@@ -28,7 +28,7 @@ class TestRegistro:
         }, follow_redirects=True)
 
         assert response.status_code == 200
-        assert 'Registro exitoso' in response.data.decode() or 'iniciar sesión' in response.data.decode().lower()
+        assert 'Cuenta creada' in response.data.decode()
 
         # Verificar que el usuario se creó en la BD
         usuario = Usuario.query.filter_by(email='test@example.com').first()
@@ -75,7 +75,7 @@ class TestRegistro:
         response = client.get('/auth/registro')
 
         assert response.status_code == 200
-        assert 'Registro' in response.data.decode()
+        assert 'Crear cuenta' in response.data.decode()
         assert 'email' in response.data.decode()
         assert 'password' in response.data.decode()
 
@@ -100,7 +100,7 @@ class TestLogin:
             'password': 'password123'
         }, follow_redirects=True)
 
-        assert response.status_code == 200
+        assert response.status_code == 400
         assert 'incorrecto' in response.data.decode().lower()
 
     def test_login_password_incorrecta(self, client, usuario_adoptante):
@@ -110,7 +110,7 @@ class TestLogin:
             'password': 'wrongpassword'
         }, follow_redirects=True)
 
-        assert response.status_code == 200
+        assert response.status_code == 400
         assert 'incorrecto' in response.data.decode().lower()
 
     def test_login_get_muestra_formulario(self, client):

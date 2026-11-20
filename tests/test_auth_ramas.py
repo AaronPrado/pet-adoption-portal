@@ -33,7 +33,7 @@ class TestRegistro:
 
         html = response.data.decode()
         assert response.status_code == 400
-        assert 'Revisa los campos marcados.' in html
+        assert 'id="resumen-errores"' in html
         assert campo_con_error(html, campo) is not None
         assert Usuario.query.count() == 0
 
@@ -55,7 +55,7 @@ class TestRegistro:
 
         html = client.post('/auth/registro', data=datos_registro()).data.decode()
 
-        assert 'No se pudo crear el usuario' in html
+        assert 'No hemos podido crear tu cuenta' in html
         assert 'fallo simulado' not in html
 
     @pytest.mark.parametrize('url', ['/auth/registro', '/auth/login'])
@@ -74,7 +74,7 @@ class TestLoginLocal:
     def test_campos_obligatorios(self, client, datos):
         response = client.post('/auth/login', data=datos)
         assert response.status_code == 400
-        assert 'Revisa los campos marcados.' in response.data.decode()
+        assert 'id="resumen-errores"' in response.data.decode()
 
     def test_cuenta_desactivada(self, client, usuario_adoptante):
         usuario_adoptante.activo = False
@@ -82,7 +82,7 @@ class TestLoginLocal:
 
         response = client.post('/auth/login', data={'email': 'adoptante@test.com', 'password': 'password123'})
 
-        assert 'Tu cuenta ha sido desactivada' in response.data.decode()
+        assert 'Tu cuenta está desactivada' in response.data.decode()
         assert client.get('/solicitudes/mis-solicitudes').status_code == 302
 
     def test_email_con_mayusculas(self, client, usuario_adoptante):
@@ -94,7 +94,8 @@ class TestGoogle:
 
     @pytest.fixture
     def google(self, app, monkeypatch):
-        """Cliente OAuth de Google sin llamadas de red."""
+        """Cliente OAuth de Google configurado y sin llamadas de red."""
+        app.config.update(GOOGLE_CLIENT_ID='id-de-prueba', GOOGLE_CLIENT_SECRET='secreto-de-prueba')
         client = oauth.create_client('google')
         monkeypatch.setattr(client, 'load_server_metadata', lambda: {
             'authorization_endpoint': 'https://accounts.google.com/o/oauth2/v2/auth'
@@ -125,7 +126,7 @@ class TestGoogle:
 
         response = client.get('/auth/google/callback', follow_redirects=True)
 
-        assert 'Error al obtener información de Google' in response.data.decode()
+        assert 'No hemos podido obtener tus datos de Google' in response.data.decode()
 
     def test_callback_crea_usuario_nuevo(self, client, google, monkeypatch):
         monkeypatch.setattr(google, 'authorize_access_token', lambda **kwargs: {'userinfo': {
@@ -156,8 +157,8 @@ class TestGoogle:
 
 def campo_con_error(html, campo):
     """Devuelve el mensaje de error que la plantilla muestra junto a `campo`."""
-    match = re.search(rf'<div id="{campo}-error"[^>]*>\s*(.*?)\s*</div>', html, re.S)
-    return match.group(1) if match else None
+    match = re.search(rf'<p id="{campo}-error"[^>]*>\s*<span[^>]*>Error: </span>(.*?)</p>', html, re.S)
+    return match.group(1).strip() if match else None
 
 
 def valor_de(html, campo):
@@ -202,7 +203,7 @@ class TestRegistroConservaDatos:
         html = response.data.decode()
 
         assert response.status_code == 400
-        assert campo_con_error(html, 'email') == 'El email es obligatorio.'
+        assert campo_con_error(html, 'email') == 'El correo electrónico es obligatorio.'
         assert campo_con_error(html, 'nombre') == 'El nombre es obligatorio.'
         assert campo_con_error(html, 'password') == 'La contraseña es obligatoria.'
         assert valor_de(html, 'apellidos') == 'Gil'
@@ -266,7 +267,7 @@ class TestLoginConservaDatos:
         html = client.post('/auth/login',
                            data={'email': 'adoptante@test.com', 'password': 'clave-mala-xyz'}).data.decode()
 
-        assert 'Email o contraseña incorrectos.' in html
+        assert 'Correo o contraseña incorrectos.' in html
         assert valor_de(html, 'email') == 'adoptante@test.com'
         assert valor_de(html, 'password') is None
         assert 'clave-mala-xyz' not in html
@@ -280,7 +281,8 @@ class TestLoginConservaDatos:
         assert campo_con_error(html, 'email') is None
         assert valor_de(html, 'email') == 'a@test.com'
 
-    def test_formulario_conserva_next(self, client):
+    def test_formulario_conserva_next(self, app, client):
+        app.config.update(GOOGLE_CLIENT_ID='id-de-prueba', GOOGLE_CLIENT_SECRET='secreto-de-prueba')
         html = client.get('/auth/login?next=/solicitudes/nueva/3').data.decode()
 
         assert '<input type="hidden" name="next" value="/solicitudes/nueva/3">' in html
@@ -312,6 +314,7 @@ class TestGoogleNext:
 
     @pytest.fixture
     def google(self, app, monkeypatch):
+        app.config.update(GOOGLE_CLIENT_ID='id-de-prueba', GOOGLE_CLIENT_SECRET='secreto-de-prueba')
         client = oauth.create_client('google')
         monkeypatch.setattr(client, 'load_server_metadata', lambda: {
             'authorization_endpoint': 'https://accounts.google.com/o/oauth2/v2/auth'
@@ -362,3 +365,160 @@ class TestGoogleNext:
         assert response.headers['Location'] == '/auth/login?next=/mascotas/1'
         with client.session_transaction() as sesion:
             assert 'next_google' not in sesion
+
+
+class TestRediseñoAuth:
+    """B4.3: login y registro con el sistema de diseño (P-13, P-16, P-33, P-36, P-42, P-43)."""
+
+    @staticmethod
+    def etiqueta(html, campo):
+        return re.search(rf'<(?:input|textarea)[^>]*\bid="{campo}"[^>]*>', html, re.S).group(0)
+
+    @pytest.mark.parametrize('url', ['/auth/login', '/auth/registro'])
+    def test_paginas_sin_bootstrap_y_con_un_h1(self, client, url):
+        html = client.get(url).data.decode()
+
+        assert 'bootstrap' not in html
+        assert 'form-control' not in html
+        assert html.count('<h1') == 1
+        assert 'paginas/auth.css' in html
+        assert 'name="csrf_token"' in html
+
+    @pytest.mark.parametrize('url, esperado', [
+        ('/auth/login', {'email': 'email', 'password': 'current-password'}),
+        ('/auth/registro', {'email': 'email', 'nombre': 'given-name', 'apellidos': 'family-name',
+                            'telefono': 'tel', 'password': 'new-password', 'password_confirm': 'new-password'}),
+    ])
+    def test_autocomplete_de_cada_campo(self, client, url, esperado):
+        html = client.get(url).data.decode()
+        for campo, valor in esperado.items():
+            assert f'autocomplete="{valor}"' in self.etiqueta(html, campo), campo
+
+    def test_registro_tiene_leyenda_y_direccion_opcional(self, client):
+        html = client.get('/auth/registro').data.decode()
+
+        assert 'son obligatorios' in html
+        assert 'Opcional' in re.search(r'<p id="direccion-ayuda"[^>]*>(.*?)</p>', html, re.S).group(1)
+        assert 'Necesaria para solicitudes' not in html
+        assert 'placeholder="Mínimo' not in html
+        assert 'id="password-ayuda"' in html
+
+    def test_errores_en_el_campo_y_resumen_enlazado(self, client):
+        response = client.post('/auth/registro', data={'apellidos': 'Gil'})
+        html = response.data.decode()
+
+        assert response.status_code == 400
+        assert 'data-resumen-errores' in html
+        assert 'href="#email"' in html and 'href="#nombre"' in html and 'href="#password"' in html
+        assert 'aria-invalid="true"' in self.etiqueta(html, 'email')
+        assert 'email-error' in self.etiqueta(html, 'email')
+        # el resumen sustituye al flash genérico
+        assert 'Revisa los campos marcados' not in html
+
+    def test_login_vacio_tiene_resumen(self, client):
+        html = client.post('/auth/login', data={'email': '', 'password': ''}).data.decode()
+        assert 'data-resumen-errores' in html
+        assert campo_con_error(html, 'email') == 'El correo electrónico es obligatorio.'
+
+    def test_credenciales_incorrectas_error_en_la_contrasena(self, client, usuario_adoptante):
+        response = client.post('/auth/login', data={'email': 'adoptante@test.com', 'password': 'mala'})
+        html = response.data.decode()
+
+        assert response.status_code == 400
+        assert campo_con_error(html, 'password') == 'Correo o contraseña incorrectos.'
+        assert 'data-resumen-errores' in html
+        assert valor_de(html, 'email') == 'adoptante@test.com'
+        assert valor_de(html, 'password') is None
+
+    def test_credenciales_incorrectas_no_distinguen_usuario(self, client, usuario_adoptante):
+        malo = client.post('/auth/login', data={'email': 'adoptante@test.com', 'password': 'mala'})
+        inexistente = client.post('/auth/login', data={'email': 'nadie@test.com', 'password': 'mala'})
+        assert campo_con_error(malo.data.decode(), 'password') == \
+            campo_con_error(inexistente.data.decode(), 'password')
+
+    def test_google_configurado_con_svg_propio_sin_recursos_externos(self, app, client):
+        app.config.update(GOOGLE_CLIENT_ID='id-de-prueba', GOOGLE_CLIENT_SECRET='secreto-de-prueba')
+        html = client.get('/auth/login').data.decode()
+
+        assert 'developers.google.com' not in html
+        assert 'href="/auth/google"' in html
+        boton = html.split('href="/auth/google"')[1].split('</a>')[0]
+        assert '<svg' in boton and 'aria-hidden="true"' in boton
+
+    @pytest.mark.parametrize('id_cliente, secreto', [(None, None), ('id', None), (None, 'secreto'), ('', '')])
+    def test_google_sin_configurar_no_muestra_el_boton(self, app, client, id_cliente, secreto):
+        app.config.update(GOOGLE_CLIENT_ID=id_cliente, GOOGLE_CLIENT_SECRET=secreto)
+        html = client.get('/auth/login').data.decode()
+        assert '/auth/google' not in html
+        assert 'Continuar con Google' not in html
+
+    def test_entrar_en_google_sin_configurar_redirige_al_login(self, app, client):
+        app.config.update(GOOGLE_CLIENT_ID=None, GOOGLE_CLIENT_SECRET=None)
+
+        response = client.get('/auth/google?next=/mascotas/1')
+
+        assert response.status_code == 302
+        assert response.headers['Location'] == '/auth/login?next=/mascotas/1'
+        html = client.get(response.headers['Location']).data.decode()
+        assert 'Ahora mismo no se puede iniciar sesión con Google' in html
+
+    def test_callback_de_google_sin_configurar_no_da_500(self, app, client):
+        app.config.update(GOOGLE_CLIENT_ID=None, GOOGLE_CLIENT_SECRET=None)
+        assert client.get('/auth/google/callback').status_code == 302
+
+    def test_login_tiene_leyenda_de_obligatorios(self, client):
+        assert 'son obligatorios' in client.get('/auth/login').data.decode()
+
+    def test_el_registro_no_tiene_boton_de_google(self, client):
+        assert '/auth/google' not in client.get('/auth/registro').data.decode()
+
+    @pytest.mark.parametrize('contacto, esperado', [
+        ('refugio@example.org', 'escríbenos a refugio@example.org'),
+        ('', 'contacta con el refugio'),
+    ])
+    def test_cuenta_desactivada_usa_el_contacto_de_la_marca(self, app, client, usuario_adoptante, contacto, esperado):
+        app.config['MARCA_CONTACTO'] = contacto
+        usuario_adoptante.activo = False
+        db.session.commit()
+
+        html = client.post('/auth/login', data={'email': 'adoptante@test.com', 'password': 'password123'}) \
+            .data.decode()
+
+        assert 'Tu cuenta está desactivada.' in html
+        assert esperado in html
+        assert 'administrador' not in html
+
+    def test_cuenta_desactivada_con_google_usa_el_contacto(self, app, client, usuario_adoptante, monkeypatch):
+        app.config['MARCA_CONTACTO'] = '981 000 000'
+        usuario_adoptante.activo = False
+        db.session.commit()
+        monkeypatch.setattr(oauth.create_client('google'), 'authorize_access_token', lambda **k: {'userinfo': {
+            'sub': 'g-x', 'email': 'adoptante@test.com', 'email_verified': True}})
+
+        html = client.get('/auth/google/callback', follow_redirects=True).data.decode()
+
+        assert 'escríbenos a 981 000 000' in html
+
+    def test_mensajes_de_google_nuevos(self, client, monkeypatch):
+        google = oauth.create_client('google')
+        monkeypatch.setattr(google, 'authorize_access_token', lambda **k: {'userinfo': {
+            'sub': 'g-y', 'email': 'x@gmail.com', 'email_verified': False}})
+        html = client.get('/auth/google/callback', follow_redirects=True).data.decode()
+        assert 'no tiene el correo verificado' in html
+
+        monkeypatch.setattr(google, 'authorize_access_token', lambda **k: {'userinfo': {
+            'sub': 'g-z', 'email': 'z@gmail.com', 'email_verified': True, 'given_name': 'Zoe'}})
+        html = client.get('/auth/google/callback', follow_redirects=True).data.decode()
+        assert '¡Hola, Zoe!' in html
+        assert 'Bienvenido' not in html
+
+    def test_bienvenida_sin_masculino_por_defecto(self, client, usuario_adoptante):
+        html = client.post('/auth/login', data={'email': 'adoptante@test.com', 'password': 'password123'},
+                           follow_redirects=True).data.decode()
+        assert '¡Hola, ' in html
+        assert 'Bienvenido' not in html
+
+    def test_next_se_mantiene_y_se_valida_en_el_registro(self, client):
+        html = client.get('/auth/registro?next=/mascotas/1').data.decode()
+        assert '<input type="hidden" name="next" value="/mascotas/1">' in html
+        assert 'name="next"' not in client.get('/auth/registro?next=//evil.com').data.decode()

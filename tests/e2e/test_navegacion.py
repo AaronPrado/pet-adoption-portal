@@ -166,7 +166,7 @@ def test_formulario_sin_token_csrf_rechazado(page):
         const form = document.querySelector('form[action$="/auth/login"]');
         form.querySelector('input[name=csrf_token]').remove();
     }""")
-    page.get_by_label('Email').fill(ADOPTANTE[0])
+    page.get_by_label('Correo electrónico').fill(ADOPTANTE[0])
     page.get_by_label('Contraseña').fill(ADOPTANTE[1])
     page.get_by_role('button', name='Iniciar Sesión').click()
 
