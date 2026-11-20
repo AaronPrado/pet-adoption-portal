@@ -1,0 +1,88 @@
+/*
+  Ficha de mascota (B4.2). Solo tokens de sistema.css, en la capa
+  `componentes` y con clases propias (`ficha*`).
+*/
+@layer componentes {
+  .ficha {
+    display: grid;
+    gap: var(--esp-6);
+  }
+
+  .ficha__foto {
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    object-fit: cover;
+    background-color: var(--color-acento-suave);
+    border-radius: var(--radio-lg);
+    box-shadow: var(--sombra-1);
+  }
+
+  .ficha__foto--vacia {
+    display: grid;
+    place-items: center;
+    color: var(--color-acento);
+  }
+
+  .ficha__info {
+    display: grid;
+    align-content: start;
+    gap: var(--esp-6);
+  }
+
+  .ficha__info h2 {
+    margin-block-end: var(--esp-3);
+    font-size: var(--texto-lg);
+  }
+
+  .ficha__estado {
+    display: grid;
+    justify-items: start;
+    gap: var(--esp-3);
+  }
+
+  .ficha__datos {
+    display: grid;
+    gap: var(--esp-2);
+    margin: 0;
+  }
+
+  .ficha__datos > div {
+    display: grid;
+    grid-template-columns: minmax(9rem, 12rem) 1fr;
+    gap: var(--esp-3);
+    padding-block-end: var(--esp-2);
+    border-block-end: 1px solid var(--color-borde);
+  }
+
+  .ficha__datos dt {
+    color: var(--color-texto-suave);
+  }
+
+  .ficha__datos dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+    font-weight: var(--peso-fuerte);
+  }
+
+  .ficha__descripcion {
+    overflow-wrap: anywhere;
+  }
+
+  .ficha__accion {
+    display: grid;
+    justify-items: start;
+    gap: var(--esp-3);
+  }
+
+  @media (min-width: 48rem) {
+    .ficha {
+      grid-template-columns: 2fr 3fr;
+      align-items: start;
+    }
+
+    .ficha__foto {
+      position: sticky;
+      inset-block-start: var(--esp-5);
+    }
+  }
+}

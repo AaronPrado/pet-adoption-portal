@@ -34,9 +34,9 @@ def test_adoptante_envia_solicitud(page, errores_js, mascotas):
 
 
 def test_login_desde_la_ficha_vuelve_al_cuestionario(page, errores_js, mascotas):
-    """El anónimo que pulsa «Inicia sesión para adoptar» acaba en el cuestionario."""
+    """El anónimo que pulsa «Inicia sesión para solicitar la adopción» acaba en el cuestionario."""
     page.goto(f'/mascotas/{mascotas["Misu"]}')
-    page.get_by_role('link', name='Inicia sesión para adoptar').click()
+    page.get_by_role('link', name='Inicia sesión para solicitar la adopción').click()
 
     # Un primer intento fallido conserva el correo y el destino
     page.get_by_label('Correo electrónico').fill(ADOPTANTE[0])

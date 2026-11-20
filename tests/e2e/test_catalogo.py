@@ -18,6 +18,18 @@ def test_catalogo_publico(page, errores_js):
     expect(page.get_by_role('heading', name='Toby')).to_have_count(0)
 
 
+def test_de_la_tarjeta_a_la_ficha(page, errores_js):
+    """El enlace «Ver a Toby» es único y lleva a la ficha; «Volver al catálogo» regresa."""
+    page.goto('/mascotas/catalogo')
+
+    tarjeta = page.get_by_role('article').filter(has=page.get_by_role('heading', name='Toby'))
+    tarjeta.get_by_role('link', name='Ver a Toby').click()
+
+    expect(page.get_by_role('heading', level=1, name='Toby')).to_be_visible()
+    page.get_by_role('link', name='Volver al catálogo').click()
+    expect(page.get_by_role('heading', level=1, name='Mascotas en adopción')).to_be_visible()
+
+
 def test_filtros_plegados_y_estado_vacio(page, errores_js):
     page.goto('/mascotas/catalogo')
 

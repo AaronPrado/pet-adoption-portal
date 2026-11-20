@@ -1,111 +1,80 @@
-{% extends "base_bootstrap.html" %}
+{% extends "base.html" %}
+{% import "macros/componentes.html" as c %}
 
-{% block title %}{{ mascota.nombre }} - Portal de Adopción{% endblock %}
+{% block title %}{{ mascota.nombre }} - {{ marca_nombre }}{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/paginas/detalle-mascota.css') }}">
+{% endblock %}
 
 {% block content %}
-<div class="row mb-3">
-    <div class="col-12">
-        <a href="{{ url_for('mascotas.catalogo') }}" class="btn btn-light">
-            ← Volver al catálogo
-        </a>
-    </div>
-</div>
+{% set edad = mascota.edad_aprox %}
+{% set srcset = mascota.foto_url|srcset_foto if mascota.foto_url else '' %}
 
-<div class="row">
-    <!-- Imagen de la mascota -->
-    <div class="col-md-5">
-        <div class="card">
-            {% if mascota.foto_url %}
-                <img src="{{ mascota.foto_url }}" class="card-img-top mascota-detail-img" alt="{{ mascota.nombre }}">
+{{ c.cabecera_pagina(mascota.nombre, volver_url=url_for('mascotas.catalogo'), volver_texto='Volver al catálogo') }}
+
+<div class="ficha">
+    {% if mascota.foto_url %}
+    <img class="ficha__foto" src="{{ mascota.foto_url }}"
+         {%- if srcset %} srcset="{{ srcset }}" sizes="(min-width: 48rem) 40vw, 100vw"{% endif %}
+         width="800" height="600" alt="Foto de {{ mascota.nombre }}, {{ mascota.especie|lower }}"
+         decoding="async" fetchpriority="high">
+    {% else %}
+    <div class="ficha__foto ficha__foto--vacia" role="img" aria-label="{{ mascota.nombre }} todavía no tiene foto">
+        <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" width="64" height="64" fill="currentColor">
+            <ellipse cx="6" cy="9" rx="2" ry="2.6"/><ellipse cx="10" cy="5.5" rx="2" ry="2.6"/>
+            <ellipse cx="14" cy="5.5" rx="2" ry="2.6"/><ellipse cx="18" cy="9" rx="2" ry="2.6"/>
+            <path d="M12 11c-3 0-6 4.2-6 6.6 0 1.6 1.3 2.4 2.8 2.4 1.3 0 2.1-.7 3.2-.7s1.9.7 3.2.7c1.5 0 2.8-.8 2.8-2.4 0-2.4-3-6.6-6-6.6z"/>
+        </svg>
+    </div>
+    {% endif %}
+
+    <div class="ficha__info">
+        <section class="ficha__estado" aria-label="Estado de {{ mascota.nombre }}">
+            {{ c.badge_estado(mascota.estado) }}
+            {% if mascota.estado == 'disponible' %}
+                {% if pendientes %}
+                <p>{{ AVISO_PENDIENTES }}</p>
+                {% endif %}
+            {% elif mascota.estado == 'adoptado' %}
+                <p>Ya tiene hogar. Conoce a otras mascotas que buscan una familia.</p>
+                {{ c.enlace_boton('Ver mascotas disponibles', url_for('mascotas.catalogo'), 'secundario') }}
             {% else %}
-                <img src="https://placehold.co/400x400/8ecae6/023047?text={{ mascota.especie }}"
-                     class="card-img-top mascota-detail-img" alt="{{ mascota.nombre }}">
+                <p>Tiene una solicitud en revisión y ahora no se puede solicitar. Mientras tanto, conoce a otras mascotas que buscan hogar.</p>
+                {{ c.enlace_boton('Ver mascotas disponibles', url_for('mascotas.catalogo'), 'secundario') }}
             {% endif %}
-        </div>
-    </div>
+        </section>
 
-    <!-- Información de la mascota -->
-    <div class="col-md-7">
-        <div class="card">
-            <div class="card-body">
-                <h2 class="card-title">{{ mascota.nombre }}</h2>
-
-                <!-- Estado -->
-                {% if mascota.estado == 'disponible' %}
-                    <span class="badge bg-success mb-3">Disponible para adopción</span>
-                    {% if pendientes %}
-                        <span class="badge bg-info text-dark mb-3">Tiene solicitudes en curso</span>
-                    {% endif %}
-                {% elif mascota.estado == 'adoptado' %}
-                    <span class="badge bg-secondary mb-3">Adoptado</span>
+        <section>
+            <h2>Datos de {{ mascota.nombre }}</h2>
+            <dl class="ficha__datos">
+                <div><dt>Especie</dt><dd>{{ mascota.especie }}</dd></div>
+                {% if mascota.raza %}<div><dt>Raza</dt><dd>{{ mascota.raza }}</dd></div>{% endif %}
+                {% if edad is not none %}
+                <div><dt>Edad aproximada</dt><dd>{{ 'Menos de 1 año' if edad == 0 else edad ~ (' año' if edad == 1 else ' años') }}</dd></div>
                 {% endif %}
+                {% if mascota.sexo %}<div><dt>Sexo</dt><dd>{{ mascota.sexo }}</dd></div>{% endif %}
+                {% if mascota.tamano %}<div><dt>Tamaño</dt><dd>{{ mascota.tamano }}</dd></div>{% endif %}
+                <div><dt>Vacunas</dt><dd>{{ 'Al día' if mascota.vacunado else 'Pendientes' }}</dd></div>
+                <div><dt>Esterilización</dt><dd>{{ 'Sí' if mascota.esterilizado else 'No' }}</dd></div>
+            </dl>
+        </section>
 
-                <!-- Características principales -->
-                <h5 class="mt-3">Características</h5>
-                <table class="table table-borderless">
-                    <tbody>
-                        <tr>
-                            <th class="columna-etiqueta-40">Especie:</th>
-                            <td>{{ mascota.especie }}</td>
-                        </tr>
-                        {% if mascota.raza %}
-                        <tr>
-                            <th>Raza:</th>
-                            <td>{{ mascota.raza }}</td>
-                        </tr>
-                        {% endif %}
-                        {% if mascota.edad_aprox %}
-                        <tr>
-                            <th>Edad aproximada:</th>
-                            <td>{{ mascota.edad_aprox }} {% if mascota.edad_aprox == 1 %}año{% else %}años{% endif %}</td>
-                        </tr>
-                        {% endif %}
-                        {% if mascota.sexo %}
-                        <tr>
-                            <th>Sexo:</th>
-                            <td>{{ mascota.sexo }}</td>
-                        </tr>
-                        {% endif %}
-                        {% if mascota.tamano %}
-                        <tr>
-                            <th>Tamaño:</th>
-                            <td>{{ mascota.tamano }}</td>
-                        </tr>
-                        {% endif %}
-                        <tr>
-                            <th>Vacunado:</th>
-                            <td>{% if mascota.vacunado %}Sí ✓{% else %}No{% endif %}</td>
-                        </tr>
-                        <tr>
-                            <th>Esterilizado:</th>
-                            <td>{% if mascota.esterilizado %}Sí ✓{% else %}No{% endif %}</td>
-                        </tr>
-                    </tbody>
-                </table>
+        <section>
+            <h2>Sobre {{ mascota.nombre }}</h2>
+            <p class="ficha__descripcion">{{ mascota.descripcion }}</p>
+        </section>
 
-                <!-- Descripción -->
-                <h5 class="mt-4">Sobre {{ mascota.nombre }}</h5>
-                <p class="card-text">{{ mascota.descripcion }}</p>
-
-                <!-- Botón de adopción (si está disponible) -->
-                {% if mascota.estado == 'disponible' %}
-                    <div class="mt-4">
-                        {% if current_user.is_authenticated %}
-                            <a href="{{ url_for('solicitudes.nueva', mascota_id=mascota.id) }}" class="btn btn-primary btn-lg w-100">
-                                Solicitar Adopción
-                            </a>
-                            <small class="text-muted d-block mt-2">
-                                Deberás completar un cuestionario de adopción
-                            </small>
-                        {% else %}
-                            <a href="{{ url_for('auth.login', next=url_for('solicitudes.nueva', mascota_id=mascota.id)) }}" class="btn btn-primary btn-lg w-100">
-                                Inicia sesión para adoptar
-                            </a>
-                        {% endif %}
-                    </div>
-                {% endif %}
-            </div>
-        </div>
+        {% if mascota.estado == 'disponible' %}
+        <section class="ficha__accion" aria-label="Solicitar la adopción de {{ mascota.nombre }}">
+            {% if usuario_nav() %}
+            {{ c.enlace_boton('Solicitar adopción', url_for('solicitudes.nueva', mascota_id=mascota.id)) }}
+            <p>Deberás completar un cuestionario de adopción.</p>
+            {% else %}
+            {{ c.enlace_boton('Inicia sesión para solicitar la adopción', url_for('auth.login', next=url_for('solicitudes.nueva', mascota_id=mascota.id))) }}
+            {% endif %}
+        </section>
+        {% endif %}
     </div>
 </div>
 {% endblock %}
