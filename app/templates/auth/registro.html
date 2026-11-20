@@ -1,96 +1,39 @@
-{% extends "base_bootstrap.html" %}
+{% extends "base.html" %}
+{% import "macros/formulario.html" as f %}
+{% import "macros/componentes.html" as c %}
 
-{% block title %}Registro - Portal de Adopción{% endblock %}
+{% block title %}Crear cuenta - {{ marca_nombre }}{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/paginas/auth.css') }}">
+{% endblock %}
 
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-md-6">
-        <div class="card shadow">
-            <div class="card-body p-5">
-                <h2 class="text-center mb-4">Crear Cuenta</h2>
+<div class="auth">
+  {{ c.cabecera_pagina('Crear cuenta') }}
+  {{ f.resumen_errores(errores) }}
 
-                <form method="POST" action="{{ url_for('auth.registro') }}">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
-                    <!-- Email -->
-                    <div class="mb-3">
-                        <label for="email" class="form-label">Email *</label>
-                        <input type="email" class="form-control{% if errores.email %} is-invalid{% endif %}" id="email" name="email"
-                               value="{{ valores.email or '' }}"
-                               placeholder="tu@email.com" required autofocus
-                               {%- if errores.email %} aria-invalid="true" aria-describedby="email-error email-ayuda"{% endif %}>
-                        {% if errores.email %}<div id="email-error" class="invalid-feedback">{{ errores.email }}</div>{% endif %}
-                        <small id="email-ayuda" class="text-muted">Usarás este email para iniciar sesión</small>
-                    </div>
+  <form class="auth__panel" method="POST" action="{{ url_for('auth.registro') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
+    {{ f.leyenda_obligatorios() }}
 
-                    <!-- Nombre -->
-                    <div class="mb-3">
-                        <label for="nombre" class="form-label">Nombre *</label>
-                        <input type="text" class="form-control{% if errores.nombre %} is-invalid{% endif %}" id="nombre" name="nombre"
-                               value="{{ valores.nombre or '' }}"
-                               placeholder="Juan" required
-                               {%- if errores.nombre %} aria-invalid="true" aria-describedby="nombre-error"{% endif %}>
-                        {% if errores.nombre %}<div id="nombre-error" class="invalid-feedback">{{ errores.nombre }}</div>{% endif %}
-                    </div>
+    {{ f.campo('email', 'Correo electrónico', tipo='email', valores=valores, errores=errores,
+               autocomplete='email', obligatorio=true, ayuda='Lo usarás para iniciar sesión.',
+               atributos={'autocapitalize': 'none', 'spellcheck': 'false'}) }}
+    {{ f.campo('nombre', 'Nombre', valores=valores, errores=errores, autocomplete='given-name', obligatorio=true) }}
+    {{ f.campo('apellidos', 'Apellidos', valores=valores, errores=errores, autocomplete='family-name') }}
+    {{ f.campo('telefono', 'Teléfono', tipo='tel', valores=valores, errores=errores, autocomplete='tel') }}
+    {{ f.campo('direccion', 'Dirección', tipo='textarea', valores=valores, errores=errores, filas=2,
+               autocomplete='street-address', ayuda='Opcional. Nos ayuda a valorar tu solicitud.') }}
+    {{ f.campo('password', 'Contraseña', tipo='password', errores=errores, autocomplete='new-password',
+               obligatorio=true, ayuda='Al menos 8 caracteres.', atributos={'minlength': 8}) }}
+    {{ f.campo('password_confirm', 'Confirma la contraseña', tipo='password', errores=errores,
+               autocomplete='new-password', obligatorio=true) }}
 
-                    <!-- Apellidos -->
-                    <div class="mb-3">
-                        <label for="apellidos" class="form-label">Apellidos</label>
-                        <input type="text" class="form-control" id="apellidos" name="apellidos"
-                               placeholder="Pérez García"
-                               value="{{ valores.apellidos or '' }}">
-                    </div>
+    {{ f.boton('Crear cuenta') }}
+  </form>
 
-                    <!-- Teléfono -->
-                    <div class="mb-3">
-                        <label for="telefono" class="form-label">Teléfono</label>
-                        <input type="tel" class="form-control" id="telefono" name="telefono"
-                               placeholder="666123456"
-                               value="{{ valores.telefono or '' }}">
-                    </div>
-
-                    <!-- Dirección -->
-                    <div class="mb-3">
-                        <label for="direccion" class="form-label">Dirección</label>
-                        <textarea class="form-control" id="direccion" name="direccion" rows="2"
-                                  placeholder="Calle Mayor 1, Madrid">{{ valores.direccion or '' }}</textarea>
-                        <small class="text-muted">Necesaria para solicitudes de adopción</small>
-                    </div>
-
-                    <!-- Contraseña -->
-                    <div class="mb-3">
-                        <label for="password" class="form-label">Contraseña *</label>
-                        <input type="password" class="form-control{% if errores.password %} is-invalid{% endif %}" id="password" name="password"
-                               placeholder="Mínimo 8 caracteres" minlength="8" required
-                               {%- if errores.password %} aria-invalid="true" aria-describedby="password-error"{% endif %}>
-                        {% if errores.password %}<div id="password-error" class="invalid-feedback">{{ errores.password }}</div>{% endif %}
-                    </div>
-
-                    <!-- Confirmar contraseña -->
-                    <div class="mb-3">
-                        <label for="password_confirm" class="form-label">Confirmar Contraseña *</label>
-                        <input type="password" class="form-control{% if errores.password_confirm %} is-invalid{% endif %}" id="password_confirm" name="password_confirm"
-                               placeholder="Repite tu contraseña" required
-                               {%- if errores.password_confirm %} aria-invalid="true" aria-describedby="password_confirm-error"{% endif %}>
-                        {% if errores.password_confirm %}<div id="password_confirm-error" class="invalid-feedback">{{ errores.password_confirm }}</div>{% endif %}
-                    </div>
-
-                    <!-- Botón de envío -->
-                    <div class="d-grid gap-2">
-                        <button type="submit" class="btn btn-primary btn-lg">
-                            Registrarse
-                        </button>
-                    </div>
-                </form>
-
-                <!-- Enlace a login -->
-                <hr class="my-4">
-                <p class="text-center text-muted">
-                    ¿Ya tienes cuenta?
-                    <a href="{{ url_for('auth.login', next=next) }}" class="text-decoration-none">Inicia sesión aquí</a>
-                </p>
-            </div>
-        </div>
-    </div>
+  <p class="auth__cambio">¿Ya tienes cuenta? <a href="{{ url_for('auth.login', next=next) }}">Inicia sesión</a></p>
 </div>
 {% endblock %}

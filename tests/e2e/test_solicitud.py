@@ -39,11 +39,11 @@ def test_login_desde_la_ficha_vuelve_al_cuestionario(page, errores_js, mascotas)
     page.get_by_role('link', name='Inicia sesión para adoptar').click()
 
     # Un primer intento fallido conserva el correo y el destino
-    page.get_by_label('Email').fill(ADOPTANTE[0])
+    page.get_by_label('Correo electrónico').fill(ADOPTANTE[0])
     page.get_by_label('Contraseña').fill('clave-equivocada')
     page.get_by_role('button', name='Iniciar Sesión').click()
-    expect(page.get_by_text('Email o contraseña incorrectos.')).to_be_visible()
-    expect(page.get_by_label('Email')).to_have_value(ADOPTANTE[0])
+    expect(page.get_by_role('link', name='Correo o contraseña incorrectos.')).to_be_visible()
+    expect(page.get_by_label('Correo electrónico')).to_have_value(ADOPTANTE[0])
     expect(page.get_by_label('Contraseña')).to_have_value('')
 
     page.get_by_label('Contraseña').fill(ADOPTANTE[1])

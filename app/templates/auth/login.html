@@ -1,69 +1,51 @@
-{% extends "base_bootstrap.html" %}
+{% extends "base.html" %}
+{% import "macros/formulario.html" as f %}
+{% import "macros/componentes.html" as c %}
 
-{% block title %}Iniciar Sesión - Portal de Adopción{% endblock %}
+{% block title %}Iniciar sesión - {{ marca_nombre }}{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/paginas/auth.css') }}">
+{% endblock %}
 
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-md-5">
-        <div class="card shadow">
-            <div class="card-body p-5">
-                <h2 class="text-center mb-4">Iniciar Sesión</h2>
+<div class="auth">
+  {{ c.cabecera_pagina('Iniciar sesión') }}
+  {{ f.resumen_errores(errores) }}
 
-                <form method="POST" action="{{ url_for('auth.login') }}">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
-                    <!-- Email -->
-                    <div class="mb-3">
-                        <label for="email" class="form-label">Email</label>
-                        <input type="email" class="form-control{% if errores.email %} is-invalid{% endif %}" id="email" name="email" placeholder="tu@email.com"
-                            value="{{ valores.email or '' }}" required autofocus
-                            {%- if errores.email %} aria-invalid="true" aria-describedby="email-error"{% endif %}>
-                        {% if errores.email %}<div id="email-error" class="invalid-feedback">{{ errores.email }}</div>{% endif %}
-                    </div>
+  <form class="auth__panel" method="POST" action="{{ url_for('auth.login') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
+    {{ f.leyenda_obligatorios() }}
 
-                    <!-- Contraseña -->
-                    <div class="mb-3">
-                        <label for="password" class="form-label">Contraseña</label>
-                        <input type="password" class="form-control{% if errores.password %} is-invalid{% endif %}" id="password" name="password"
-                            placeholder="Tu contraseña" required
-                            {%- if errores.password %} aria-invalid="true" aria-describedby="password-error"{% endif %}>
-                        {% if errores.password %}<div id="password-error" class="invalid-feedback">{{ errores.password }}</div>{% endif %}
-                    </div>
+    {{ f.campo('email', 'Correo electrónico', tipo='email', valores=valores, errores=errores,
+               autocomplete='email', obligatorio=true, atributos={'autocapitalize': 'none', 'spellcheck': 'false'}) }}
+    {{ f.campo('password', 'Contraseña', tipo='password', errores=errores,
+               autocomplete='current-password', obligatorio=true) }}
 
-                    <!-- Recordarme -->
-                    <div class="mb-3 form-check">
-                        <input type="checkbox" class="form-check-input" id="remember" name="remember">
-                        <label class="form-check-label" for="remember">
-                            Recordarme en este dispositivo
-                        </label>
-                    </div>
-
-                    <!-- Botón de envío -->
-                    <div class="d-grid gap-2">
-                        <button type="submit" class="btn btn-primary btn-lg">
-                            Iniciar Sesión
-                        </button>
-                    </div>
-                </form>
-
-                <!-- OAuth Google -->
-                <div class="text-center my-3">
-                    <p class="text-muted">O continúa con:</p>
-                    <a href="{{ url_for('auth.google_login', next=next) }}" class="btn btn-outline-dark d-inline-flex align-items-center gap-2">
-                        <img src="https://developers.google.com/identity/images/g-logo.png" alt=""
-                            width="24" height="24" class="logo-proveedor">
-                        Continuar con Google
-                    </a>
-                </div>
-
-                <!-- Enlace a registro -->
-                <hr class="my-4">
-                <p class="text-center text-muted">
-                    ¿No tienes cuenta?
-                    <a href="{{ url_for('auth.registro', next=next) }}" class="text-decoration-none">Regístrate aquí</a>
-                </p>
-            </div>
-        </div>
+    <div class="opcion auth__recordar">
+      <input class="opcion__control" type="checkbox" id="remember" name="remember">
+      <label class="opcion__etiqueta" for="remember">Recordarme en este dispositivo</label>
     </div>
+
+    {{ f.boton('Iniciar sesión') }}
+  </form>
+
+  {% if google_activo %}
+  <div class="auth__alternativa">
+    <p class="auth__separador">O entra con tu cuenta de Google</p>
+    <a class="boton boton--secundario" href="{{ url_for('auth.google_login', next=next) }}">
+      <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false">
+        <path fill="#4285F4" d="M23.5 12.27c0-.85-.08-1.67-.22-2.45H12v4.64h6.46a5.52 5.52 0 0 1-2.4 3.62v3h3.88c2.27-2.09 3.56-5.17 3.56-8.81z"/>
+        <path fill="#34A853" d="M12 24c3.24 0 5.96-1.07 7.94-2.92l-3.88-3c-1.07.72-2.45 1.15-4.06 1.15-3.12 0-5.77-2.11-6.71-4.95H1.28v3.1A12 12 0 0 0 12 24z"/>
+        <path fill="#FBBC05" d="M5.29 14.28a7.2 7.2 0 0 1 0-4.56v-3.1H1.28a12 12 0 0 0 0 10.76l4.01-3.1z"/>
+        <path fill="#EA4335" d="M12 4.77c1.76 0 3.34.61 4.59 1.8l3.44-3.44C17.95 1.19 15.23 0 12 0A12 12 0 0 0 1.28 6.62l4.01 3.1C6.23 6.88 8.88 4.77 12 4.77z"/>
+      </svg>
+      Continuar con Google
+    </a>
+  </div>
+  {% endif %}
+
+  <p class="auth__cambio">¿No tienes cuenta? <a href="{{ url_for('auth.registro', next=next) }}">Crea una</a></p>
 </div>
 {% endblock %}
