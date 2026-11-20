@@ -31,6 +31,10 @@ CASILLAS_MASCOTA = ('vacunado', 'esterilizado')
 EDAD_MINIMA = 0
 EDAD_MAXIMA = 30
 
+# Opciones de los filtros del catálogo
+TAMANOS = (('Pequeño', 'Pequeño'), ('Mediano', 'Mediano'), ('Grande', 'Grande'))
+SEXOS = (('Macho', 'Macho'), ('Hembra', 'Hembra'))
+
 # Margen para el resto de campos del formulario dentro de MAX_CONTENT_LENGTH
 MARGEN_PETICION_FOTO = 64 * 1024
 
@@ -45,34 +49,47 @@ def catalogo():
     Permite filtrar por especie, tamaño, sexo y edad.
     Accesible sin autenticación.
     """
-    # Obtener parámetros de filtrado
-    especie_filtro = request.args.get('especie', '')
+    # La especie se guarda normalizada: el parámetro se normaliza igual (como en la API)
+    especie_filtro = Mascota.normalizar_especie(request.args.get('especie', ''))
     tamano_filtro = request.args.get('tamano', '')
     sexo_filtro = request.args.get('sexo', '')
-    edad_filtro = request.args.get('edad', '')
+    edad_filtro = request.args.get('edad', '').strip()
 
     # Query base: solo mascotas disponibles
     query = Mascota.query.filter_by(estado='disponible')
 
-    # Aplicar filtros si existen
+    # Etiquetas legibles de los filtros aplicados (resumen y estado vacío)
+    filtros_activos = []
+
     if especie_filtro:
         query = query.filter(Mascota.especie == especie_filtro)
+        filtros_activos.append(especie_filtro)
 
     if tamano_filtro:
         query = query.filter(Mascota.tamano == tamano_filtro)
+        filtros_activos.append(tamano_filtro)
 
     if sexo_filtro:
         query = query.filter(Mascota.sexo == sexo_filtro)
+        filtros_activos.append(sexo_filtro)
 
+    aviso_edad = None
     if edad_filtro:
         try:
             edad_max = int(edad_filtro)
-            query = query.filter(Mascota.edad_aprox <= edad_max)
         except ValueError:
-            pass  # Ignorar si el filtro de edad no es válido
+            edad_max = None
+        if edad_max is None or not EDAD_MINIMA <= edad_max <= EDAD_MAXIMA:
+            # Se avisa y se ignora; fuera de rango también evita un desbordamiento en la BD
+            aviso_edad = (f'La edad máxima debe ser un número entero entre {EDAD_MINIMA} y {EDAD_MAXIMA}. '
+                          'Se muestran mascotas de todas las edades.')
+            edad_filtro = ''
+        else:
+            query = query.filter(Mascota.edad_aprox <= edad_max)
+            filtros_activos.append(f'hasta {edad_max} {"año" if edad_max == 1 else "años"}')
 
     # Ordenar por fecha de ingreso (más recientes primero)
-    pagina = query.order_by(Mascota.fecha_ingreso.desc()).paginate(
+    pagina = query.order_by(Mascota.fecha_ingreso.desc(), Mascota.id.desc()).paginate(
         page=request.args.get('page', 1, type=int),
         per_page=current_app.config['CATALOGO_POR_PAGINA'],
         error_out=False,
@@ -90,11 +107,13 @@ def catalogo():
                          mascotas=pagina.items,
                          pagina=pagina,
                          pendientes=adopciones.pendientes_por_mascota([m.id for m in pagina.items]),
-                         especies_disponibles=especies_disponibles,
-                         especie_filtro=especie_filtro,
-                         tamano_filtro=tamano_filtro,
-                         sexo_filtro=sexo_filtro,
-                         edad_filtro=edad_filtro)
+                         especies=[(esp, esp) for esp in especies_disponibles],
+                         valores={'especie': especie_filtro, 'tamano': tamano_filtro,
+                                  'sexo': sexo_filtro, 'edad': edad_filtro},
+                         filtros_activos=filtros_activos,
+                         aviso_edad=aviso_edad,
+                         tamanos=TAMANOS, sexos=SEXOS,
+                         edad_minima=EDAD_MINIMA, edad_maxima=EDAD_MAXIMA)
 
 
 @bp.route('/<int:mascota_id>')

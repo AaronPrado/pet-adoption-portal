@@ -129,6 +129,7 @@ def test_envio_sin_respuesta_se_anuncia_y_se_libera(page, errores_js):
 def test_los_formularios_get_no_se_bloquean(page, errores_js):
     """Un filtro (GET) puede repetirse: no cambia nada en el servidor."""
     page.goto('/mascotas/catalogo')
+    page.get_by_text('Filtrar mascotas').click()
     registrar_envios(page)
     filtrar = page.get_by_role('button', name='Filtrar').element_handle()
 

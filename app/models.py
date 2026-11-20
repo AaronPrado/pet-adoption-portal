@@ -32,6 +32,10 @@ ETIQUETAS_ESTADO = {
     'solicitud': {'pendiente': 'Pendiente', 'aprobada': 'Aprobada', 'rechazada': 'Rechazada'},
 }
 
+# Aviso de una mascota disponible con solicitudes pendientes (ADR-0004): una
+# sola frase para el catálogo y la ficha (global de Jinja `AVISO_PENDIENTES`)
+AVISO_PENDIENTES = 'Tiene solicitudes en curso. Aún puedes solicitarla.'
+
 
 def etiqueta_estado(estado, tipo='mascota'):
     """

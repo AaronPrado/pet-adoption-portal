@@ -46,16 +46,22 @@ def enlace_nav(html, texto):
 
 class TestPlantillas:
 
-    def test_solo_las_paginas_de_error_usan_la_base_nueva(self):
-        """Mientras dure la migración, cada página extiende una de las dos bases."""
+    def test_cada_pagina_extiende_una_de_las_dos_bases(self):
+        """Mientras dure la migración, una página usa base.html o base_bootstrap.html; la migrada no lleva Bootstrap."""
         bases = {}
         for ruta in PLANTILLAS.rglob('*.html'):
             coincidencia = re.match(r'{% extends "([^"]+)" %}', ruta.read_text(encoding='utf-8'))
             if coincidencia:
                 bases[ruta.relative_to(PLANTILLAS).as_posix()] = coincidencia.group(1)
 
-        assert bases.pop('errores/error.html') == 'base.html'
         assert set(bases.values()) <= {'base.html', 'base_bootstrap.html'}
+        assert bases['errores/error.html'] == 'base.html'
+        clases_bootstrap = re.compile(r'class="[^"]*\b(btn(-\w+)?|card(-\w+)?|col(-\w+)+|row|badge|alert|container|'
+                                      r'form-(control|select|label)|page-(link|item)|mb-\d|mt-\d|d-flex)\b')
+        for plantilla, base in bases.items():
+            if base == 'base.html':
+                texto = (PLANTILLAS / plantilla).read_text(encoding='utf-8')
+                assert not clases_bootstrap.search(texto), f'{plantilla} usa clases de Bootstrap'
 
     def test_la_base_nueva_no_carga_bootstrap(self):
         texto = re.sub(r'{#.*?#}', '', (PLANTILLAS / 'base.html').read_text(encoding='utf-8'), flags=re.S)
