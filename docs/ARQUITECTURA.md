@@ -296,7 +296,9 @@ app/
     ├── css/
     │   ├── sistema.css  # Sistema de diseño (ADR-0002): tokens, base y componentes
     │   ├── marca.css    # Marca de la protectora: acento y fuentes (solo tokens)
+    │   ├── paginas/     # CSS de cada página migrada (inicio.css); solo tokens
     │   └── styles.css   # Estilos de base_bootstrap.html (se retira con Bootstrap)
+    ├── img/             # Imágenes de la portada (hero-640/1280.webp) y su origen
     ├── fonts/           # Atkinson Hyperlegible y Fraunces en WOFF2 (OFL)
     ├── js/app.js        # Confirmaciones `data-confirmar`, límite de tamaño de la foto, doble envío,
     │                    # foco en el resumen de errores y menús de base.html (sin JavaScript inline)

@@ -1,1 +1,4 @@
 app/static/vendor/** linguist-vendored -text
+
+# Imágenes binarias
+app/static/img/*.webp binary

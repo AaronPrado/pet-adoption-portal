@@ -310,49 +310,6 @@ table thead th a:hover {
     object-fit: cover !important;
 }
 
-/* Portada (antes en un <style> de index.html; la CSP no admite estilos en línea) */
-.hero-home {
-    background: linear-gradient(rgba(2,48,71,0.5), rgba(2,48,71,0.5)),
-                url('https://images.unsplash.com/photo-1450778869180-41d0601e046e?w=1200&h=500&fit=crop') center/cover no-repeat;
-    border-radius: 10px;
-    padding: 100px 20px;
-    color: white;
-}
-
-.step-number {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 60px;
-    height: 60px;
-    background-color: #219ebc;
-    color: white;
-    border-radius: 50%;
-    font-size: 24px;
-    font-weight: bold;
-    margin: 0 auto;
-}
-
-.icon-box {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-}
-
-@media (max-width: 768px) {
-    .hero-home {
-        padding: 60px 20px;
-    }
-
-    .hero-home h1 {
-        font-size: 2rem;
-    }
-
-    .hero-home .lead {
-        font-size: 1rem;
-    }
-}
-
 /* Clases que sustituyen a los antiguos atributos style de las plantillas.
    Llevan el elemento en el selector para igualar la especificidad de
    `.card img` y, al ir después en el archivo, ganarle. */

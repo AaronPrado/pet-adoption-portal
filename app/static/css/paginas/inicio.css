@@ -1,0 +1,134 @@
+/*
+ * Portada (B4.1). Solo tokens de sistema.css.
+ *
+ * Va en la capa `componentes`, ya declarada en sistema.css: así se ordena
+ * igual que el resto de componentes y las utilidades siguen ganándole.
+ *
+ * El texto del hero va en un panel de superficie con el color de texto
+ * (contraste ≥ 4,5:1 comprobado en tests/test_tokens.py), nunca sobre la foto.
+ */
+@layer componentes {
+  .inicio-hero {
+    margin-block-end: var(--esp-8);
+  }
+
+  .inicio-hero__imagen {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1280 / 753;
+    object-fit: cover;
+    border-radius: var(--radio-lg);
+    background-color: var(--color-acento-suave);
+  }
+
+  /* El panel solapa la parte baja de la foto; en pantallas anchas, a la izquierda */
+  .inicio-hero__panel {
+    position: relative;
+    display: grid;
+    gap: var(--esp-4);
+    max-inline-size: 38rem;
+    margin-block-start: calc(var(--esp-7) * -1);
+    margin-inline: var(--esp-3);
+    padding: var(--esp-5);
+    color: var(--color-texto);
+    background-color: var(--color-superficie);
+    border-radius: var(--radio-md);
+    box-shadow: var(--sombra-2);
+  }
+
+  .inicio-hero__panel h1 {
+    font-size: var(--texto-2xl);
+  }
+
+  .inicio-hero__texto {
+    font-size: var(--texto-md);
+    color: var(--color-texto-suave);
+  }
+
+  .inicio-hero__acciones {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--esp-3);
+  }
+
+  @media (min-width: 48rem) {
+    .inicio-hero__panel {
+      margin-block-start: calc(var(--esp-9) * -1);
+      margin-inline: var(--esp-6);
+      padding: var(--esp-6);
+    }
+  }
+
+  .inicio-seccion {
+    display: grid;
+    gap: var(--esp-5);
+    margin-block-end: var(--esp-8);
+  }
+
+  .inicio-seccion > h2,
+  .inicio-final > h2 {
+    font-size: var(--texto-xl);
+  }
+
+  /* Cifras: solo las que valen más que 0 (la plantilla no pinta las demás) */
+  .inicio-cifras {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--esp-3) var(--esp-7);
+    padding: 0;
+    list-style: none;
+    font-size: var(--texto-md);
+  }
+
+  .inicio-cifras strong {
+    font-size: var(--texto-xl);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .inicio-pasos {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(14rem, 100%), 1fr));
+    gap: var(--esp-5);
+    padding: 0;
+    list-style: none;
+  }
+
+  .inicio-pasos > li {
+    display: grid;
+    justify-items: start;
+    align-content: start;
+    gap: var(--esp-2);
+    padding: var(--esp-5);
+    background-color: var(--color-superficie);
+    border: 1px solid var(--color-borde);
+    border-radius: var(--radio-md);
+  }
+
+  .inicio-pasos h3 {
+    font-size: var(--texto-md);
+  }
+
+  /* Blanco sobre el acento fuerte: el par que ya comprueba test_tokens (P-48) */
+  .inicio-pasos__numero {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--objetivo-min);
+    height: var(--objetivo-min);
+    font-size: var(--texto-md);
+    font-weight: var(--peso-fuerte);
+    color: var(--color-sobre-acento);
+    background-color: var(--color-acento-fuerte);
+    border-radius: var(--radio-total);
+  }
+
+  .inicio-final {
+    display: grid;
+    justify-items: start;
+    gap: var(--esp-3);
+    padding: var(--esp-6);
+    background-color: var(--color-acento-suave);
+    border-radius: var(--radio-md);
+  }
+}
