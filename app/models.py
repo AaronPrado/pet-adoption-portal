@@ -28,7 +28,7 @@ def utcnow():
 # (macro `badge_estado`). Las claves son los valores de la base de datos y no
 # cambian; las etiquetas sí se pueden reescribir.
 ETIQUETAS_ESTADO = {
-    'mascota': {'disponible': 'Disponible', 'en_proceso': 'En proceso', 'adoptado': 'Adoptado'},
+    'mascota': {'disponible': 'Disponible', 'en_proceso': 'En proceso', 'adoptado': 'Adoptada'},
     'solicitud': {'pendiente': 'Pendiente', 'aprobada': 'Aprobada', 'rechazada': 'Rechazada'},
 }
 

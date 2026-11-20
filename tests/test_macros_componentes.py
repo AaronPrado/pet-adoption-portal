@@ -72,7 +72,7 @@ def test_etiqueta_estado():
 @pytest.mark.parametrize('estado, tipo, texto, tono', [
     ('disponible', 'mascota', 'Disponible', 'exito'),
     ('en_proceso', 'mascota', 'En proceso', 'aviso'),
-    ('adoptado', 'mascota', 'Adoptado', 'info'),
+    ('adoptado', 'mascota', 'Adoptada', 'info'),
     ('pendiente', 'solicitud', 'Pendiente', 'aviso'),
     ('aprobada', 'solicitud', 'Aprobada', 'exito'),
     ('rechazada', 'solicitud', 'Rechazada', 'error'),
@@ -184,7 +184,7 @@ def test_tarjeta_mascota_sin_datos_opcionales(ctx):
 
 def test_tarjeta_mascota_adoptada(ctx):
     html = renderizar('{{ c.tarjeta_mascota(m) }}', m=mascota(estado='adoptado'))
-    assert con_clase(html, 'span', 'chapa--info')[0]['texto'].strip() == 'Adoptado'
+    assert con_clase(html, 'span', 'chapa--info')[0]['texto'].strip() == 'Adoptada'
 
 
 def test_tarjeta_mascota_nota(ctx):

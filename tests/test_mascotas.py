@@ -398,4 +398,4 @@ class TestAvisoSolicitudesEnCurso:
         html = client.get(f'/mascotas/{mascota_disponible.id}').data.decode()
 
         assert 'En proceso de adopción' not in html
-        assert 'Adoptado' not in html
+        assert 'Adoptada' not in html
