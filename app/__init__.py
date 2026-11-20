@@ -150,8 +150,9 @@ def create_app(config_name='default'):
     from app.models import etiqueta_estado
     app.add_template_global(etiqueta_estado)
     # Enlaces de orden de la macro tabla y href admitidos en las macros
-    from app.enlaces import url_orden, url_segura
+    from app.enlaces import url_orden, url_pagina, url_segura
     app.add_template_global(url_orden)
+    app.add_template_global(url_pagina)
     app.add_template_filter(url_segura)
     # Marca de la protectora y usuario de la navegación (base.html)
     from app.contexto import registrar_contexto

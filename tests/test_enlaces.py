@@ -6,7 +6,7 @@ macro `tabla` y validación de los `href` que llegan a las macros.
 import pytest
 from flask import render_template_string
 
-from app.enlaces import url_orden, url_segura
+from app.enlaces import url_orden, url_pagina, url_segura
 
 
 def orden(app, query, clave='nombre', direccion='asc'):
@@ -54,6 +54,30 @@ def test_peticion_real_con_endpoint_en_la_query(app, client):
     assert respuesta.status_code == 200
     html = respuesta.get_data(as_text=True)
     assert 'href="/mascotas/admin?estado=a&amp;estado=b&amp;orden=id&amp;dir=asc"' in html
+
+
+# --- url_pagina -----------------------------------------------------------------
+
+def pagina(app, query, numero):
+    with app.test_request_context('/mascotas/catalogo?' + query):
+        return url_pagina('mascotas.catalogo', numero)
+
+
+def test_url_pagina_conserva_filtros_y_cambia_page(app):
+    assert pagina(app, 'especie=Gato&page=3', 2) == '/mascotas/catalogo?especie=Gato&page=2'
+
+
+def test_url_pagina_primera_sin_page(app):
+    assert pagina(app, 'especie=Gato&page=3', 1) == '/mascotas/catalogo?especie=Gato'
+
+
+def test_url_pagina_conserva_valores_repetidos(app):
+    assert pagina(app, 'especie=Perro&especie=Gato', 2) == '/mascotas/catalogo?especie=Perro&especie=Gato&page=2'
+
+
+@pytest.mark.parametrize('query', ['_external=1', '_scheme=http', '_anchor=x', '_method=POST', 'endpoint=1'])
+def test_url_pagina_descarta_argumentos_de_url_for(app, query):
+    assert pagina(app, query + '&sexo=Macho', 2) == '/mascotas/catalogo?sexo=Macho&page=2'
 
 
 # --- url_segura -----------------------------------------------------------------
