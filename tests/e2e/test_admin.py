@@ -143,10 +143,12 @@ def test_foto_subida_se_ve_en_la_ficha(page, errores_js):
     expect(page.get_by_text('Mascota "Nala" creada exitosamente.')).to_be_visible()
 
     page.goto('/mascotas/catalogo')
-    foto = page.get_by_role('img', name='Nala')
+    foto = page.get_by_role('img', name='Foto de Nala')
     expect(foto).to_have_count(1)
     expect(foto).to_have_attribute('src', re.compile(r'^/fotos/'))
-    expect(foto).to_have_js_property('naturalWidth', 40)
+    # Con srcset, naturalWidth es el ancho de la variante dividido por su densidad: basta con que cargue
+    expect(foto).to_have_js_property('complete', True)
+    assert foto.evaluate('imagen => imagen.naturalWidth') > 0
 
 
 def _solicitud_pendiente(app_e2e, nombre_mascota):

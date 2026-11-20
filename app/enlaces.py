@@ -3,6 +3,7 @@ URLs de las macros de plantilla (`macros/componentes.html`).
 
 - `url_orden`: enlace de una cabecera ordenable de `tabla`, construido en
   Python para que la query string no pueda manipular `url_for`.
+- `url_pagina`: enlace de la paginación de la base nueva, construido igual.
 - `url_segura`: filtro que solo deja pasar los `href` admitidos; las macros
   no pintan el enlace si devuelve ''.
 """
@@ -37,6 +38,21 @@ def url_orden(endpoint, clave, direccion):
             and clave_arg not in ARGUMENTOS_URL_FOR
             and clave_arg not in PARAMETROS_DE_ORDEN}
     return url_for(endpoint, **args, orden=clave, dir='desc' if direccion == 'desc' else 'asc')
+
+
+def url_pagina(endpoint, numero):
+    """
+    URL de `endpoint` en la página `numero`, con los filtros de la petición.
+
+    Igual que url_orden: conserva los filtros (también los repetidos) y
+    descarta los que empiezan por `_` o chocan con url_for. La página 1 no
+    lleva `page`.
+    """
+    args = {clave: valores for clave, valores in request.args.lists()
+            if not clave.startswith('_') and clave not in ARGUMENTOS_URL_FOR and clave != 'page'}
+    if numero > 1:
+        args['page'] = numero
+    return url_for(endpoint, **args)
 
 
 def url_segura(url):

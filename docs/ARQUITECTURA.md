@@ -661,7 +661,7 @@ páginas las adoptan en las fases 4 y 5.
 {% endcall %}
 ```
 
-- **`tarjeta_mascota(mascota, nivel=2, diferida=true, sizes)`**: `article`
+- **`tarjeta_mascota(mascota, nivel=2, diferida=true, sizes, nota)`**: `article`
   nombrado por su título (`h2` por defecto; `nivel` de 2 a 6), la chapa de
   estado, los datos (especie, raza, edad y tamaño, los que haya) y un único
   enlace «Ver a {nombre}», con aspecto de botón secundario, que hace pulsable
@@ -711,6 +711,9 @@ páginas las adoptan en las fases 4 y 5.
   (vuelve a la primera página) y descarta las claves que empiezan por `_`
   (`_external`, `_scheme`, `_anchor`...) y `endpoint`, que chocan con
   `url_for`: `?endpoint=1` daba un 500.
+- `url_pagina(endpoint, numero)`, global de Jinja, hace lo mismo para
+  `paginacion_sistema` (`macros/paginacion.html`, base nueva; clases en
+  `paginas/catalogo.css`). `paginacion` conserva Bootstrap para el panel.
 - El filtro `url_segura` valida `enlace_boton`, `volver_url` y `accion_url`.
   Solo admite rutas propias (`/...`, pero no `//` ni `/\`) y `http:`,
   `https:` y `mailto:`, sin distinguir mayúsculas ni tener en cuenta los

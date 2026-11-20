@@ -28,9 +28,13 @@ def utcnow():
 # (macro `badge_estado`). Las claves son los valores de la base de datos y no
 # cambian; las etiquetas sí se pueden reescribir.
 ETIQUETAS_ESTADO = {
-    'mascota': {'disponible': 'Disponible', 'en_proceso': 'En proceso', 'adoptado': 'Adoptado'},
+    'mascota': {'disponible': 'Disponible', 'en_proceso': 'En proceso', 'adoptado': 'Adoptada'},
     'solicitud': {'pendiente': 'Pendiente', 'aprobada': 'Aprobada', 'rechazada': 'Rechazada'},
 }
+
+# Aviso de una mascota disponible con solicitudes pendientes (ADR-0004): una
+# sola frase para el catálogo y la ficha (global de Jinja `AVISO_PENDIENTES`)
+AVISO_PENDIENTES = 'Tiene solicitudes en curso. Aún puedes solicitarla.'
 
 
 def etiqueta_estado(estado, tipo='mascota'):

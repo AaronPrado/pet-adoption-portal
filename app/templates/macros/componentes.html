@@ -77,9 +77,10 @@
   - diferida: false en la primera fila (la que se ve sin desplazar), para no
     retrasar el LCP.
   - sizes: ancho con el que se pinta la foto en la rejilla.
+  - nota: línea opcional bajo los datos (p. ej. AVISO_PENDIENTES).
 #}
 {% macro tarjeta_mascota(mascota, nivel=2, diferida=true,
-                         sizes='(min-width: 72rem) 22rem, (min-width: 36rem) 50vw, 100vw') -%}
+                         sizes='(min-width: 72rem) 22rem, (min-width: 36rem) 50vw, 100vw', nota=none) -%}
   {%- set h = 'h' ~ _nivel(nivel) -%}
   {%- set id_titulo = 'mascota-' ~ mascota.id ~ '-nombre' -%}
   {%- set edad = mascota.edad_aprox -%}
@@ -93,6 +94,9 @@
       {%- if edad is not none %}<li>{{ 'Menos de 1 año' if edad == 0 else edad ~ (' año' if edad == 1 else ' años') }}</li>{% endif %}
       {%- if mascota.tamano %}<li>{{ mascota.tamano }}</li>{% endif %}
     </ul>
+    {%- if nota %}
+    <p class="tarjeta-mascota__nota">{{ nota }}</p>
+    {%- endif %}
     <a class="boton boton--secundario tarjeta-mascota__enlace"
        href="{{ url_for('mascotas.detalle', mascota_id=mascota.id) }}">Ver a {{ mascota.nombre }}</a>
   </div>

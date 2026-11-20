@@ -139,12 +139,12 @@ class TestPaginacion:
     def test_catalogo_muestra_12_por_pagina(self, client, mascotas):
         html = client.get('/mascotas/catalogo').data.decode()
 
-        assert html.count('<h5 class="card-title">Mascota ') == 12
+        assert html.count('<article class="tarjeta-mascota"') == 12
         assert 'aria-label="Paginación"' in html
 
     def test_catalogo_ultima_pagina(self, client, mascotas):
         html = client.get('/mascotas/catalogo?page=3').data.decode()
-        assert html.count('<h5 class="card-title">Mascota ') == 6
+        assert html.count('<article class="tarjeta-mascota"') == 6
 
     def test_enlaces_conservan_los_filtros(self, client, mascotas):
         for i in range(30, 45):

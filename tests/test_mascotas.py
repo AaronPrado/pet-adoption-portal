@@ -380,7 +380,7 @@ class TestAvisoSolicitudesEnCurso:
         html = client.get(f'/mascotas/{solicitud_pendiente.mascota_id}').data.decode()
 
         assert self.AVISO in html
-        assert 'Disponible para adopción' in html
+        assert 'Aún puedes solicitarla' in html
 
     def test_detalle_sin_pendientes_sin_aviso(self, client, mascota_disponible):
         assert self.AVISO not in client.get(f'/mascotas/{mascota_disponible.id}').data.decode()
@@ -398,4 +398,4 @@ class TestAvisoSolicitudesEnCurso:
         html = client.get(f'/mascotas/{mascota_disponible.id}').data.decode()
 
         assert 'En proceso de adopción' not in html
-        assert 'Adoptado' not in html
+        assert 'Adoptada' not in html
