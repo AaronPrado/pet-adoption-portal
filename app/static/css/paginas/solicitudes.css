@@ -1,0 +1,185 @@
+/*
+  Solicitudes del adoptante (B4.5): mis_solicitudes.html y detalle.html.
+  Solo tokens de sistema.css. Va en la capa `componentes`, la misma que los
+  componentes que reutiliza (`aviso`, `chapa`, `boton`, `rejilla-tarjetas`), y
+  solo define clases propias (`solicitud*`, `que-pasa-ahora*`, `respuestas__*`).
+*/
+@layer componentes {
+  /* Tarjeta de cada solicitud en la lista */
+  .solicitud {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background-color: var(--color-superficie);
+    border-radius: var(--radio-md);
+    box-shadow: var(--sombra-1);
+  }
+
+  .solicitud__foto {
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    object-fit: cover;
+    background-color: var(--color-acento-suave);
+  }
+
+  .solicitud__foto--vacia {
+    display: grid;
+    place-items: center;
+    color: var(--color-acento);
+  }
+
+  .solicitud__cuerpo {
+    display: grid;
+    flex: 1;
+    justify-items: start;
+    align-content: start;
+    gap: var(--esp-3);
+    padding: var(--esp-4);
+  }
+
+  .solicitud__nombre {
+    margin: 0;
+    font-size: var(--texto-lg);
+    overflow-wrap: anywhere;
+  }
+
+  .solicitud__fecha {
+    margin: 0;
+    color: var(--color-texto-suave);
+    font-size: var(--texto-sm);
+  }
+
+  .solicitud__mensaje {
+    justify-self: stretch;
+    overflow-wrap: anywhere;
+  }
+
+  .solicitud__mensaje p {
+    margin: 0;
+  }
+
+  .solicitud__mensaje-titulo {
+    font-weight: var(--peso-fuerte);
+  }
+
+  .solicitud__enlace {
+    align-self: end;
+    margin-block-start: auto;
+  }
+
+  /* Detalle: la mascota a un lado y la solicitud al otro */
+  .solicitud-detalle {
+    display: grid;
+    gap: var(--esp-6);
+  }
+
+  .solicitud-detalle__mascota {
+    display: grid;
+    justify-items: start;
+    align-content: start;
+    gap: var(--esp-3);
+  }
+
+  .solicitud-detalle__mascota .solicitud__foto {
+    border-radius: var(--radio-lg);
+    box-shadow: var(--sombra-1);
+  }
+
+  .solicitud-detalle__datos {
+    margin: 0;
+    color: var(--color-texto-suave);
+  }
+
+  .solicitud-detalle__contenido {
+    display: grid;
+    align-content: start;
+    gap: var(--esp-6);
+    min-width: 0;
+  }
+
+  .solicitud-detalle__contenido h2 {
+    margin-block-end: var(--esp-3);
+    font-size: var(--texto-lg);
+  }
+
+  .solicitud-detalle__estado {
+    display: grid;
+    justify-items: start;
+    gap: var(--esp-2);
+  }
+
+  .solicitud-detalle__titulo-aviso {
+    margin-block-end: var(--esp-2);
+  }
+
+  /* «Qué pasa ahora» (P-24): destacado, con el texto de su estado */
+  .que-pasa-ahora {
+    display: grid;
+    justify-items: start;
+    gap: var(--esp-3);
+    padding: var(--esp-4) var(--esp-5);
+    background-color: var(--color-acento-suave);
+    border-radius: var(--radio-md);
+  }
+
+  .que-pasa-ahora h2,
+  .que-pasa-ahora p {
+    margin: 0;
+  }
+
+  .que-pasa-ahora__contacto {
+    color: var(--color-texto-suave);
+    font-size: var(--texto-sm);
+    overflow-wrap: anywhere;
+  }
+
+  /* Datos del solicitante y respuestas del cuestionario */
+  .respuestas__seccion + .respuestas__seccion {
+    margin-block-start: var(--esp-5);
+  }
+
+  .respuestas__seccion h3 {
+    margin-block-end: var(--esp-2);
+    color: var(--color-texto-suave);
+    font-size: var(--texto-base);
+  }
+
+  .respuestas__lista {
+    display: grid;
+    gap: var(--esp-2);
+    margin: 0;
+  }
+
+  .respuestas__lista > div {
+    display: grid;
+    gap: var(--esp-1) var(--esp-4);
+    padding-block-end: var(--esp-2);
+    border-block-end: 1px solid var(--color-borde);
+  }
+
+  .respuestas__lista dt {
+    color: var(--color-texto-suave);
+  }
+
+  .respuestas__lista dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+    font-weight: var(--peso-fuerte);
+  }
+
+  @media (min-width: 48rem) {
+    .solicitud-detalle {
+      grid-template-columns: 1fr 2fr;
+      align-items: start;
+    }
+
+    .solicitud-detalle__mascota {
+      position: sticky;
+      inset-block-start: var(--esp-5);
+    }
+
+    .respuestas__lista > div {
+      grid-template-columns: minmax(10rem, 2fr) 3fr;
+    }
+  }
+}

@@ -121,6 +121,7 @@ flask --app run exportar-fotos <directorio>
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Login con Google. En [Google Cloud Console](https://console.cloud.google.com/), añade `http://localhost:5000/auth/google/callback` como URI de redirección. |
 | `FOTOS_BACKEND`, `FOTOS_DIR` | Dónde se guardan las fotos subidas: `local` (en `FOTOS_DIR` o, sin ella, en `instance/fotos`), `s3` o vacío (sin subida; las fotos se indican por URL `https://`). En desarrollo, sin definir, es `local`. |
 | `FOTOS_MAX_PIXELES` | Píxeles máximos de una foto subida (por defecto 40 000 000); limita la memoria de cada subida. |
+| `ZONA_HORARIA` | Zona horaria en la que se muestran las fechas (por defecto `Europe/Madrid`); se guardan en UTC. |
 | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_S3_BUCKET`, `AWS_S3_REGION`, `AWS_S3_ENDPOINT_URL` | Backend `s3`. Bucket con lectura pública y usuario IAM con `PutObject` y `DeleteObject` sobre `mascotas/*`. `AWS_S3_ENDPOINT_URL` solo para servicios compatibles (MinIO, R2). |
 | `SECRET_KEY`, `JWT_SECRET_KEY` | Obligatorias en producción (mínimo 32 bytes). En desarrollo hay valores por defecto. |
 

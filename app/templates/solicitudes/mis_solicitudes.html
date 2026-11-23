@@ -1,82 +1,54 @@
-{% extends "base_bootstrap.html" %}
+{% extends "base.html" %}
+{% import "macros/componentes.html" as c %}
 
-{% block title %}Mis Solicitudes - Portal de Adopción{% endblock %}
+{% block title %}Mis solicitudes - {{ marca_nombre }}{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/paginas/solicitudes.css') }}">
+{% endblock %}
 
 {% block content %}
-<div class="row mb-4">
-    <div class="col-12">
-        <h2>Mis Solicitudes de Adopción</h2>
-        <p class="text-muted">Aquí puedes ver el estado de todas tus solicitudes</p>
-    </div>
-</div>
+{{ c.cabecera_pagina('Mis solicitudes', entradilla='Aquí ves el estado de cada solicitud de adopción. No te avisamos por correo: vuelve a esta página para ver las respuestas.') }}
 
 {% if solicitudes %}
-<div class="row">
+<ul class="rejilla-tarjetas">
     {% for solicitud in solicitudes %}
-    <div class="col-md-6 col-lg-4 mb-4">
-        <div class="card h-100">
-            {% if solicitud.mascota.foto_url %}
-                <img src="{{ solicitud.mascota.foto_url }}" class="card-img-top foto-alto-200" alt="{{ solicitud.mascota.nombre }}">
+    {% set mascota = solicitud.mascota %}
+    <li>
+        <article class="solicitud" aria-labelledby="solicitud-{{ solicitud.id }}-mascota">
+            {% if mascota.foto_url %}
+            <img class="solicitud__foto" src="{{ mascota.foto_url }}" width="800" height="600"
+                 alt="Foto de {{ mascota.nombre }}, {{ mascota.especie|lower }}" loading="lazy" decoding="async">
             {% else %}
-                <img src="https://placehold.co/400x200/8ecae6/023047?text={{ solicitud.mascota.especie }}"
-                     class="card-img-top" alt="{{ solicitud.mascota.nombre }}">
-            {% endif %}
-            <div class="card-body">
-                <h5 class="card-title">{{ solicitud.mascota.nombre }}</h5>
-                <p class="card-text">
-                    <strong>{{ solicitud.mascota.especie }}</strong>
-                    {% if solicitud.mascota.raza %} - {{ solicitud.mascota.raza }}{% endif %}
-                </p>
-
-                <!-- Estado de la solicitud -->
-                <div class="mb-3">
-                    {% if solicitud.estado == 'pendiente' %}
-                        <span class="badge bg-warning text-dark">Pendiente de revisión</span>
-                    {% elif solicitud.estado == 'aprobada' %}
-                        <span class="badge bg-success">¡Aprobada!</span>
-                    {% elif solicitud.estado == 'rechazada' %}
-                        <span class="badge bg-danger">Rechazada</span>
-                    {% endif %}
-                </div>
-
-                <p class="card-text">
-                    <small class="text-muted">
-                        Solicitud enviada el {{ solicitud.fecha_solicitud.strftime('%d/%m/%Y') }}
-                    </small>
-                </p>
-
-                {% if solicitud.fecha_revision %}
-                <p class="card-text">
-                    <small class="text-muted">
-                        Revisada el {{ solicitud.fecha_revision.strftime('%d/%m/%Y') }}
-                    </small>
-                </p>
-                {% endif %}
-
-                {% if solicitud.comentarios_admin %}
-                <div class="alert alert-info p-2 mt-2">
-                    <small><strong>Mensaje del refugio:</strong><br>{{ solicitud.comentarios_admin }}</small>
-                </div>
-                {% endif %}
-
-                <div class="mt-3">
-                    <a href="{{ url_for('solicitudes.detalle', solicitud_id=solicitud.id) }}" class="btn btn-outline-primary btn-sm w-100">
-                        Ver Detalles
-                    </a>
-                </div>
+            <div class="solicitud__foto solicitud__foto--vacia" role="img" aria-label="{{ mascota.nombre }} todavía no tiene foto">
+                <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" width="40" height="40" fill="currentColor">
+                    <ellipse cx="6" cy="9" rx="2" ry="2.6"/><ellipse cx="10" cy="5.5" rx="2" ry="2.6"/>
+                    <ellipse cx="14" cy="5.5" rx="2" ry="2.6"/><ellipse cx="18" cy="9" rx="2" ry="2.6"/>
+                    <path d="M12 11c-3 0-6 4.2-6 6.6 0 1.6 1.3 2.4 2.8 2.4 1.3 0 2.1-.7 3.2-.7s1.9.7 3.2.7c1.5 0 2.8-.8 2.8-2.4 0-2.4-3-6.6-6-6.6z"/>
+                </svg>
             </div>
-        </div>
-    </div>
+            {% endif %}
+            <div class="solicitud__cuerpo">
+                <h2 id="solicitud-{{ solicitud.id }}-mascota" class="solicitud__nombre">{{ mascota.nombre }}</h2>
+                {{ c.badge_estado(solicitud.estado, 'solicitud') }}
+                <p class="solicitud__fecha">Enviada el {{ solicitud.fecha_solicitud|fecha_local }}</p>
+                {% if solicitud.fecha_revision %}
+                <p class="solicitud__fecha">Revisada el {{ solicitud.fecha_revision|fecha_local }}</p>
+                {% endif %}
+                {% if solicitud.comentarios_admin %}
+                <div class="aviso aviso--info solicitud__mensaje">
+                    <p class="solicitud__mensaje-titulo">Mensaje del refugio</p>
+                    <p>{{ solicitud.comentarios_admin }}</p>
+                </div>
+                {% endif %}
+                <a class="boton boton--secundario solicitud__enlace"
+                   href="{{ url_for('solicitudes.detalle', solicitud_id=solicitud.id) }}">Ver la solicitud de {{ mascota.nombre }}</a>
+            </div>
+        </article>
+    </li>
     {% endfor %}
-</div>
+</ul>
 {% else %}
-<div class="alert alert-info" role="alert">
-    <h4 class="alert-heading">No tienes solicitudes aún</h4>
-    <p>Aún no has enviado ninguna solicitud de adopción.</p>
-    <hr>
-    <p class="mb-0">
-        <a href="{{ url_for('mascotas.catalogo') }}" class="alert-link">Explora el catálogo</a> para encontrar a tu compañero perfecto.
-    </p>
-</div>
+{{ c.estado_vacio('Aún no tienes solicitudes', 'Cuando pidas adoptar a una mascota, podrás seguir aquí su estado.', url_for('mascotas.catalogo'), 'Ver mascotas disponibles') }}
 {% endif %}
 {% endblock %}

@@ -104,6 +104,9 @@ class Config:
     MARCA_CONTACTO = os.environ.get('MARCA_CONTACTO') or ''
     MARCA_CREDITO = os.environ.get('MARCA_CREDITO', 'Desarrollado por Aarón Prado')
 
+    # Zona horaria en la que se muestran las fechas (se guardan en UTC)
+    ZONA_HORARIA = os.environ.get('ZONA_HORARIA') or 'Europe/Madrid'
+
     # Paginación de listados web
     CATALOGO_POR_PAGINA = 12
     ADMIN_POR_PAGINA = 20

@@ -22,6 +22,7 @@ Docker (o, sin Docker, cualquier PaaS compatible con `Procfile`).
 | `FOTOS_BACKEND` | Para subir fotos | `s3` o `local`. Sin definir (o vacía), no hay subida y el formulario solo admite URLs `https://`. |
 | `FOTOS_DIR` | Con `FOTOS_BACKEND=local` | Ruta de un volumen persistente. La app no arranca en producción con `local` sin ella. |
 | `FOTOS_MAX_PIXELES` | No | Píxeles máximos de una foto subida (por defecto 40 000 000). Limita la memoria de cada subida: ver «Memoria por worker» en el punto 6. |
+| `ZONA_HORARIA` | No | Zona horaria en la que se muestran las fechas (por defecto `Europe/Madrid`). Las fechas se guardan en UTC. |
 | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_S3_BUCKET`, `AWS_S3_REGION` | Con `FOTOS_BACKEND=s3` | Usuario IAM con `PutObject` y `DeleteObject` sobre `mascotas/*`. Sin `AWS_S3_BUCKET`, la subida se oculta. |
 | `AWS_S3_ENDPOINT_URL` | No | Servicio compatible con S3 (MinIO, Cloudflare R2...). Las URLs de las fotos quedan como `<endpoint>/<bucket>/mascotas/<clave>`, así que el bucket debe ser legible por esa ruta. |
 | `TRUSTED_PROXIES` | Detrás de un proxy | Número de proxies inversos delante de la app (normalmente `1`). |

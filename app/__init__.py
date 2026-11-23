@@ -155,6 +155,9 @@ def create_app(config_name='default'):
     app.add_template_global(url_orden)
     app.add_template_global(url_pagina)
     app.add_template_filter(url_segura)
+    # Fechas en la zona horaria del refugio (filtro fecha_local)
+    from app.fechas import registrar_filtros
+    registrar_filtros(app)
     # Marca de la protectora y usuario de la navegación (base.html)
     from app.contexto import registrar_contexto
     registrar_contexto(app)
