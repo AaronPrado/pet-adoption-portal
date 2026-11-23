@@ -1,6 +1,7 @@
 """
 Tests del cuestionario de adopción con la base nueva (B4.4): estructura y
-accesibilidad de `solicitudes/nueva.html` (P-12, P-16).
+accesibilidad de `solicitudes/nueva.html` (P-12, P-16), aviso de solicitud
+duplicada (P-44) y confirmación del envío (P-24).
 """
 
 import re
@@ -9,7 +10,9 @@ from html.parser import HTMLParser
 import pytest
 from markupsafe import escape
 
-from app import cuestionario
+from app import adopciones, cuestionario
+from app.models import Solicitud
+from app.routes import solicitudes as rutas
 
 
 def url_nueva(mascota):
@@ -224,3 +227,88 @@ class TestErrores:
         assert 'value="no" checked' not in html.split('id="tiene_mascotas_no"')[1].split('>')[0]
         assert 'Ana &lt;García&gt;</textarea>' in html
         assert 'He tenido perros toda la vida</textarea>' in html
+
+
+class TestSolicitudDuplicada:
+    """P-44: quien ya la solicitó lo lee y llega a su solicitud."""
+
+    def test_get_lleva_a_su_solicitud(self, client, auth_headers_adoptante, solicitud_pendiente):
+        response = client.get(f'/solicitudes/nueva/{solicitud_pendiente.mascota_id}')
+
+        assert response.status_code == 302
+        assert response.headers['Location'] == f'/solicitudes/detalle/{solicitud_pendiente.id}'
+        html = contenido(client.get(response.headers['Location']))
+        assert 'Ya tienes una solicitud para Cerbero.' in html
+
+    def test_post_no_crea_otra(self, client, auth_headers_adoptante, solicitud_pendiente, respuestas_validas):
+        response = client.post(f'/solicitudes/nueva/{solicitud_pendiente.mascota_id}', data=respuestas_validas)
+
+        assert response.headers['Location'] == f'/solicitudes/detalle/{solicitud_pendiente.id}'
+        assert Solicitud.query.count() == 1
+
+    def test_se_avisa_antes_que_la_falta_de_disponibilidad(self, client, auth_headers_adoptante,
+                                                          solicitud_pendiente, usuario_admin):
+        """Si su solicitud ya se aprobó, no le decimos que la mascota «ya no está disponible»."""
+        adopciones.aprobar(solicitud_pendiente, usuario_admin.id)
+
+        response = client.get(f'/solicitudes/nueva/{solicitud_pendiente.mascota_id}', follow_redirects=True)
+
+        html = contenido(response)
+        assert 'Ya tienes una solicitud para Cerbero.' in html
+        assert adopciones.MascotaNoDisponible.mensaje not in html
+
+    def test_envio_simultaneo_lleva_a_la_que_gano(self, client, auth_headers_adoptante, mascota_disponible,
+                                                  respuestas_validas, usuario_adoptante, monkeypatch):
+        """Dos envíos a la vez: el segundo choca con la restricción única y va a la del primero."""
+        crear = adopciones.crear_solicitud
+
+        def crear_otra_antes(usuario_id, mascota_id, respuestas):
+            crear(usuario_id, mascota_id, respuestas)
+            return crear(usuario_id, mascota_id, respuestas)
+
+        monkeypatch.setattr(adopciones, 'crear_solicitud', crear_otra_antes)
+        response = client.post(url_nueva(mascota_disponible), data=respuestas_validas)
+
+        ganadora = Solicitud.query.one()
+        assert response.headers['Location'] == f'/solicitudes/detalle/{ganadora.id}'
+        assert 'Ya tienes una solicitud para Cerbero.' in contenido(client.get(response.headers['Location']))
+
+    def test_choque_sin_solicitud_que_mostrar(self, client, auth_headers_adoptante, mascota_disponible,
+                                              respuestas_validas, monkeypatch):
+        """Si la otra se borró justo después del choque, se va a la lista."""
+        def chocar(*_):
+            raise adopciones.SolicitudDuplicada()
+
+        monkeypatch.setattr(adopciones, 'crear_solicitud', chocar)
+        response = client.post(url_nueva(mascota_disponible), data=respuestas_validas)
+
+        assert response.headers['Location'] == '/solicitudes/mis-solicitudes'
+        assert 'Ya tienes una solicitud para Cerbero.' in contenido(client.get(response.headers['Location']))
+
+    def test_la_api_mantiene_su_mensaje(self):
+        assert adopciones.SolicitudDuplicada.mensaje == 'Ya has enviado una solicitud para esta mascota.'
+
+
+class TestConfirmacion:
+    """P-24: tras enviar, el adoptante sabe qué pasa ahora y dónde verlo."""
+
+    def test_explica_que_pasa_ahora(self, client, auth_headers_adoptante, mascota_disponible, respuestas_validas):
+        response = client.post(url_nueva(mascota_disponible), data=respuestas_validas)
+
+        assert response.status_code == 302
+        assert response.headers['Location'] == '/solicitudes/mis-solicitudes'
+        html = contenido(client.get(response.headers['Location']))
+        assert str(escape(rutas.MENSAJE_RECIBIDA.format(nombre='Cerbero'))) in html
+        assert 'éxito' not in html
+
+    def test_texto_de_la_confirmacion(self):
+        texto = rutas.MENSAJE_RECIBIDA.format(nombre='Toby')
+
+        assert texto.startswith('Hemos recibido tu solicitud para adoptar a Toby.')
+        assert 'revis' in texto and 'esta página' in texto
+
+    def test_la_mascota_no_disponible_sigue_igual(self, client, auth_headers_adoptante, mascota_adoptada):
+        response = client.get(url_nueva(mascota_adoptada))
+
+        assert response.headers['Location'] == f'/mascotas/{mascota_adoptada.id}'
+        assert Solicitud.query.count() == 0

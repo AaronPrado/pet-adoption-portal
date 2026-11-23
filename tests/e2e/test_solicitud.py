@@ -1,6 +1,7 @@
 """
 e2e de la solicitud de adopción: de la ficha de la mascota al cuestionario
-enviado, solo con teclado (B4.4), y con sus errores.
+enviado, solo con teclado (B4.4), con sus errores y con el aviso de solicitud
+duplicada (P-44).
 """
 
 import re
@@ -9,7 +10,7 @@ import pytest
 from playwright.sync_api import expect
 
 from app import db
-from app.models import Mascota
+from app.models import Mascota, Solicitud, Usuario
 from tests.e2e.conftest import ADOPTANTE, iniciar_sesion
 
 pytestmark = pytest.mark.e2e
@@ -18,13 +19,22 @@ HORAS = '¿Cuántas horas al día pasaría la mascota sin compañía?'
 RESUMEN = 'Revisa estas respuestas antes de enviar la solicitud'
 
 
-def _mascota(app_e2e, nombre):
-    """Una mascota nueva para un solo test (así no depende del orden de los demás); devuelve su id."""
+def _mascota(app_e2e, nombre, con_solicitud=False):
+    """
+    Una mascota nueva para un solo test (así no depende del orden de los
+    demás). Devuelve su id y, si se pide, el de una solicitud de la adoptante.
+    """
     with app_e2e.app_context():
         mascota = Mascota(nombre=nombre, especie='Perro', descripcion='Perro alegre y muy sociable')
         db.session.add(mascota)
+        db.session.flush()
+        solicitud = None
+        if con_solicitud:
+            adoptante = db.session.execute(db.select(Usuario).filter_by(email=ADOPTANTE[0])).scalar_one()
+            solicitud = Solicitud(adoptante.id, mascota.id)
+            db.session.add(solicitud)
         db.session.commit()
-        return mascota.id
+        return mascota.id, solicitud and solicitud.id
 
 
 def tabular_hasta(page, destino, maximo=40):
@@ -49,7 +59,7 @@ def pulsar(page, tecla, enfocado):
 
 def test_cuestionario_completo_solo_con_teclado(page, errores_js, app_e2e):
     """Tab entre preguntas, flechas dentro de un grupo de radios, Espacio para marcar y Enter para enviar."""
-    mascota_id = _mascota(app_e2e, 'Kira')
+    mascota_id, _ = _mascota(app_e2e, 'Kira')
     iniciar_sesion(page, *ADOPTANTE)
     page.goto(f'/mascotas/{mascota_id}')
 
@@ -103,13 +113,15 @@ def test_cuestionario_completo_solo_con_teclado(page, errores_js, app_e2e):
     pulsar(page, 'Tab', page.get_by_role('button', name='Enviar solicitud'))
     page.keyboard.press('Enter')
 
+    # P-24: la confirmación dice qué pasa ahora y dónde seguirla
     expect(page).to_have_url(re.compile('/solicitudes/mis-solicitudes'))
-    expect(page.get_by_text('Solicitud enviada con éxito para Kira')).to_be_visible()
+    expect(page.get_by_text('Hemos recibido tu solicitud para adoptar a Kira.')).to_be_visible()
+    expect(page.get_by_text('El refugio revisará tus respuestas')).to_be_visible()
 
 
 def test_error_lleva_al_resumen_y_del_resumen_a_la_pregunta(page, errores_js, app_e2e):
     """El foco va al resumen; su enlace lleva al fieldset de la pregunta, que anuncia su error."""
-    mascota_id = _mascota(app_e2e, 'Bruno')
+    mascota_id, _ = _mascota(app_e2e, 'Bruno')
     iniciar_sesion(page, *ADOPTANTE)
     page.goto(f'/solicitudes/nueva/{mascota_id}')
 
@@ -148,7 +160,20 @@ def test_error_lleva_al_resumen_y_del_resumen_a_la_pregunta(page, errores_js, ap
     pulsar(page, 'Tab', horas.get_by_role('radio', name='Menos de 4 horas'))
     page.keyboard.press('Space')
     page.get_by_role('button', name='Enviar solicitud').click()
-    expect(page.get_by_text('Solicitud enviada con éxito para Bruno')).to_be_visible()
+    expect(page.get_by_text('Hemos recibido tu solicitud para adoptar a Bruno.')).to_be_visible()
+
+
+def test_quien_ya_la_solicito_va_a_su_solicitud(page, errores_js, app_e2e):
+    """P-44: «Ya tienes una solicitud para Simba», en la propia solicitud, no «ya no está disponible»."""
+    mascota_id, solicitud_id = _mascota(app_e2e, 'Simba', con_solicitud=True)
+    iniciar_sesion(page, *ADOPTANTE)
+
+    page.goto(f'/mascotas/{mascota_id}')
+    page.get_by_role('link', name='Solicitar adopción').click()
+
+    expect(page).to_have_url(re.compile(rf'/solicitudes/detalle/{solicitud_id}$'))
+    expect(page.get_by_text('Ya tienes una solicitud para Simba.')).to_be_visible()
+    expect(page.get_by_text('ya no está disponible')).to_have_count(0)
 
 
 def test_login_desde_la_ficha_vuelve_al_cuestionario(page, errores_js, mascotas):

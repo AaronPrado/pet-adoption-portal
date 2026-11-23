@@ -366,7 +366,7 @@ class TestSolicitudesWebEnParalelo:
         response = client.post(f'/solicitudes/nueva/{solicitud_pendiente.mascota_id}', data=respuestas_validas,
                                follow_redirects=True)
 
-        assert '¡Solicitud enviada con éxito para Cerbero!' in response.data.decode()
+        assert 'Hemos recibido tu solicitud para adoptar a Cerbero.' in response.data.decode()
         assert Solicitud.query.filter_by(estado='pendiente').count() == 2
         assert db.session.get(Mascota, solicitud_pendiente.mascota_id).estado == 'disponible'
 

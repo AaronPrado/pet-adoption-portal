@@ -148,7 +148,8 @@ class TestSolicitudesWeb:
 
         response = client.get(f'/solicitudes/nueva/{solicitud_pendiente.mascota_id}', follow_redirects=True)
 
-        assert 'Ya has enviado una solicitud para esta mascota.' in response.data.decode()
+        assert 'Ya tienes una solicitud para Cerbero.' in response.data.decode()
+        assert response.request.path == f'/solicitudes/detalle/{solicitud_pendiente.id}'
 
     def test_envio_simultaneo_duplicado(self, client, auth_headers_adoptante, mascota_disponible, monkeypatch,
                                         respuestas_validas):
@@ -160,7 +161,7 @@ class TestSolicitudesWeb:
         response = client.post(f'/solicitudes/nueva/{mascota_disponible.id}', data=respuestas_validas,
                                follow_redirects=True)
 
-        assert 'Ya has enviado una solicitud para esta mascota.' in response.data.decode()
+        assert 'Ya tienes una solicitud para Cerbero.' in response.data.decode()
         assert Solicitud.query.count() == 0
 
     def test_adoptada_mientras_se_rellenaba(self, client, auth_headers_adoptante, mascota_disponible, monkeypatch,
