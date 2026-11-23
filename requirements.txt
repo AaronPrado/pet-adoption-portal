@@ -39,3 +39,6 @@ PyJWT==2.15.1
 
 # Requests
 requests==2.34.2
+
+# Zonas horarias (zoneinfo) donde el sistema no las trae: Docker slim, Windows
+tzdata==2026.6
