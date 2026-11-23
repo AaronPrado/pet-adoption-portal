@@ -257,6 +257,14 @@ def test_foco_visible_en_controles_y_botones():
         assert any('outline-offset: var(--foco-separacion)' in c for c in cuerpos), selector
 
 
+
+def test_radio_con_error_conserva_el_anillo_de_foco():
+    """El outline rojo de un radio inválido (capa componentes) no tapa el foco (WCAG 2.4.7 y 2.4.11)."""
+    componentes = _capa(_leer('sistema.css'), 'componentes')
+    cuerpos = _cuerpos(componentes, '.opcion__control[aria-invalid="true"]:focus-visible')
+    assert any('outline: var(--foco-anillo)' in c for c in cuerpos)
+    assert any('outline-offset: var(--foco-separacion)' in c for c in cuerpos)
+
 @pytest.mark.parametrize('selector', ['.campo__control', '.boton', '.opcion', '.opcion__etiqueta',
                                       '.tabla__ordenar'])
 def test_objetivos_tactiles_minimos(selector):

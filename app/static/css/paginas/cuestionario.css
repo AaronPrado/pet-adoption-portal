@@ -1,0 +1,45 @@
+/*
+  Cuestionario de adopción (B4.4). Solo tokens de sistema.css. Va en la capa
+  `componentes`, ya declarada por sistema.css, porque son reglas de una página
+  que colocan sus componentes (.campo, .grupo-opciones, .boton) sin
+  sustituirlos.
+*/
+
+@layer componentes {
+  /* Una sola columna a la medida del texto: las preguntas se leen de arriba
+     abajo y a 320 px ocupa todo el ancho */
+  .cuestionario {
+    width: 100%;
+    max-width: 40rem;
+    margin-inline: auto;
+  }
+
+  .cuestionario__formulario {
+    padding: var(--esp-5);
+    background-color: var(--color-superficie);
+    border: 1px solid var(--color-borde);
+    border-radius: var(--radio-md);
+    box-shadow: var(--sombra-1);
+  }
+
+  .cuestionario__seccion + .cuestionario__seccion {
+    margin-block-start: var(--esp-6);
+    padding-block-start: var(--esp-5);
+    border-block-start: 1px solid var(--color-borde);
+  }
+
+  .cuestionario__titulo {
+    margin-block-end: var(--esp-4);
+    font-size: var(--texto-lg);
+  }
+
+  .cuestionario__aviso {
+    margin-block-start: var(--esp-5);
+    color: var(--color-texto-suave);
+  }
+
+  .cuestionario__formulario > .boton {
+    width: 100%;
+    margin-block-start: var(--esp-3);
+  }
+}

@@ -3,6 +3,8 @@ Tests de app/cuestionario.py: preguntas, etiquetas y validación de los
 envíos nuevos (P-04).
 """
 
+import re
+
 import pytest
 
 from app import cuestionario
@@ -13,7 +15,7 @@ class TestPreguntas:
 
     def test_etiquetas_legibles(self):
         assert PREGUNTAS['horas_solo'].etiqueta('8+') == 'Más de 8 horas'
-        assert PREGUNTAS['vivienda_tipo'].etiqueta('finca') == 'Finca/Campo'
+        assert PREGUNTAS['vivienda_tipo'].etiqueta('finca') == 'Finca o campo'
         assert PREGUNTAS['tiene_jardin'].etiqueta('si') == 'Sí'
 
     def test_etiqueta_desconocida_o_texto_libre(self):
@@ -23,6 +25,71 @@ class TestPreguntas:
     def test_obligatorias(self):
         opcionales = {campo for campo, p in PREGUNTAS.items() if not p.obligatoria}
         assert opcionales == {'mascotas_detalles', 'referencias'}
+
+
+class TestFormatoGuardado:
+    """
+    Los `value` y las claves se guardan en `cuestionario_json`: cambiarlos
+    dejaría sin etiqueta las solicitudes ya enviadas y rompería la API. Si de
+    verdad hay que cambiarlos, hace falta una migración de datos.
+    """
+
+    def test_claves_de_las_preguntas(self):
+        assert list(PREGUNTAS) == [
+            'vivienda_tipo', 'vivienda_propia', 'tiene_jardin', 'tiene_mascotas', 'mascotas_detalles',
+            'experiencia_previa', 'horas_solo', 'emergencia_veterinaria', 'motivo_adopcion',
+            'compromiso_gastos', 'compromiso_tiempo', 'referencias']
+
+    def test_values_de_las_opciones(self):
+        values = {campo: tuple(valor for valor, _ in p.opciones) for campo, p in PREGUNTAS.items() if p.opciones}
+
+        assert values == {
+            'vivienda_tipo': ('casa', 'apartamento', 'finca'),
+            'vivienda_propia': ('propia', 'alquilada'),
+            'tiene_jardin': ('si', 'no'),
+            'tiene_mascotas': ('si', 'no'),
+            'horas_solo': ('0-4', '4-8', '8+'),
+            'emergencia_veterinaria': ('veterinario', 'consulta', 'espera'),
+            'compromiso_gastos': ('si', 'no'),
+            'compromiso_tiempo': ('si', 'no'),
+        }
+
+    def test_si_no_se_guardan_como_booleano(self):
+        si_no = {campo for campo, p in PREGUNTAS.items() if p.si_no}
+
+        assert si_no == {'tiene_jardin', 'tiene_mascotas', 'compromiso_gastos', 'compromiso_tiempo'}
+
+
+class TestTextos:
+    """P-27: tuteo en todo el cuestionario y rangos de horas sin solapes."""
+
+    def textos(self):
+        for pregunta in PREGUNTAS.values():
+            yield pregunta.texto
+            if pregunta.ayuda:
+                yield pregunta.ayuda
+            for _, etiqueta in pregunta.opciones or ():
+                yield etiqueta
+
+    def test_rangos_de_horas_sin_solapes(self):
+        assert PREGUNTAS['horas_solo'].opciones == (
+            ('0-4', 'Menos de 4 horas'), ('4-8', 'De 4 a 8 horas'), ('8+', 'Más de 8 horas'))
+
+    def test_tuteo(self):
+        usted = re.compile(r'\b(usted|[Tt]iene|[Ee]s vivienda|[Ss]e compromete|[Pp]uede|estaría|actuaría)\b')
+
+        assert [texto for texto in self.textos() if usted.search(texto)] == []
+
+    def test_cada_enunciado_es_una_pregunta(self):
+        """El resumen de errores antepone el enunciado al mensaje («¿…? Esta pregunta es obligatoria.»)."""
+        for pregunta in PREGUNTAS.values():
+            assert pregunta.texto.startswith('¿') and pregunta.texto.endswith('?'), pregunta.texto
+
+    def test_compromisos_dicen_a_que_se_compromete(self):
+        """P-12: «No puedo garantizarlo» no se entiende sin su pregunta, que ahora es el legend."""
+        assert PREGUNTAS['compromiso_gastos'].etiqueta('si') == 'Sí, me comprometo'
+        assert PREGUNTAS['compromiso_tiempo'].etiqueta('no') == 'No puedo garantizarlo'
+        assert 'gastos veterinarios' in PREGUNTAS['compromiso_gastos'].texto
 
 
 class TestValidar:
@@ -144,6 +211,26 @@ class TestDependencias:
         assert errores == {}
 
 
+
+class TestResumenDeErrores:
+    """Textos del resumen de errores del formulario: la pregunta y su error, en el orden del formulario."""
+
+    def test_orden_del_formulario_y_enunciado(self):
+        errores = {'mascotas_detalles': cuestionario.MENSAJE_DETALLES, 'vivienda_tipo': cuestionario.MENSAJE_OPCION}
+
+        resumen = cuestionario.resumen_de_errores(errores)
+
+        assert list(resumen.items()) == [
+            ('vivienda_tipo', f'{PREGUNTAS["vivienda_tipo"].texto} {cuestionario.MENSAJE_OPCION}'),
+            ('mascotas_detalles', f'{PREGUNTAS["mascotas_detalles"].texto} {cuestionario.MENSAJE_DETALLES}'),
+        ]
+
+    def test_sin_errores(self):
+        assert cuestionario.resumen_de_errores({}) == {}
+
+    def test_ignora_claves_que_no_son_preguntas(self):
+        assert cuestionario.resumen_de_errores({'otra': 'x'}) == {}
+
 def test_claves_desconocidas(respuestas_validas):
     assert cuestionario.claves_desconocidas(respuestas_validas) == []
     assert cuestionario.claves_desconocidas({**respuestas_validas, 'z': 1, 'a': 2}) == ['a', 'z']
@@ -154,12 +241,12 @@ class TestRespuestaLegible:
 
     @pytest.mark.parametrize('campo, valor, esperado', [
         ('horas_solo', '8+', 'Más de 8 horas'),
-        ('emergencia_veterinaria', 'espera', 'Esperaría a ver evolución'),
-        ('vivienda_tipo', 'finca', 'Finca/Campo'),
+        ('emergencia_veterinaria', 'espera', 'Esperaría a ver cómo evoluciona'),
+        ('vivienda_tipo', 'finca', 'Finca o campo'),
         ('tiene_jardin', True, 'Sí'),
         ('tiene_mascotas', False, 'No'),
-        ('compromiso_gastos', True, 'Se compromete'),
-        ('compromiso_tiempo', False, 'No puede garantizarlo'),
+        ('compromiso_gastos', True, 'Sí, me comprometo'),
+        ('compromiso_tiempo', False, 'No puedo garantizarlo'),
         ('motivo_adopcion', 'Quiero un perro', 'Quiero un perro'),
     ])
     def test_etiquetas(self, campo, valor, esperado):

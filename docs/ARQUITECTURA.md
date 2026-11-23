@@ -813,7 +813,7 @@ atributo `seccion`, en su orden) y muestra cada respuesta con el filtro Jinja
 `respuesta_legible(respuestas, campo)`, registrado en `app/__init__.py`:
 
 - Las opciones salen con su etiqueta («8+» → «Más de 8 horas») y los
-  sí/no guardados como booleano, con la de su opción («Se compromete»).
+  sí/no guardados como booleano, con la de su opción («Sí, me comprometo»).
 - Lo que falta (o está vacío) sale como «Sin respuesta».
 - Un valor que no está en la lista se muestra tal cual, y los datos que no
   son un dict no dan error. Las claves antiguas que no son preguntas no se

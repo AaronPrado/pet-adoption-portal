@@ -16,8 +16,15 @@ from app import adopciones, cuestionario, db
 from app.decorators import admin_required
 from app.models import Mascota, Solicitud
 
-# Mensaje general cuando el cuestionario tiene errores en sus campos
+# Mensaje general cuando un formulario del admin tiene errores en sus campos
+# (el cuestionario usa el resumen de errores)
 MENSAJE_REVISAR = 'Revisa los campos marcados.'
+# Tras enviar el cuestionario (P-24): qué pasa ahora y dónde verlo. La app no
+# envía correos, así que la respuesta solo llega a «Mis solicitudes».
+MENSAJE_RECIBIDA = ('Hemos recibido tu solicitud para adoptar a {nombre}. El refugio revisará tus '
+                    'respuestas y te contestará en esta página, donde puedes seguir su estado.')
+# Quien vuelve a solicitar la misma mascota (P-44); la API mantiene su mensaje
+MENSAJE_YA_SOLICITADA = 'Ya tienes una solicitud para {nombre}.'
 MENSAJE_ACCION_NO_VALIDA = 'Acción no válida.'
 MENSAJE_MOTIVO = 'Escribe el motivo del rechazo: el solicitante lo verá.'
 
@@ -32,10 +39,26 @@ bp = Blueprint('solicitudes', __name__, url_prefix='/solicitudes')
 def mostrar_cuestionario(mascota, valores=None, errores=None, codigo=200):
     """
     Renderiza el cuestionario con los valores enviados y los errores por
-    campo (contrato `valores`/`errores`).
+    campo (contrato `valores`/`errores`). Las preguntas salen de
+    `app/cuestionario.py`, la única fuente.
     """
-    return render_template('solicitudes/nueva.html', mascota=mascota, preguntas=cuestionario.PREGUNTAS,
-                           valores=valores or {}, errores=errores or {}), codigo
+    errores = errores or {}
+    return render_template('solicitudes/nueva.html', mascota=mascota, secciones=cuestionario.SECCIONES,
+                           resumen=cuestionario.resumen_de_errores(errores),
+                           valores=valores or {}, errores=errores), codigo
+
+
+def solicitud_propia(mascota_id):
+    """La solicitud del usuario actual para esa mascota, o None."""
+    return db.session.scalar(db.select(Solicitud).filter_by(usuario_id=current_user.id, mascota_id=mascota_id))
+
+
+def ir_a_solicitud_propia(nombre, solicitud):
+    """Avisa de que ya la solicitó y lleva a esa solicitud (a la lista si ya no existe)."""
+    flash(MENSAJE_YA_SOLICITADA.format(nombre=nombre), 'info')
+    if solicitud is None:
+        return redirect(url_for('solicitudes.mis_solicitudes'))
+    return redirect(url_for('solicitudes.detalle', solicitud_id=solicitud.id))
 
 
 @bp.route('/nueva/<int:mascota_id>', methods=['GET', 'POST'])
@@ -46,7 +69,8 @@ def nueva(mascota_id):
 
     Muestra formulario con preguntas sobre el adoptante.
     Solo usuarios autenticados pueden solicitar.
-    No se puede solicitar la misma mascota dos veces.
+    No se puede solicitar la misma mascota dos veces: quien ya la solicitó
+    va a su solicitud, aunque la mascota ya no esté disponible (P-44).
     Ante un cuestionario inválido vuelve a mostrar el formulario con lo
     escrito y los errores de cada campo, responde 400 y no crea la solicitud.
 
@@ -54,28 +78,23 @@ def nueva(mascota_id):
         mascota_id (int): ID de la mascota a adoptar
     """
     mascota = db.get_or_404(Mascota, mascota_id)
+    # El rollback de un error de adopciones expira la mascota
+    nombre = mascota.nombre
 
-    # Verificar que la mascota esté disponible
+    # Antes que la disponibilidad: si su solicitud se aprobó, la mascota ya no está disponible
+    solicitud_existente = solicitud_propia(mascota_id)
+    if solicitud_existente:
+        return ir_a_solicitud_propia(nombre, solicitud_existente)
+
     if not mascota.esta_disponible():
         flash(adopciones.MascotaNoDisponible.mensaje, 'warning')
         return redirect(url_for('mascotas.detalle', mascota_id=mascota_id))
-
-    # Verificar si el usuario ya tiene una solicitud para esta mascota
-    solicitud_existente = Solicitud.query.filter_by(
-        usuario_id=current_user.id,
-        mascota_id=mascota_id
-    ).first()
-
-    if solicitud_existente:
-        flash(adopciones.SolicitudDuplicada.mensaje, 'info')
-        return redirect(url_for('solicitudes.mis_solicitudes'))
 
     if request.method == 'POST':
         # Validar antes de crear: un envío inválido no crea la solicitud (P-04)
         valores = {campo: request.form.get(campo, '') for campo in cuestionario.PREGUNTAS}
         respuestas, errores = cuestionario.validar(valores)
         if errores:
-            flash(MENSAJE_REVISAR, 'danger')
             # Se repinta como mucho un carácter de más, para que se note que se pasó
             repintar = {campo: valor[:cuestionario.LONGITUD_MAXIMA + 1] for campo, valor in valores.items()}
             return mostrar_cuestionario(mascota, repintar, errores, 400)
@@ -83,16 +102,16 @@ def nueva(mascota_id):
         # La mascota sigue disponible: admite más solicitudes en paralelo
         try:
             adopciones.crear_solicitud(current_user.id, mascota_id, respuestas)
-        except adopciones.SolicitudDuplicada as error:
-            flash(error.mensaje, 'info')
-            return redirect(url_for('solicitudes.mis_solicitudes'))
+        except adopciones.SolicitudDuplicada:
+            # Otro envío suyo llegó antes (la restricción única lo detecta)
+            return ir_a_solicitud_propia(nombre, solicitud_propia(mascota_id))
         except adopciones.MascotaNoDisponible as error:
             flash(error.mensaje, 'warning')
             return redirect(url_for('mascotas.detalle', mascota_id=mascota_id))
         except adopciones.MascotaNoEncontrada:
             abort(404)
 
-        flash(f'¡Solicitud enviada con éxito para {mascota.nombre}! Revisaremos tu solicitud pronto.', 'success')
+        flash(MENSAJE_RECIBIDA.format(nombre=nombre), 'success')
         return redirect(url_for('solicitudes.mis_solicitudes'))
 
     return mostrar_cuestionario(mascota)

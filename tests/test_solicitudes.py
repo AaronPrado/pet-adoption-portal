@@ -84,7 +84,7 @@ class TestValidarCuestionarioWeb:
         assert response.status_code == 400
         assert Solicitud.query.count() == 0
         html = response.data.decode()
-        assert 'Revisa los campos marcados.' in html
+        assert 'data-resumen-errores' in html
         assert 'Esta pregunta es obligatoria.' in html
         assert 'éxito' not in html
         # Es el formulario, no la página genérica del 400 (app/errores.py)
@@ -94,11 +94,11 @@ class TestValidarCuestionarioWeb:
     def test_errores_junto_a_su_campo(self, client, auth_headers_adoptante, mascota_disponible):
         html = self.enviar(client, mascota_disponible, {}).data.decode()
 
-        assert 'aria-describedby="vivienda_tipo-error"' in html
+        assert 'aria-describedby="experiencia_previa-error experiencia_previa-ayuda"' in html
         assert 'id="vivienda_tipo-error"' in html
-        # En los radios, cada opción apunta al error del grupo
-        assert html.count('aria-describedby="tiene_jardin-error"') == 2
-        assert 'id="jardin_si"' in html and 'id="gastos_si"' in html
+        # En los radios, el error describe el grupo (su fieldset)
+        assert html.count('aria-describedby="tiene_jardin-error"') == 1
+        assert 'id="tiene_jardin_si"' in html and 'id="compromiso_gastos_si"' in html
         # Las opcionales no se marcan
         assert 'id="referencias-error"' not in html
 
@@ -116,12 +116,12 @@ class TestValidarCuestionarioWeb:
                  'horas_solo': '8+'}
         html = self.enviar(client, mascota_disponible, datos).data.decode()
 
-        assert '<option value="casa" selected>' in html
-        assert '<option value="8+" selected>' in html
+        assert 'id="vivienda_tipo_casa" name="vivienda_tipo" value="casa" checked' in html
+        assert 'id="horas_solo_8+" name="horas_solo" value="8+" checked' in html
         assert 'He tenido perros toda la vida</textarea>' in html
         assert 'Ana &lt;García&gt;</textarea>' in html
-        assert 'id="mascotas_si" value="si" checked' in html
-        assert 'id="mascotas_no" value="no" checked' not in html
+        assert 'id="tiene_mascotas_si" name="tiene_mascotas" value="si" checked' in html
+        assert 'id="tiene_mascotas_no" name="tiene_mascotas" value="no" checked' not in html
         # El único error es la dependencia
         assert 'id="mascotas_detalles-error"' in html
         assert html.count('aria-invalid="true"') == 1
@@ -178,18 +178,6 @@ class TestValidarCuestionarioWeb:
         html = client.get(f'/solicitudes/nueva/{mascota_disponible.id}').data.decode()
 
         assert 'aria-describedby="referencias-ayuda"' in html
-
-    def test_opciones_de_los_select_salen_del_modulo(self, client, auth_headers_adoptante, mascota_disponible):
-        """Fuente única: los <select> pintan exactamente las opciones de PREGUNTAS."""
-        html = client.get(f'/solicitudes/nueva/{mascota_disponible.id}').data.decode()
-
-        selects = re.findall(r'<select[^>]*\bname="([^"]+)"[^>]*>(.*?)</select>', html, re.S)
-        assert {nombre for nombre, _ in selects} == {
-            campo for campo, p in cuestionario.PREGUNTAS.items() if p.opciones and not p.si_no}
-        for nombre, cuerpo in selects:
-            pintadas = re.findall(r'<option value="([^"]*)"[^>]*>([^<]*)</option>', cuerpo)
-            assert pintadas[0] == ('', 'Selecciona...')
-            assert tuple(pintadas[1:]) == cuestionario.PREGUNTAS[nombre].opciones, nombre
 
     def test_get_sin_errores(self, client, auth_headers_adoptante, mascota_disponible):
         html = client.get(f'/solicitudes/nueva/{mascota_disponible.id}').data.decode()
@@ -589,8 +577,8 @@ class TestRespuestasLegibles:
         html = contenido(client.get(ruta.format(solicitud_nueva.id)))
 
         assert 'Más de 8 horas' in html
-        assert 'Esperaría a ver evolución' in html
-        assert 'No puede garantizarlo' in html
+        assert 'Esperaría a ver cómo evoluciona' in html
+        assert 'No puedo garantizarlo' in html
         assert '>8+<' not in html and '>espera<' not in html
         # Las opcionales sin contestar
         assert html.count('Sin respuesta') == 2
