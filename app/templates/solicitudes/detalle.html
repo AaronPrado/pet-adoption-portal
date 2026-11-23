@@ -1,115 +1,81 @@
-{% extends "base_bootstrap.html" %}
+{% extends "base.html" %}
+{% import "macros/componentes.html" as c %}
+{% import "macros/solicitudes.html" as s with context %}
 
-{% block title %}Solicitud #{{ solicitud.id }} - {{ solicitud.mascota.nombre }}{% endblock %}
+{% block title %}Solicitud de {{ solicitud.mascota.nombre }} - {{ marca_nombre }}{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/paginas/solicitudes.css') }}">
+{% endblock %}
 
 {% block content %}
-<div class="row mb-3">
-    <div class="col-12">
-        {% if current_user.is_admin() %}
-            <a href="{{ url_for('solicitudes.admin_lista') }}" class="btn btn-light">
-                ← Volver al panel admin
-            </a>
+{% set mascota = solicitud.mascota %}
+{% set solicitante = solicitud.usuario %}
+{% set es_propia = solicitud.usuario_id == current_user.id %}
+
+{% if current_user.is_admin() %}
+{% call c.cabecera_pagina('Solicitud de ' ~ mascota.nombre, volver_url=url_for('solicitudes.admin_lista'), volver_texto='Volver a las solicitudes') %}
+    {% if solicitud.estado == 'pendiente' %}
+    {{ c.enlace_boton('Revisar solicitud', url_for('solicitudes.admin_revisar', solicitud_id=solicitud.id)) }}
+    {% endif %}
+{% endcall %}
+{% else %}
+{{ c.cabecera_pagina('Solicitud de ' ~ mascota.nombre, volver_url=url_for('solicitudes.mis_solicitudes'), volver_texto='Volver a mis solicitudes') }}
+{% endif %}
+
+<div class="solicitud-detalle">
+    <aside class="solicitud-detalle__mascota">
+        {% if mascota.foto_url %}
+        <img class="solicitud__foto" src="{{ mascota.foto_url }}" width="800" height="600"
+             alt="Foto de {{ mascota.nombre }}, {{ mascota.especie|lower }}" decoding="async">
         {% else %}
-            <a href="{{ url_for('solicitudes.mis_solicitudes') }}" class="btn btn-light">
-                ← Volver a mis solicitudes
-            </a>
+        <div class="solicitud__foto solicitud__foto--vacia" role="img" aria-label="{{ mascota.nombre }} todavía no tiene foto">
+            <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" width="48" height="48" fill="currentColor">
+                <ellipse cx="6" cy="9" rx="2" ry="2.6"/><ellipse cx="10" cy="5.5" rx="2" ry="2.6"/>
+                <ellipse cx="14" cy="5.5" rx="2" ry="2.6"/><ellipse cx="18" cy="9" rx="2" ry="2.6"/>
+                <path d="M12 11c-3 0-6 4.2-6 6.6 0 1.6 1.3 2.4 2.8 2.4 1.3 0 2.1-.7 3.2-.7s1.9.7 3.2.7c1.5 0 2.8-.8 2.8-2.4 0-2.4-3-6.6-6-6.6z"/>
+            </svg>
+        </div>
         {% endif %}
-    </div>
-</div>
+        <p class="solicitud-detalle__datos">{{ mascota.especie }}{% if mascota.raza %} · {{ mascota.raza }}{% endif %}</p>
+        {{ c.enlace_boton('Ver la ficha de ' ~ mascota.nombre, url_for('mascotas.detalle', mascota_id=mascota.id), 'secundario') }}
+    </aside>
 
-<div class="row">
-    <!-- Información de la mascota -->
-    <div class="col-md-4 mb-4">
-        <div class="card">
-            {% if solicitud.mascota.foto_url %}
-                <img src="{{ solicitud.mascota.foto_url }}" class="card-img-top foto-alto-250" alt="{{ solicitud.mascota.nombre }}">
-            {% else %}
-                <img src="https://placehold.co/400x250/8ecae6/023047?text={{ solicitud.mascota.especie }}"
-                     class="card-img-top" alt="{{ solicitud.mascota.nombre }}">
+    <div class="solicitud-detalle__contenido">
+        <div class="solicitud-detalle__estado">
+            {{ c.badge_estado(solicitud.estado, 'solicitud') }}
+            <p class="solicitud__fecha">Enviada el {{ solicitud.fecha_solicitud|fecha_local(hora=true) }}</p>
+            {% if solicitud.fecha_revision %}
+            <p class="solicitud__fecha">Revisada el {{ solicitud.fecha_revision|fecha_local(hora=true) }}</p>
             {% endif %}
-            <div class="card-body">
-                <h5 class="card-title">{{ solicitud.mascota.nombre }}</h5>
-                <p class="card-text">
-                    <strong>{{ solicitud.mascota.especie }}</strong>
-                    {% if solicitud.mascota.raza %}<br>{{ solicitud.mascota.raza }}{% endif %}
-                </p>
-                <a href="{{ url_for('mascotas.detalle', mascota_id=solicitud.mascota.id) }}" class="btn btn-sm btn-outline-primary w-100">
-                    Ver Perfil Completo
-                </a>
-            </div>
         </div>
-    </div>
 
-    <!-- Detalles de la solicitud -->
-    <div class="col-md-8">
-        <div class="card">
-            <div class="card-body">
-                <h3>Solicitud #{{ solicitud.id }}</h3>
+        {% if es_propia %}
+        {{ s.que_pasa_ahora(solicitud) }}
+        {% endif %}
 
-                <!-- Estado -->
-                <div class="mb-4">
-                    {% if solicitud.estado == 'pendiente' %}
-                        <span class="badge bg-warning text-dark fs-6">Pendiente de revisión</span>
-                    {% elif solicitud.estado == 'aprobada' %}
-                        <span class="badge bg-success fs-6">¡Aprobada!</span>
-                    {% elif solicitud.estado == 'rechazada' %}
-                        <span class="badge bg-danger fs-6">Rechazada</span>
-                    {% endif %}
+        {% if solicitud.comentarios_admin %}
+        <section class="aviso aviso--info" aria-labelledby="mensaje-refugio-titulo">
+            <h2 id="mensaje-refugio-titulo" class="solicitud-detalle__titulo-aviso">Mensaje del refugio</h2>
+            <p>{{ solicitud.comentarios_admin }}</p>
+        </section>
+        {% endif %}
 
-                    <p class="text-muted mt-2 mb-0">
-                        <small>Solicitud enviada el {{ solicitud.fecha_solicitud.strftime('%d/%m/%Y a las %H:%M') }}</small>
-                    </p>
-
-                    {% if solicitud.fecha_revision %}
-                    <p class="text-muted mb-0">
-                        <small>Revisada el {{ solicitud.fecha_revision.strftime('%d/%m/%Y a las %H:%M') }}</small>
-                    </p>
-                    {% endif %}
-                </div>
-
-                <!-- Solicitante -->
-                <h5 class="mb-3">Información del Solicitante</h5>
-                <table class="table table-borderless">
-                    <tbody>
-                        <tr>
-                            <th class="columna-etiqueta-30">Nombre:</th>
-                            <td>{{ solicitud.usuario.nombre }} {{ solicitud.usuario.apellidos or '' }}</td>
-                        </tr>
-                        <tr>
-                            <th>Email:</th>
-                            <td>{{ solicitud.usuario.email }}</td>
-                        </tr>
-                        {% if solicitud.usuario.telefono %}
-                        <tr>
-                            <th>Teléfono:</th>
-                            <td>{{ solicitud.usuario.telefono }}</td>
-                        </tr>
-                        {% endif %}
-                    </tbody>
-                </table>
-
-                <!-- Cuestionario -->
-                <h5 class="mt-4 mb-3">Respuestas del Cuestionario</h5>
-                {% include 'solicitudes/_respuestas.html' %}
-
-                <!-- Mensaje del refugio -->
-                {% if solicitud.comentarios_admin %}
-                <div class="alert alert-info mt-4">
-                    <h6 class="alert-heading">Mensaje del refugio</h6>
-                    <p class="mb-0">{{ solicitud.comentarios_admin }}</p>
-                </div>
+        <section>
+            <h2>Datos del solicitante</h2>
+            <dl class="respuestas__lista">
+                <div><dt>Nombre</dt><dd>{{ solicitante.nombre }}{% if solicitante.apellidos %} {{ solicitante.apellidos }}{% endif %}</dd></div>
+                <div><dt>Correo electrónico</dt><dd>{{ solicitante.email }}</dd></div>
+                {% if solicitante.telefono %}
+                <div><dt>Teléfono</dt><dd>{{ solicitante.telefono }}</dd></div>
                 {% endif %}
+            </dl>
+        </section>
 
-                <!-- Botón de acción para admin -->
-                {% if current_user.is_admin() and solicitud.estado == 'pendiente' %}
-                <div class="mt-4">
-                    <a href="{{ url_for('solicitudes.admin_revisar', solicitud_id=solicitud.id) }}" class="btn btn-primary">
-                        Revisar Solicitud
-                    </a>
-                </div>
-                {% endif %}
-            </div>
-        </div>
+        <section>
+            <h2>Respuestas del cuestionario</h2>
+            {% include 'solicitudes/_respuestas_sistema.html' %}
+        </section>
     </div>
 </div>
 {% endblock %}

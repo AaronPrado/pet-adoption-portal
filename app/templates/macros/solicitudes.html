@@ -1,0 +1,30 @@
+{#
+  Textos de las solicitudes para el adoptante (B4.5, P-24). Aquí está, en un
+  solo sitio, lo que pasa en cada estado; las etiquetas de los estados salen de
+  ETIQUETAS_ESTADO (app/models.py).
+
+    {% import "macros/solicitudes.html" as s with context %}
+    {{ s.que_pasa_ahora(solicitud) }}
+
+  La app no envía correos: esta página es el único canal, así que el texto
+  dice dónde mirar. `marca_contacto` (MARCA_CONTACTO) es opcional.
+#}
+{% import "macros/componentes.html" as c %}
+
+{% macro que_pasa_ahora(solicitud) -%}
+{%- set mascota = solicitud.mascota.nombre -%}
+<section class="que-pasa-ahora" aria-labelledby="que-pasa-ahora-titulo">
+  <h2 id="que-pasa-ahora-titulo">Qué pasa ahora</h2>
+  {%- if solicitud.estado == 'pendiente' %}
+  <p>Estamos revisando tu solicitud. No te avisaremos por correo: vuelve a esta página para ver la respuesta.</p>
+  {%- elif solicitud.estado == 'aprobada' %}
+  <p>¡Enhorabuena! El refugio se pondrá en contacto contigo para organizar la entrega de {{ mascota }}.</p>
+  {%- else %}
+  <p>Esta vez no ha podido ser. Puedes solicitar la adopción de otra mascota.</p>
+  {{ c.enlace_boton('Ver mascotas disponibles', url_for('mascotas.catalogo'), 'secundario') }}
+  {%- endif %}
+  {%- if marca_contacto %}
+  <p class="que-pasa-ahora__contacto">Si tienes dudas, escribe a {{ marca_contacto }}.</p>
+  {%- endif %}
+</section>
+{%- endmacro %}

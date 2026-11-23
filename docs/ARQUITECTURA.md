@@ -254,6 +254,7 @@ app/
 │                        # cabeceras de seguridad y /health
 ├── errores.py           # Páginas de error de la web (la API queda fuera)
 ├── contexto.py          # Marca (context processor) y usuario de la navegación
+├── fechas.py            # Filtro Jinja fecha_local (UTC a ZONA_HORARIA)
 ├── cli.py               # Comandos flask crear-admin y exportar-fotos
 ├── models.py            # Modelos SQLAlchemy (Usuario, Mascota, Solicitud)
 ├── adopciones.py        # Regla de adopción: crear, aprobar y rechazar solicitudes
@@ -284,12 +285,14 @@ app/
 │   │   └── error.html   # Página común de error (400, CSRF, 403, 404, 405, 429, 500)
 │   ├── macros/
 │   │   ├── formulario.html  # campo, grupo_opciones, boton, resumen_errores, avisos (ADR-0002)
+│   │   ├── solicitudes.html # que_pasa_ahora: el texto de cada estado de la solicitud
 │   │   └── paginacion.html
 │   ├── auth/            # login.html, registro.html
 │   ├── mascotas/        # catalogo.html, detalle.html
 │   │   └── admin/       # lista.html, form.html
 │   └── solicitudes/     # nueva.html, mis_solicitudes.html, detalle.html,
-│       │                # _respuestas.html (respuestas legibles, parcial)
+│       │                # _respuestas.html (respuestas legibles con Bootstrap, solo
+│       │                # para admin/revisar.html) y _respuestas_sistema.html (base nueva)
 │       └── admin/       # lista.html, revisar.html
 │
 └── static/
@@ -317,6 +320,18 @@ Dockerfile, gunicorn.conf.py, Procfile   # Despliegue (docs/DESPLIEGUE.md)
 `FLASK_ENV` elige una (production si no se indica). Producción no arranca si
 faltan `SECRET_KEY`, `JWT_SECRET_KEY` o `DATABASE_URL`, o si alguna clave
 tiene menos de 32 bytes.
+
+`ZONA_HORARIA` (por defecto `Europe/Madrid`, configurable por entorno) es la
+zona en la que se muestran las fechas. Se guardan en UTC sin zona
+(`utcnow()`) y el filtro Jinja `fecha_local` (`app/fechas.py`) las convierte
+con `zoneinfo`, con el cambio de hora incluido: `{{ f|fecha_local }}` da «15 de
+noviembre de 2026» y `{{ f|fecha_local(hora=true) }}`, «15 de noviembre de 2026,
+14:53». Los meses salen de una tabla propia, no del locale del sistema. Una
+zona desconocida impide arrancar la app. `tzdata` está en `requirements.txt`
+porque Docker slim y Windows no traen la base de zonas. Hoy lo usan
+`solicitudes/mis_solicitudes.html` y `solicitudes/detalle.html`; las plantillas
+del panel de solicitudes (`admin/lista.html` y `admin/revisar.html`) siguen con
+`strftime` en UTC hasta la fase 5.
 
 ### Páginas de error de la web
 
@@ -927,8 +942,8 @@ base-uri 'none'; form-action 'self'; frame-ancestors 'none'
   accesibilidad del HTML, recuento de consultas (N+1) y migraciones.
 - **End-to-end** (`tests/e2e/`): Playwright en Chromium con la app real y
   CSRF activado; fallan si hay errores de JavaScript o de CSP.
-  Un módulo por área (`test_navegacion`, `test_catalogo`, `test_solicitud` y
-  `test_admin`), con lo común en `conftest.py`; cada cambio toca solo el de su
+  Un módulo por área (`test_navegacion`, `test_catalogo`, `test_solicitud`,
+  `test_adoptante` y `test_admin`), con lo común en `conftest.py`; cada cambio toca solo el de su
   área y localiza por rol, etiqueta o texto, no por clases de Bootstrap.
 - **GitHub Actions**: tests, `ruff`, `pip-audit`, e2e, migraciones y seed
   contra PostgreSQL 15 y construcción de la imagen Docker.
