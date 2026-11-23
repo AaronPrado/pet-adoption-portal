@@ -330,6 +330,12 @@
     outline-offset: 1px;
   }
 
+  /* Esta capa gana a `base`: sin esto, el outline rojo taparía el anillo de foco */
+  .opcion__control[aria-invalid="true"]:focus-visible {
+    outline: var(--foco-anillo);
+    outline-offset: var(--foco-separacion);
+  }
+
   .opcion__etiqueta {
     flex: 1;
     display: flex;

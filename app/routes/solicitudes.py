@@ -16,7 +16,8 @@ from app import adopciones, cuestionario, db
 from app.decorators import admin_required
 from app.models import Mascota, Solicitud
 
-# Mensaje general cuando el cuestionario tiene errores en sus campos
+# Mensaje general cuando un formulario del admin tiene errores en sus campos
+# (el cuestionario usa el resumen de errores)
 MENSAJE_REVISAR = 'Revisa los campos marcados.'
 MENSAJE_ACCION_NO_VALIDA = 'Acción no válida.'
 MENSAJE_MOTIVO = 'Escribe el motivo del rechazo: el solicitante lo verá.'
@@ -32,10 +33,13 @@ bp = Blueprint('solicitudes', __name__, url_prefix='/solicitudes')
 def mostrar_cuestionario(mascota, valores=None, errores=None, codigo=200):
     """
     Renderiza el cuestionario con los valores enviados y los errores por
-    campo (contrato `valores`/`errores`).
+    campo (contrato `valores`/`errores`). Las preguntas salen de
+    `app/cuestionario.py`, la única fuente.
     """
-    return render_template('solicitudes/nueva.html', mascota=mascota, preguntas=cuestionario.PREGUNTAS,
-                           valores=valores or {}, errores=errores or {}), codigo
+    errores = errores or {}
+    return render_template('solicitudes/nueva.html', mascota=mascota, secciones=cuestionario.SECCIONES,
+                           resumen=cuestionario.resumen_de_errores(errores),
+                           valores=valores or {}, errores=errores), codigo
 
 
 @bp.route('/nueva/<int:mascota_id>', methods=['GET', 'POST'])
@@ -75,7 +79,6 @@ def nueva(mascota_id):
         valores = {campo: request.form.get(campo, '') for campo in cuestionario.PREGUNTAS}
         respuestas, errores = cuestionario.validar(valores)
         if errores:
-            flash(MENSAJE_REVISAR, 'danger')
             # Se repinta como mucho un carácter de más, para que se note que se pasó
             repintar = {campo: valor[:cuestionario.LONGITUD_MAXIMA + 1] for campo, valor in valores.items()}
             return mostrar_cuestionario(mascota, repintar, errores, 400)
