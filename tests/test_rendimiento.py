@@ -68,9 +68,17 @@ class TestNMasUno:
 
         assert consultas_en(client, '/solicitudes/mis-solicitudes') == con_1
 
-    @pytest.mark.parametrize('ruta', ['/solicitudes/admin/revisar/{}', '/solicitudes/detalle/{}'])
+    @pytest.mark.parametrize('ruta, limite', [
+        # Usuario de la sesión, solicitud con mascota y solicitante
+        # (joinedload), pendientes de la mascota y el contador de pendientes
+        # del menú del admin
+        ('/solicitudes/admin/revisar/{}', 4),
+        # Usuario, solicitud, su mascota y su solicitante (carga perezosa, una
+        # fila cada uno) y el contador del menú del admin
+        ('/solicitudes/detalle/{}', 5),
+    ])
     def test_revision_y_detalle_no_crecen_con_las_pendientes(self, client, auth_headers_admin,
-                                                            solicitud_pendiente, ruta):
+                                                            solicitud_pendiente, ruta, limite):
         """Las otras pendientes de la mascota se cuentan con una consulta agregada."""
         url = ruta.format(solicitud_pendiente.id)
         mascota_id = solicitud_pendiente.mascota_id
@@ -89,8 +97,7 @@ class TestNMasUno:
         otras(5, 'b')
 
         assert consultas_en(client, url) == con_1
-        # Usuario de la sesión, solicitud con mascota y solicitante, pendientes y revisor
-        assert con_1 <= 4
+        assert con_1 <= limite
 
     def test_revision_de_una_resuelta(self, client, auth_headers_admin, solicitud_pendiente, usuario_admin):
         solicitud_pendiente.registrar_revision('aprobada', usuario_admin.id)
@@ -98,8 +105,9 @@ class TestNMasUno:
         url = f'/solicitudes/admin/revisar/{solicitud_pendiente.id}'
         db.session.expunge_all()
 
-        # Sin recuento de pendientes; el revisor sí se carga
-        assert consultas_en(client, url) <= 3
+        # Usuario, solicitud con mascota y solicitante, revisor (sin recuento
+        # de pendientes) y el contador del menú
+        assert consultas_en(client, url) <= 4
 
     def test_catalogo_cuenta_pendientes_con_una_consulta(self, client):
         crear_solicitudes(1)
@@ -126,8 +134,9 @@ class TestNMasUno:
         assert html.count('/mascotas/admin/eliminar/') == 5
         db.session.expunge_all()
         assert consultas_en(client, '/mascotas/admin') == con_2
-        # Usuario de la sesión, total de la paginación, la página y el recuento
-        assert con_2 == 4
+        # Usuario de la sesión, pendientes del menú, total de la paginación,
+        # la página y el recuento
+        assert con_2 == 5
 
     def test_portada_no_crece_con_las_mascotas(self, client):
         """Tres contadores y las destacadas: cuatro consultas, sean cuantas sean las mascotas."""

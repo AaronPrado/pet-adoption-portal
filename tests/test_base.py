@@ -177,8 +177,9 @@ class TestNavegacion:
     def test_admin(self, client, auth_headers_admin):
         html = client.get('/no-existe').data.decode()
 
-        assert 'href="/mascotas/admin"' in enlace_nav(html, 'Panel Admin Mascotas')
-        assert 'href="/solicitudes/admin"' in enlace_nav(html, 'Panel Admin Solicitudes')
+        # Sin Title Case (P-42); el contador de pendientes, en tests/test_admin_solicitudes_paginas.py
+        assert 'href="/mascotas/admin"' in enlace_nav(html, 'Gestionar mascotas')
+        assert 'href="/solicitudes/admin"' in enlace_nav(html, 'Gestionar solicitudes')
         assert 'Mis Solicitudes' not in html
 
     def test_admin_enlace_activo(self, app, usuario_admin):
@@ -186,7 +187,7 @@ class TestNavegacion:
             login_user(usuario_admin)
             html = render_template('errores/error.html', titulo='T', mensaje='M', salidas=[])
 
-        assert 'aria-current="page"' in enlace_nav(html, 'Panel Admin Mascotas')
+        assert 'aria-current="page"' in enlace_nav(html, 'Gestionar mascotas')
 
     def test_cerrar_sesion_por_post_con_csrf(self, app, client, auth_headers_adoptante):
         app.config['WTF_CSRF_ENABLED'] = True

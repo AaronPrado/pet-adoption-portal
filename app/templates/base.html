@@ -14,6 +14,12 @@
 <a class="{{ clase }}" href="{{ url_for(endpoint) }}"
    {%- if request.endpoint == endpoint %} aria-current="page"{% endif %}>{{ texto }}</a>
 {%- endmacro -%}
+{#- Contador de pendientes (P-28) en el propio texto del enlace, así un lector
+    de pantalla lo lee igual. Sin pendientes (o sin recuento) no sale. Es una
+    macro y no un `set` para no pisar variables de las páginas. #}
+{% macro texto_solicitudes(pendientes) -%}
+Gestionar solicitudes{% if pendientes %} ({{ pendientes }} {{ 'pendiente' if pendientes == 1 else 'pendientes' }}){% endif %}
+{%- endmacro -%}
 <!DOCTYPE html>
 <html lang="es">
 
@@ -77,8 +83,8 @@
                         </button>
                         <ul id="menu-usuario" class="menu-usuario__lista">
                             {%- if usuario.admin %}
-                            <li>{{ enlace_nav('Panel Admin Mascotas', 'mascotas.admin_lista', 'menu-usuario__opcion') }}</li>
-                            <li>{{ enlace_nav('Panel Admin Solicitudes', 'solicitudes.admin_lista', 'menu-usuario__opcion') }}</li>
+                            <li>{{ enlace_nav('Gestionar mascotas', 'mascotas.admin_lista', 'menu-usuario__opcion') }}</li>
+                            <li>{{ enlace_nav(texto_solicitudes(usuario.pendientes), 'solicitudes.admin_lista', 'menu-usuario__opcion') }}</li>
                             {%- else %}
                             <li>{{ enlace_nav('Mis Solicitudes', 'solicitudes.mis_solicitudes', 'menu-usuario__opcion') }}</li>
                             {%- endif %}

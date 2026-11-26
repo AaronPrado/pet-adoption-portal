@@ -540,7 +540,10 @@ página extiende una sola; `tests/test_base.py` comprueba cuáles usan la nueva.
   POST con `csrf_token`. El usuario sale de `usuario_nav()`, que nunca lanza:
   si no se puede cargar (base de datos caída en un 500), se trata como
   anónimo y la traza se registra una sola vez por petición (marca en `g`).
-  `errores.py` usa la misma función para elegir las salidas.
+  `errores.py` usa la misma función para elegir las salidas. Para un admin
+  incluye `pendientes`, el contador del enlace «Gestionar solicitudes (N
+  pendientes)» (P-28): una consulta `count` por petición (cacheada en `g`),
+  ninguna para los demás, y `None` (enlace sin contador) si falla.
 - **Menú móvil y menú de usuario** con el patrón *disclosure*: un `<button
   data-desplegable aria-expanded aria-controls>` seguido de su panel. El
   HTML llega cerrado (`aria-expanded="false"`). `con-js.js`, un script

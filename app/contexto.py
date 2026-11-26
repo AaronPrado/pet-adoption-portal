@@ -14,12 +14,16 @@ from typing import NamedTuple
 from flask import current_app, g, url_for
 from flask_login import current_user
 
-from app.models import utcnow
+from app import db
+from app.models import Solicitud, utcnow
 
 
 class UsuarioNav(NamedTuple):
     nombre: str
     admin: bool
+    # Solicitudes pendientes, solo para un admin (None si no es admin o si
+    # no se han podido contar)
+    pendientes: int | None = None
 
 
 def url_logo(logo):
@@ -45,6 +49,37 @@ def contexto_marca():
     }
 
 
+def contar_pendientes():
+    """Número de solicitudes pendientes de revisión, con una consulta `count`."""
+    return db.session.scalar(
+        db.select(db.func.count()).select_from(Solicitud).where(Solicitud.estado == 'pendiente'))
+
+
+def pendientes_nav():
+    """
+    Pendientes para la navegación del admin, contadas una vez por petición
+    (la base y la ficha llaman a usuario_nav). Si la consulta falla, None:
+    el menú se pinta sin contador.
+
+    En PostgreSQL un error SQL aborta la transacción y fallarían las
+    consultas siguientes de la misma petición, así que se deshace. Se pinta
+    después de que la vista haya hecho su commit, sin cambios pendientes que
+    perder. Un savepoint lo evitaría también, pero sumaría dos sentencias a
+    cada página del admin aunque el recuento no falle.
+    """
+    if 'pendientes_nav' not in g:
+        try:
+            g.pendientes_nav = contar_pendientes()
+        except Exception:
+            current_app.logger.exception('No se ha podido contar las solicitudes pendientes')
+            g.pendientes_nav = None
+            try:
+                db.session.rollback()
+            except Exception:
+                current_app.logger.exception('No se ha podido deshacer la transacción tras el recuento')
+    return g.pendientes_nav
+
+
 def usuario_nav():
     """
     Nombre y rol del usuario con sesión, o None si es anónimo. Si cargarlo
@@ -55,12 +90,13 @@ def usuario_nav():
     try:
         if not current_user.is_authenticated:
             return None
-        return UsuarioNav(nombre=current_user.nombre, admin=current_user.is_admin())
+        nombre, admin = current_user.nombre, current_user.is_admin()
     except Exception:
         if not g.get('fallo_usuario_nav'):
             g.fallo_usuario_nav = True
             current_app.logger.exception('No se ha podido cargar el usuario para la navegación')
         return None
+    return UsuarioNav(nombre=nombre, admin=admin, pendientes=pendientes_nav() if admin else None)
 
 
 def registrar_contexto(app):
