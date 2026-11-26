@@ -14,6 +14,7 @@ from sqlalchemy.orm import joinedload
 
 from app import adopciones, cuestionario, db
 from app.decorators import admin_required
+from app.errores import INICIO, pagina_error
 from app.models import Mascota, Solicitud
 
 # Mensaje general cuando un formulario del admin tiene errores en sus campos
@@ -27,6 +28,11 @@ MENSAJE_RECIBIDA = ('Hemos recibido tu solicitud para adoptar a {nombre}. El ref
 MENSAJE_YA_SOLICITADA = 'Ya tienes una solicitud para {nombre}.'
 MENSAJE_ACCION_NO_VALIDA = 'Acción no válida.'
 MENSAJE_MOTIVO = 'Escribe el motivo del rechazo: el solicitante lo verá.'
+# El refugio gestiona las solicitudes, no las envía (P-45)
+TITULO_ADMIN_NO_SOLICITA = 'Las cuentas del refugio no pueden solicitar adopciones'
+MENSAJE_ADMIN_NO_SOLICITA = ('Con la cuenta del refugio revisas las solicitudes para adoptar a {nombre}, '
+                             'pero no puedes enviar una. Para adoptar, usa una cuenta personal.')
+GESTIONAR_SOLICITUDES = ('Gestionar solicitudes', 'solicitudes.admin_lista')
 
 # Tope del mensaje al aprobar y del motivo al rechazar (el mismo que las respuestas)
 LONGITUD_MAXIMA = cuestionario.LONGITUD_MAXIMA
@@ -80,6 +86,13 @@ def nueva(mascota_id):
     mascota = db.get_or_404(Mascota, mascota_id)
     # El rollback de un error de adopciones expira la mascota
     nombre = mascota.nombre
+
+    # El admin revisa solicitudes (y podría aprobar la suya): 403 propio (P-45)
+    if current_user.is_admin():
+        return pagina_error(403, TITULO_ADMIN_NO_SOLICITA, MENSAJE_ADMIN_NO_SOLICITA.format(nombre=nombre),
+                            salidas=(GESTIONAR_SOLICITUDES, INICIO),
+                            primera=(f'Volver a la ficha de {nombre}',
+                                     url_for('mascotas.detalle', mascota_id=mascota_id)))
 
     # Antes que la disponibilidad: si su solicitud se aprobó, la mascota ya no está disponible
     solicitud_existente = solicitud_propia(mascota_id)

@@ -14,6 +14,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app import contexto, db
 from app.models import Mascota, Solicitud, Usuario
+from tests.test_catalogo_paginas import html_de
 from tests.test_rendimiento import ContadorConsultas
 
 LISTA = '/solicitudes/admin'
@@ -177,3 +178,35 @@ class TestContadorDePendientes:
         monkeypatch.setattr(contexto, 'contar_pendientes', roto)
 
         assert enlace_solicitudes(client.get('/no-existe').data.decode()) == 'Gestionar solicitudes'
+
+
+class TestAdminNoSolicita:
+    """P-45: el refugio gestiona solicitudes, no las envía."""
+
+    def test_la_ficha_no_ofrece_solicitar(self, client, auth_headers_admin, mascota_disponible):
+        html = principal(html_de(client, f'/mascotas/{mascota_disponible.id}'))
+
+        assert 'Solicitar adopción' not in html
+        assert f'/solicitudes/nueva/{mascota_disponible.id}' not in html
+
+    def test_el_adoptante_si(self, client, auth_headers_adoptante, mascota_disponible):
+        html = principal(html_de(client, f'/mascotas/{mascota_disponible.id}'))
+
+        assert 'Solicitar adopción' in html
+
+    @pytest.mark.parametrize('metodo', ['get', 'post'])
+    def test_la_ruta_da_un_403_propio(self, client, auth_headers_admin, mascota_disponible,
+                                      respuestas_validas, metodo):
+        url = f'/solicitudes/nueva/{mascota_disponible.id}'
+        response = getattr(client, metodo)(url, data=respuestas_validas)
+
+        assert response.status_code == 403
+        html = response.data.decode()
+        assert h1_de(html) == ['Las cuentas del refugio no pueden solicitar adopciones']
+        assert 'Cerbero' in principal(html)
+        assert f'href="/mascotas/{mascota_disponible.id}">Volver a la ficha de Cerbero</a>' in html
+        assert 'href="/solicitudes/admin">Gestionar solicitudes</a>' in principal(html)
+        assert Solicitud.query.count() == 0
+
+    def test_mascota_inexistente_sigue_siendo_404(self, client, auth_headers_admin):
+        assert client.get('/solicitudes/nueva/99999').status_code == 404
