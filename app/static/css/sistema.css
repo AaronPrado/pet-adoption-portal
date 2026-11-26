@@ -659,7 +659,11 @@
   }
 
   /* Tabla en una región desplazable (P-23, DIS-12) */
+  /* position: relative hace de la región el bloque contenedor de los
+     .visualmente-oculto (absolutos) de las celdas: sin ella escapan del
+     recorte y la página entera se desplaza en horizontal en el móvil */
   .tabla {
+    position: relative;
     overflow-x: auto;
     background-color: var(--color-superficie);
     border: 1px solid var(--color-borde);

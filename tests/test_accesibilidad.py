@@ -10,7 +10,6 @@ from html.parser import HTMLParser
 import pytest
 
 from app import db
-from app.models import Solicitud
 
 
 class Analizador(HTMLParser):
@@ -107,12 +106,11 @@ def test_revision_de_una_resuelta(client, auth_headers_admin, solicitud_pendient
     assert problemas(client, f'/solicitudes/admin/revisar/{solicitud_pendiente.id}') == []
 
 
-def test_botones_de_icono_nombran_el_elemento(client, auth_headers_admin, solicitud_pendiente):
+def test_acciones_de_la_tabla_nombran_la_mascota(client, auth_headers_admin, mascota_disponible):
     html = client.get('/mascotas/admin').data.decode()
-    nombre = db.session.get(Solicitud, solicitud_pendiente.id).mascota.nombre
 
-    assert f'aria-label="Eliminar {nombre}"' in html
-    assert f'aria-label="Editar {nombre}"' in html
+    assert 'aria-label="Eliminar a Cerbero"' in html
+    assert 'Editar<span class="visualmente-oculto"> a Cerbero</span>' in html
 
 
 def test_enlace_para_saltar_al_contenido(client):

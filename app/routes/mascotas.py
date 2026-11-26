@@ -9,12 +9,12 @@ Este módulo maneja:
 
 from flask import Blueprint, abort, current_app, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
-from sqlalchemy import exists, select
+from sqlalchemy import exists, func, select
 
 from app import adopciones, db, fotos
 from app.adopciones import consulta_mascota_bloqueada
 from app.decorators import admin_required
-from app.models import Mascota
+from app.models import Mascota, Solicitud
 from app.routes.auth import MENSAJE_REVISAR
 
 # Crear blueprint
@@ -22,6 +22,17 @@ bp = Blueprint('mascotas', __name__, url_prefix='/mascotas')
 
 # Estados por los que se puede filtrar la lista del panel admin
 ESTADOS_FILTRABLES = ('disponible', 'adoptado')
+
+# Columnas por las que se puede ordenar la lista del panel admin (parámetro `orden`)
+COLUMNAS_ORDENABLES = {
+    'id': Mascota.id,
+    'nombre': Mascota.nombre,
+    'especie': Mascota.especie,
+    'raza': Mascota.raza,
+    'edad': Mascota.edad_aprox,
+    'tamano': Mascota.tamano,
+    'estado': Mascota.estado,
+}
 
 # Campos del formulario de mascota del panel admin
 CAMPOS_TEXTO_MASCOTA = ('nombre', 'especie', 'raza', 'edad_aprox', 'sexo', 'tamano', 'descripcion', 'foto_url')
@@ -142,47 +153,32 @@ def admin_lista():
     """
     Panel de administración: lista de todas las mascotas.
 
-    Muestra todas las mascotas (disponibles y adoptadas).
-    Solo accesible para administradores.
-    Permite ordenar por cualquier columna.
+    Muestra todas las mascotas (disponibles y adoptadas), con filtro por
+    estado y orden por cualquier columna. Solo accesible para
+    administradores. Un campo de orden desconocido pasa a `id` y una
+    dirección desconocida a `asc`, para que la cabecera marcada con
+    aria-sort sea la que de verdad ordena.
     """
-
-    # Obtener parámetros de URL
     estado_filtro = request.args.get('estado', '')
     if estado_filtro not in ESTADOS_FILTRABLES:
         estado_filtro = ''  # en_proceso ya no lo usa el flujo (ADR-0004)
-    orden_campo = request.args.get('orden', 'id')  # Campo por el cual ordenar
-    orden_dir = request.args.get('dir', 'asc')  # Dirección: asc o desc
+    orden_campo = request.args.get('orden', 'id')
+    if orden_campo not in COLUMNAS_ORDENABLES:
+        orden_campo = 'id'
+    orden_dir = 'desc' if request.args.get('dir') == 'desc' else 'asc'
 
-    # Query base
     query = Mascota.query
-
-    # Aplicar filtro de estado si existe
     if estado_filtro:
         query = query.filter_by(estado=estado_filtro)
 
-    # Mapeo de nombres de columnas a atributos del modelo
-    columnas_validas = {
-        'id': Mascota.id,
-        'nombre': Mascota.nombre,
-        'especie': Mascota.especie,
-        'raza': Mascota.raza,
-        'edad': Mascota.edad_aprox,
-        'tamano': Mascota.tamano,
-        'estado': Mascota.estado
-    }
-
-    # Aplicar ordenamiento
-    if orden_campo in columnas_validas:
-        columna = columnas_validas[orden_campo]
-        if orden_dir == 'desc':
-            query = query.order_by(columna.desc())
-        else:
-            query = query.order_by(columna.asc())
-    else:
-        # Orden por defecto
+    columna = COLUMNAS_ORDENABLES[orden_campo]
+    query = query.order_by(columna.desc() if orden_dir == 'desc' else columna.asc())
+    if orden_campo != 'id':
+        # Desempate estable: con valores repetidos (estado, especie...) el
+        # orden de la BD no está definido y la paginación repetiría o saltaría
+        # filas. Siempre por id creciente, sea cual sea la dirección: los
+        # empatados salen por orden de alta, que es lo que el admin espera
         query = query.order_by(Mascota.id.asc())
-
     pagina = query.paginate(
         page=request.args.get('page', 1, type=int),
         per_page=current_app.config['ADMIN_POR_PAGINA'],
@@ -192,9 +188,29 @@ def admin_lista():
     return render_template('mascotas/admin/lista.html',
                          mascotas=pagina.items,
                          pagina=pagina,
+                         solicitudes=_solicitudes_por_mascota([m.id for m in pagina.items]),
                          estado_filtro=estado_filtro,
                          orden_campo=orden_campo,
                          orden_dir=orden_dir)
+
+
+def _solicitudes_por_mascota(mascota_ids):
+    """
+    Número de solicitudes (en cualquier estado) de cada mascota, con una sola
+    consulta agregada (sin N+1). Una mascota con solicitudes no se puede
+    eliminar; las que no tienen ninguna no aparecen.
+
+    Returns:
+        dict: {mascota_id: número de solicitudes}
+    """
+    if not mascota_ids:
+        return {}
+    consulta = (
+        select(Solicitud.mascota_id, func.count())
+        .where(Solicitud.mascota_id.in_(mascota_ids))
+        .group_by(Solicitud.mascota_id)
+    )
+    return dict(db.session.execute(consulta).all())
 
 
 @bp.route('/admin/nueva', methods=['GET', 'POST'])
@@ -455,7 +471,9 @@ def admin_eliminar(mascota_id):
     # Verificar si tiene solicitudes asociadas
     if mascota.solicitudes.count() > 0:
         db.session.rollback()
-        flash(f'No se puede eliminar "{mascota.nombre}" porque tiene solicitudes de adopción asociadas.', 'danger')
+        # La lista ya no ofrece «Eliminar» en este caso; esto cubre un POST forzado o una solicitud recién llegada
+        flash(f'No puedes eliminar a {mascota.nombre} porque tiene solicitudes. Si ya no está en el refugio, '
+              'márcala como adoptada desde «Editar».', 'danger')
         return redirect(url_for('mascotas.admin_lista'))
 
     nombre = mascota.nombre
@@ -470,7 +488,7 @@ def admin_eliminar(mascota_id):
     else:
         # Solo tras borrar la ficha: si el commit falla, la mascota conserva su foto
         _borrar_foto_si_nadie_la_usa(foto)
-        flash(f'Mascota "{nombre}" eliminada exitosamente.', 'success')
+        flash(f'Se ha eliminado a {nombre}.', 'success')
 
     return redirect(url_for('mascotas.admin_lista'))
 
