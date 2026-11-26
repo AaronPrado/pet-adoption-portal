@@ -290,9 +290,8 @@ app/
 │   ├── auth/            # login.html, registro.html
 │   ├── mascotas/        # catalogo.html, detalle.html
 │   │   └── admin/       # lista.html, form.html
-│   └── solicitudes/     # nueva.html, mis_solicitudes.html, detalle.html,
-│       │                # _respuestas.html (respuestas legibles con Bootstrap, solo
-│       │                # para admin/revisar.html) y _respuestas_sistema.html (base nueva)
+│   └── solicitudes/     # nueva.html, mis_solicitudes.html, detalle.html y
+│       │                # _respuestas_sistema.html (respuestas legibles)
 │       └── admin/       # lista.html, revisar.html
 │
 └── static/
@@ -815,7 +814,7 @@ cuestionario inválido da 400 aunque la mascota no exista. La respuesta 201
 devuelve el cuestionario limpio.
 
 **Respuestas legibles (P-10).** El detalle de la solicitud y la revisión del
-admin incluyen el parcial `solicitudes/_respuestas.html`, que recorre
+admin incluyen el parcial `solicitudes/_respuestas_sistema.html`, que recorre
 `cuestionario.SECCIONES` (las preguntas de `PREGUNTAS` agrupadas por su
 atributo `seccion`, en su orden) y muestra cada respuesta con el filtro Jinja
 `respuesta_legible(respuestas, campo)`, registrado en `app/__init__.py`:

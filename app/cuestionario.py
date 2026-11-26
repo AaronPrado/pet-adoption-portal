@@ -107,7 +107,7 @@ def _agrupar_por_seccion(preguntas):
     return tuple((titulo, tuple(campos)) for titulo, campos in secciones.items())
 
 
-# Las preguntas agrupadas para mostrar las respuestas (solicitudes/_respuestas.html)
+# Las preguntas agrupadas para mostrar las respuestas (solicitudes/_respuestas_sistema.html)
 SECCIONES = _agrupar_por_seccion(PREGUNTAS)
 
 

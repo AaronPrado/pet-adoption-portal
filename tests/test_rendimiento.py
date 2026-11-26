@@ -69,9 +69,9 @@ class TestNMasUno:
         assert consultas_en(client, '/solicitudes/mis-solicitudes') == con_1
 
     @pytest.mark.parametrize('ruta, limite', [
-        # Usuario de la sesión, solicitud con mascota y solicitante
-        # (joinedload), pendientes de la mascota y el contador de pendientes
-        # del menú del admin
+        # Usuario de la sesión, solicitud con mascota, solicitante y revisor
+        # (joinedload), las otras solicitudes de la mascota con su solicitante
+        # y el contador de pendientes del menú del admin
         ('/solicitudes/admin/revisar/{}', 4),
         # Usuario, solicitud, su mascota y su solicitante (carga perezosa, una
         # fila cada uno) y el contador del menú del admin
@@ -105,8 +105,8 @@ class TestNMasUno:
         url = f'/solicitudes/admin/revisar/{solicitud_pendiente.id}'
         db.session.expunge_all()
 
-        # Usuario, solicitud con mascota y solicitante, revisor (sin recuento
-        # de pendientes) y el contador del menú
+        # Usuario, solicitud con mascota, solicitante y revisor (una consulta
+        # con joinedload), las otras solicitudes y el contador del menú
         assert consultas_en(client, url) <= 4
 
     def test_catalogo_cuenta_pendientes_con_una_consulta(self, client):

@@ -1,138 +1,138 @@
-{% extends "base_bootstrap.html" %}
+{% extends "base.html" %}
+{% import "macros/formulario.html" as f %}
+{% import "macros/componentes.html" as c %}
 
-{# Contrato `valores`/`errores`: marca el campo inválido, enlaza su error y su
-   pista (`<campo>-ayuda`) y le da el foco al repintar #}
-{% macro atributos(campo) %}
-  {%- if errores[campo] %} aria-invalid="true" aria-describedby="{{ campo }}-error {{ campo }}-ayuda" autofocus
-  {%- else %} aria-describedby="{{ campo }}-ayuda"{% endif %}
-{%- endmacro %}
-{% macro clase_invalida(campo) %}{% if errores[campo] %} is-invalid{% endif %}{% endmacro %}
-{% macro error(campo) %}{% if errores[campo] %}<div id="{{ campo }}-error" class="invalid-feedback d-block">{{ errores[campo] }}</div>{% endif %}{% endmacro %}
+{#
+  Revisión de una solicitud por el refugio (B5.3). Aprobar y rechazar pasan
+  por app/adopciones.py (ADR-0004); aprobar adopta la mascota y rechaza las
+  demás pendientes, y la página lo dice antes de los formularios y en la
+  confirmación (data-confirmar, app.js). Contrato `valores`/`errores`: el
+  error va en el campo y el resumen de errores recibe el foco. `otras` son
+  las demás solicitudes de la mascota. Reutiliza los estilos del detalle del
+  adoptante (solicitudes.css) y añade los suyos en admin-solicitudes.css.
+#}
+{% set mascota = solicitud.mascota %}
+{% set solicitante = solicitud.usuario %}
+{% set pendiente = solicitud.esta_pendiente() %}
+{% set titulo = ('Revisar la solicitud de ' if pendiente else 'Solicitud de ') ~ solicitante.nombre ~ ' para ' ~ mascota.nombre %}
 
-{% block title %}Revisar Solicitud #{{ solicitud.id }}{% endblock %}
+{% block title %}{{ titulo }} - {{ marca_nombre }}{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/paginas/solicitudes.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/paginas/admin-solicitudes.css') }}">
+{% endblock %}
 
 {% block content %}
-<div class="row mb-3">
-    <div class="col-12">
-        <a href="{{ url_for('solicitudes.admin_lista') }}" class="btn btn-light">
-            ← Volver al panel de solicitudes
-        </a>
-    </div>
-</div>
+{{ c.cabecera_pagina(titulo, volver_url=url_for('solicitudes.admin_lista'),
+                     volver_texto='Volver a gestión de solicitudes') }}
+{{ f.resumen_errores(errores) }}
 
-<div class="row">
-    <!-- Información resumida -->
-    <div class="col-md-4 mb-4">
-        <div class="card mb-3">
-            {% if solicitud.mascota.foto_url %}
-                <img src="{{ solicitud.mascota.foto_url }}" class="card-img-top foto-alto-200" alt="{{ solicitud.mascota.nombre }}">
+<div class="solicitud-detalle">
+    <aside class="solicitud-detalle__mascota" aria-label="Mascota: {{ mascota.nombre }}">
+        {% if mascota.foto_url %}
+        <img class="solicitud__foto" src="{{ mascota.foto_url }}" width="800" height="600"
+             alt="Foto de {{ mascota.nombre }}, {{ mascota.especie|lower }}" decoding="async">
+        {% endif %}
+        <p class="solicitud-detalle__datos">{{ mascota.especie }}{% if mascota.raza %} · {{ mascota.raza }}{% endif %}</p>
+        {{ c.enlace_boton('Ver la ficha de ' ~ mascota.nombre, url_for('mascotas.detalle', mascota_id=mascota.id), 'secundario') }}
+    </aside>
+
+    <div class="solicitud-detalle__contenido">
+        <div class="solicitud-detalle__estado">
+            {{ c.badge_estado(solicitud.estado, 'solicitud') }}
+            <p class="solicitud__fecha">Enviada el {{ solicitud.fecha_solicitud|fecha_local(hora=true) }}</p>
+        </div>
+
+        <section>
+            <h2>Datos del solicitante</h2>
+            <dl class="respuestas__lista">
+                <div><dt>Nombre</dt><dd>{{ solicitante.nombre }}{% if solicitante.apellidos %} {{ solicitante.apellidos }}{% endif %}</dd></div>
+                <div><dt>Correo electrónico</dt><dd>{{ solicitante.email }}</dd></div>
+                {% if solicitante.telefono %}
+                <div><dt>Teléfono</dt><dd>{{ solicitante.telefono }}</dd></div>
+                {% endif %}
+            </dl>
+        </section>
+
+        <section class="candidatas" aria-labelledby="candidatas-titulo">
+            <h2 id="candidatas-titulo">Otras solicitudes para {{ mascota.nombre }}</h2>
+            {% if otras %}
+            <ul class="candidatas__lista">
+                {% for otra in otras %}
+                <li class="candidatas__item">
+                    {#- La fecha va también en el nombre del enlace: dos solicitantes
+                        pueden llamarse igual (WCAG 2.4.4); la visible no se repite #}
+                    {%- set enviada = otra.fecha_solicitud|fecha_local %}
+                    <a href="{{ url_for('solicitudes.admin_revisar', solicitud_id=otra.id) }}"><span class="visualmente-oculto">Ver la solicitud de </span>{{ otra.usuario.nombre }}<span class="visualmente-oculto">, enviada el {{ enviada }}</span></a>
+                    {{ c.badge_estado(otra.estado, 'solicitud') }}
+                    <span class="solicitud__fecha" aria-hidden="true">Enviada el {{ enviada }}</span>
+                </li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <p>No hay otras solicitudes para {{ mascota.nombre }}.</p>
             {% endif %}
-            <div class="card-body">
-                <h5 class="card-title">{{ solicitud.mascota.nombre }}</h5>
-                <p class="card-text">
-                    {{ solicitud.mascota.especie }}
-                    {% if solicitud.mascota.raza %}- {{ solicitud.mascota.raza }}{% endif %}
-                </p>
-            </div>
-        </div>
+        </section>
 
-        <div class="card">
-            <div class="card-body">
-                <h6 class="card-title">Solicitante</h6>
-                <p class="mb-1"><strong>{{ solicitud.usuario.nombre }} {{ solicitud.usuario.apellidos or '' }}</strong></p>
-                <p class="mb-1 text-muted small">{{ solicitud.usuario.email }}</p>
-                {% if solicitud.usuario.telefono %}
-                <p class="mb-0 text-muted small">{{ solicitud.usuario.telefono }}</p>
-                {% endif %}
-            </div>
-        </div>
-    </div>
+        <section>
+            <h2>Respuestas del cuestionario</h2>
+            {% include 'solicitudes/_respuestas_sistema.html' %}
+        </section>
 
-    <!-- Formulario de revisión -->
-    <div class="col-md-8">
-        <div class="card">
-            <div class="card-body">
-                <h3 class="mb-2">Revisar Solicitud #{{ solicitud.id }}</h3>
-                <p class="mb-4">
-                    {% if solicitud.estado == 'pendiente' %}
-                        <span class="badge bg-warning text-dark">Pendiente de revisión</span>
-                    {% elif solicitud.estado == 'aprobada' %}
-                        <span class="badge bg-success">Aprobada</span>
-                    {% else %}
-                        <span class="badge bg-danger">Rechazada</span>
-                    {% endif %}
-                </p>
+        {% if pendiente %}
+        {% set adoptada = etiqueta_estado('adoptado') %}
+        {% if otras_pendientes == 0 %}
+            {% set efecto_pendientes = 'No hay otras solicitudes pendientes.' %}
+        {% elif otras_pendientes == 1 %}
+            {% set efecto_pendientes = 'Se rechazará automáticamente 1 solicitud pendiente.' %}
+        {% else %}
+            {% set efecto_pendientes = 'Se rechazarán automáticamente ' ~ otras_pendientes ~ ' solicitudes pendientes.' %}
+        {% endif %}
+        {% set efecto = mascota.nombre ~ ' pasará a «' ~ adoptada ~ '». ' ~ efecto_pendientes ~ ' No se puede deshacer.' %}
+        <section class="decision" aria-labelledby="decision-titulo">
+            <h2 id="decision-titulo">Decisión</h2>
+            <p class="decision__efecto aviso aviso--aviso">Si apruebas: {{ efecto }}</p>
 
-                <!-- Cuestionario respondido -->
-                <div class="mb-4">
-                    <h5>Respuestas del Cuestionario</h5>
-                    {% include 'solicitudes/_respuestas.html' %}
-                </div>
+            <form method="POST" class="decision__formulario" aria-labelledby="aprobar-titulo"
+                  data-confirmar="¿Aprobar la solicitud de {{ solicitante.nombre }} para {{ mascota.nombre }}? {{ efecto }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="accion" value="aprobar">
+                <h3 id="aprobar-titulo">Aprobar</h3>
+                {{ f.campo('comentarios', 'Mensaje para ' ~ solicitante.nombre ~ ' (opcional)', valores, errores,
+                           tipo='textarea', filas=3, ayuda='Lo verá en el detalle de su solicitud.',
+                           atributos={'maxlength': longitud_maxima}) }}
+                {{ f.boton('Aprobar solicitud') }}
+            </form>
 
-                <hr>
-
-                {% if solicitud.esta_pendiente() %}
-                {% set mascota = solicitud.mascota.nombre %}
-                {% if otras_pendientes == 0 %}
-                    {% set efecto_pendientes = 'No hay otras solicitudes pendientes.' %}
-                {% elif otras_pendientes == 1 %}
-                    {% set efecto_pendientes = 'Se rechazará automáticamente 1 solicitud pendiente.' %}
-                {% else %}
-                    {% set efecto_pendientes = 'Se rechazarán automáticamente ' ~ otras_pendientes ~ ' solicitudes pendientes.' %}
-                {% endif %}
-
-                <!-- Aprobar: confirmación con sus efectos (app/static/js/app.js) -->
-                <h5 id="aprobar-titulo">Aprobar</h5>
-                <p class="text-muted">
-                    {{ mascota }} pasará a «Adoptada». {{ efecto_pendientes }} No se puede deshacer.
-                </p>
-                <form method="POST" class="mb-4" aria-labelledby="aprobar-titulo"
-                      data-confirmar="¿Aprobar la solicitud de {{ solicitud.usuario.nombre }} para {{ mascota }}? {{ mascota }} pasará a «Adoptada». {{ efecto_pendientes }} No se puede deshacer.">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <input type="hidden" name="accion" value="aprobar">
-                    <div class="mb-3">
-                        <label for="comentarios" class="form-label">Mensaje para el solicitante (opcional)</label>
-                        <textarea class="form-control{{ clase_invalida('comentarios') }}" id="comentarios" name="comentarios" rows="3"
-                                  maxlength="{{ longitud_maxima }}"{{ atributos('comentarios') }}>{{ valores.comentarios or '' }}</textarea>
-                        {{ error('comentarios') }}
-                        <small id="comentarios-ayuda" class="text-muted">El solicitante verá este mensaje.</small>
-                    </div>
-                    <button type="submit" class="btn btn-success">Aprobar solicitud</button>
-                </form>
-
-                <hr>
-
-                <!-- Rechazar: motivo obligatorio (contrato valores/errores) -->
-                <h5 id="rechazar-titulo">Rechazar</h5>
-                <form method="POST" aria-labelledby="rechazar-titulo">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <input type="hidden" name="accion" value="rechazar">
-                    <div class="mb-3">
-                        <label for="motivo" class="form-label">Motivo del rechazo *</label>
-                        <textarea class="form-control{{ clase_invalida('motivo') }}" id="motivo" name="motivo" rows="3" required
-                                  maxlength="{{ longitud_maxima }}"{{ atributos('motivo') }}>{{ valores.motivo or '' }}</textarea>
-                        {{ error('motivo') }}
-                        <small id="motivo-ayuda" class="text-muted">El solicitante verá este motivo. No se puede deshacer.</small>
-                    </div>
-                    <button type="submit" class="btn btn-outline-danger">Rechazar solicitud</button>
-                </form>
-                {% else %}
-                <!-- Ya resuelta: solo el resultado -->
-                <h5>Resultado de la revisión</h5>
-                <p class="text-muted mb-2">
-                    {% if solicitud.estado == 'aprobada' %}Aprobada{% else %}Rechazada{% endif %}
-                    {% if solicitud.fecha_revision %} el {{ solicitud.fecha_revision.strftime('%d/%m/%Y a las %H:%M') }}{% endif %}
-                    {% if solicitud.revisor %} por {{ solicitud.revisor.nombre }}{% endif %}.
-                </p>
-                <h6>Mensaje del refugio</h6>
-                {% if solicitud.comentarios_admin %}
-                    <p class="mb-0">{{ solicitud.comentarios_admin }}</p>
-                {% else %}
-                    <p class="text-muted mb-0">Sin mensaje para el solicitante.</p>
-                {% endif %}
-                {% endif %}
-            </div>
-        </div>
+            {#- Rechazar tampoco se deshace (WCAG 3.3.4): confirma como aprobar #}
+            <form method="POST" class="decision__formulario" aria-labelledby="rechazar-titulo"
+                  data-confirmar="¿Rechazar la solicitud de {{ solicitante.nombre }} para {{ mascota.nombre }}? {{ solicitante.nombre }} verá el motivo. No se puede deshacer.">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="accion" value="rechazar">
+                <h3 id="rechazar-titulo">Rechazar</h3>
+                {{ f.leyenda_obligatorios() }}
+                {{ f.campo('motivo', 'Motivo del rechazo', valores, errores, tipo='textarea', filas=3,
+                           obligatorio=true, ayuda='Lo verá en el detalle de su solicitud. No se puede deshacer.',
+                           atributos={'maxlength': longitud_maxima}) }}
+                {{ f.boton('Rechazar solicitud', 'peligro') }}
+            </form>
+        </section>
+        {% else %}
+        <section class="decision" aria-labelledby="resultado-titulo">
+            <h2 id="resultado-titulo">Resultado de la revisión</h2>
+            <p>
+                {{- etiqueta_estado(solicitud.estado, 'solicitud') }}
+                {%- if solicitud.fecha_revision %} el {{ solicitud.fecha_revision|fecha_local(hora=true) }}{% endif %}
+                {%- if solicitud.revisor %} por {{ solicitud.revisor.nombre }}{% endif %}.</p>
+            <h3>Mensaje del refugio</h3>
+            {% if solicitud.comentarios_admin %}
+            <p class="decision__mensaje">{{ solicitud.comentarios_admin }}</p>
+            {% else %}
+            <p>Sin mensaje para el solicitante.</p>
+            {% endif %}
+        </section>
+        {% endif %}
     </div>
 </div>
 {% endblock %}

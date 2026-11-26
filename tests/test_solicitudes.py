@@ -15,6 +15,7 @@ from markupsafe import escape
 
 from app import cuestionario, db
 from app.models import Mascota, Solicitud, Usuario
+from app.routes.solicitudes import MENSAJE_MOTIVO
 
 
 class TestCrearSolicitud:
@@ -417,7 +418,7 @@ class TestRevisionConConfirmacion:
 
         rechazar = formulario(html, 'rechazar')
         assert 'name="motivo"' in rechazar and 'required' in rechazar
-        assert '<label for="motivo"' in rechazar
+        assert 'for="motivo"' in rechazar
         assert 'name="csrf_token"' in rechazar
         assert 'aria-invalid' not in rechazar
         assert 'name="motivo"' not in formulario(html, 'aprobar')
@@ -438,10 +439,10 @@ class TestRevisionConConfirmacion:
 
         assert 'aria-labelledby="aprobar-titulo"' in formulario(html, 'aprobar')
         assert 'aria-labelledby="rechazar-titulo"' in formulario(html, 'rechazar')
-        assert '<h5 id="aprobar-titulo">' in html and '<h5 id="rechazar-titulo">' in html
+        assert '<h3 id="aprobar-titulo">' in html and '<h3 id="rechazar-titulo">' in html
         confirmar = re.search(r'data-confirmar="([^"]*)"', html).group(1)
-        # El aviso está también en el párrafo visible, entre el título y el formulario
-        assert 'No se puede deshacer' in html.replace(confirmar, '').split('aprobar-titulo', 2)[1]
+        # El aviso está también en un párrafo visible, antes del formulario de aprobar
+        assert 'No se puede deshacer' in html.replace(confirmar, '').split('aria-labelledby="aprobar-titulo"', 1)[0]
         assert 'autofocus' not in html
 
     @pytest.mark.parametrize('campo', ['comentarios', 'motivo'])
@@ -450,11 +451,14 @@ class TestRevisionConConfirmacion:
 
         assert re.search(rf'<textarea[^>]*id="{campo}"[^>]*maxlength="{cuestionario.LONGITUD_MAXIMA}"', html)
 
-    def test_rechazar_sin_motivo_da_el_foco_al_motivo(self, client, auth_headers_admin, solicitud_pendiente):
+    def test_rechazar_sin_motivo_lleva_al_motivo_desde_el_resumen(self, client, auth_headers_admin,
+                                                                  solicitud_pendiente):
+        """El foco va al resumen de errores (app.js), que enlaza al campo; sin autofocus."""
         html = contenido(client.post(self.url(solicitud_pendiente), data={'accion': 'rechazar'}))
 
-        assert re.search(r'<textarea[^>]*id="motivo"[^>]*autofocus', html)
-        assert html.count('autofocus') == 1
+        assert 'data-resumen-errores' in html
+        assert f'href="#motivo">{MENSAJE_MOTIVO}</a>' in html
+        assert 'autofocus' not in html
 
     @pytest.mark.parametrize('accion, campo', [('aprobar', 'comentarios'), ('rechazar', 'motivo')])
     def test_texto_demasiado_largo(self, client, auth_headers_admin, solicitud_pendiente, accion, campo):

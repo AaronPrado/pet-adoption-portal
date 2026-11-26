@@ -245,9 +245,107 @@ def test_rechazar_sin_motivo_no_bloquea_el_formulario(page, errores_js, app_e2e)
     page.goto(f'/solicitudes/admin/revisar/{solicitud_id}')
     formulario = page.get_by_role('form', name='Rechazar')
 
+    dialogos = []
+    page.on('dialog', lambda dialog: (dialogos.append(dialog.message),
+                                      dialog.dismiss() if len(dialogos) == 1 else dialog.accept()))
+    # Sin motivo, el navegador no llega a enviar: ni confirma ni queda «enviando»
     page.get_by_role('button', name='Rechazar solicitud').click()
     expect(formulario).not_to_have_attribute('aria-busy', 'true')
+    assert dialogos == []
 
+    # Rechazar tampoco se deshace: pide confirmación, y cancelarla no envía (WCAG 3.3.4)
     page.get_by_label('Motivo del rechazo').fill('Buscamos una casa con jardín')
     page.get_by_role('button', name='Rechazar solicitud').click()
+    expect(formulario).not_to_have_attribute('aria-busy', 'true')
+    assert dialogos == ['¿Rechazar la solicitud de Ana para Coco? Ana verá el motivo. No se puede deshacer.']
+    expect(page.get_by_label('Motivo del rechazo')).to_have_value('Buscamos una casa con jardín')
+
+    page.get_by_role('button', name='Rechazar solicitud').click()
     expect(page.get_by_text('Solicitud rechazada.')).to_be_visible()
+    assert len(dialogos) == 2
+
+
+def _candidata(app_e2e, mascota_nombre, email, nombre):
+    """Otra solicitud pendiente para la mascota `mascota_nombre`, de un usuario nuevo."""
+    with app_e2e.app_context():
+        mascota = db.session.execute(db.select(Mascota).filter_by(nombre=mascota_nombre)).scalar_one()
+        usuario = Usuario(email=email, nombre=nombre, password='clave-candidata-e2e')
+        db.session.add(usuario)
+        db.session.flush()
+        solicitud = Solicitud(usuario.id, mascota.id)
+        db.session.add(solicitud)
+        db.session.commit()
+        return solicitud.id
+
+
+def test_aprobar_con_confirmacion_rechaza_solas_las_demas(page, errores_js, app_e2e):
+    """B5.3 (P-40): desde el menú con su contador, aprobar avisa y rechaza a las demás candidatas."""
+    solicitud_id = _solicitud_pendiente(app_e2e, 'Nuka')
+    otra_id = _candidata(app_e2e, 'Nuka', 'berta@e2e.test', 'Berta')
+    iniciar_sesion(page, *ADMIN)
+
+    page.get_by_role('button', name='Admin').click()
+    page.get_by_role('link', name=re.compile(r'^Gestionar solicitudes \(\d+ pendientes?\)$')).click()
+    expect(page.get_by_role('heading', level=1)).to_have_text('Gestión de solicitudes')
+    page.get_by_role('link', name='Revisar la solicitud de Ana para Nuka').click()
+
+    candidatas = page.get_by_role('region', name='Otras solicitudes para Nuka')
+    expect(candidatas.get_by_role('link', name='Ver la solicitud de Berta')).to_be_visible()
+    expect(page.get_by_text('Se rechazará automáticamente 1 solicitud pendiente.')).to_be_visible()
+
+    dialogos = []
+    page.once('dialog', lambda dialog: (dialogos.append(dialog.message), dialog.accept()))
+    page.get_by_role('button', name='Aprobar solicitud').click()
+    expect(page.get_by_text('Solicitud aprobada. Ana ha adoptado a Nuka.')).to_be_visible()
+    assert 'Nuka pasará a «Adoptada»' in dialogos[0]
+    assert 'Se rechazará automáticamente 1 solicitud pendiente.' in dialogos[0]
+
+    with app_e2e.app_context():
+        assert db.session.get(Solicitud, solicitud_id).estado == 'aprobada'
+        assert db.session.get(Solicitud, otra_id).estado == 'rechazada'
+    page.goto(f'/solicitudes/admin/revisar/{otra_id}')
+    expect(page.get_by_role('heading', level=1)).to_have_text('Solicitud de Berta para Nuka')
+    expect(page.get_by_role('button', name='Rechazar solicitud')).to_have_count(0)
+
+
+def test_rechazar_sin_motivo_da_error_en_el_campo(page, errores_js, app_e2e):
+    """B5.3 (P-40): un motivo en blanco supera el `required` del navegador, pero no al servidor."""
+    solicitud_id = _solicitud_pendiente(app_e2e, 'Pipa')
+    iniciar_sesion(page, *ADMIN)
+    page.goto(f'/solicitudes/admin/revisar/{solicitud_id}')
+
+    page.get_by_label('Motivo del rechazo').fill('   ')
+    page.once('dialog', lambda dialog: dialog.accept())
+    page.get_by_role('button', name='Rechazar solicitud').click()
+
+    resumen = page.get_by_role('group', name='Revisa estos campos antes de continuar')
+    expect(resumen).to_be_focused()
+    motivo = page.get_by_label('Motivo del rechazo')
+    expect(motivo).to_have_attribute('aria-invalid', 'true')
+    expect(page.locator('#motivo-error')).to_contain_text('Escribe el motivo del rechazo')
+    resumen.get_by_role('link').click()
+    expect(motivo).to_be_focused()
+    with app_e2e.app_context():
+        assert db.session.get(Solicitud, solicitud_id).estado == 'pendiente'
+
+
+@pytest.mark.parametrize('ancho', [320, 375])
+def test_solicitudes_del_admin_sin_scroll_horizontal(page, errores_js, app_e2e, ancho):
+    """B5.3 (P-23): la tabla se desplaza dentro de su región; la página no."""
+    solicitud_id = _solicitud_pendiente(app_e2e, f'Movil{ancho}')
+    iniciar_sesion(page, *ADMIN)
+    page.set_viewport_size({'width': ancho, 'height': 800})
+
+    page.goto('/solicitudes/admin')
+    region = page.get_by_role('region', name=re.compile('solicitudes', re.I))
+    expect(region).to_be_visible()
+    assert page.evaluate('document.documentElement.scrollWidth') <= ancho
+    # La acción de la última columna se alcanza desplazando la región
+    accion = page.get_by_role('link', name=f'Revisar la solicitud de Ana para Movil{ancho}')
+    accion.focus()
+    expect(accion).to_be_in_viewport()
+    assert page.evaluate('document.documentElement.scrollWidth') <= ancho
+
+    page.goto(f'/solicitudes/admin/revisar/{solicitud_id}')
+    expect(page.get_by_role('button', name='Aprobar solicitud')).to_be_visible()
+    assert page.evaluate('document.documentElement.scrollWidth') <= ancho

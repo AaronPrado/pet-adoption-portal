@@ -304,12 +304,3 @@ class TestDetalle:
 
         assert 'Sin respuesta' in html_de(client, detalle(solicitud_pendiente))
 
-
-class TestRespuestasDelAdmin:
-    """El parcial de Bootstrap sigue sirviendo a `admin/revisar.html` hasta la fase 5."""
-
-    def test_revisar_sigue_con_su_parcial_de_bootstrap(self, client, auth_headers_admin, solicitud_pendiente):
-        html = html_de(client, f'/solicitudes/admin/revisar/{solicitud_pendiente.id}')
-
-        assert '<dl class="row mb-3">' in html
-        assert 'respuestas__' not in html
