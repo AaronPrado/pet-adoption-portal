@@ -10,15 +10,14 @@ Este módulo maneja:
 
 from flask import Blueprint, abort, current_app, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
+from sqlalchemy import case
 from sqlalchemy.orm import joinedload
 
 from app import adopciones, cuestionario, db
 from app.decorators import admin_required
-from app.models import Mascota, Solicitud
+from app.errores import INICIO, pagina_error
+from app.models import ETIQUETAS_ESTADO, Mascota, Solicitud
 
-# Mensaje general cuando un formulario del admin tiene errores en sus campos
-# (el cuestionario usa el resumen de errores)
-MENSAJE_REVISAR = 'Revisa los campos marcados.'
 # Tras enviar el cuestionario (P-24): qué pasa ahora y dónde verlo. La app no
 # envía correos, así que la respuesta solo llega a «Mis solicitudes».
 MENSAJE_RECIBIDA = ('Hemos recibido tu solicitud para adoptar a {nombre}. El refugio revisará tus '
@@ -27,6 +26,14 @@ MENSAJE_RECIBIDA = ('Hemos recibido tu solicitud para adoptar a {nombre}. El ref
 MENSAJE_YA_SOLICITADA = 'Ya tienes una solicitud para {nombre}.'
 MENSAJE_ACCION_NO_VALIDA = 'Acción no válida.'
 MENSAJE_MOTIVO = 'Escribe el motivo del rechazo: el solicitante lo verá.'
+# El refugio gestiona las solicitudes, no las envía (P-45)
+TITULO_ADMIN_NO_SOLICITA = 'Las cuentas del refugio no pueden solicitar adopciones'
+MENSAJE_ADMIN_NO_SOLICITA = ('Con la cuenta del refugio revisas las solicitudes para adoptar a {nombre}, '
+                             'pero no puedes enviar una. Para adoptar, usa una cuenta personal.')
+GESTIONAR_SOLICITUDES = ('Gestionar solicitudes', 'solicitudes.admin_lista')
+# Filtros de la lista: (valor de `estado`, texto); '' es «Todas»
+FILTROS_ESTADO = (('', 'Todas'), ('pendiente', 'Pendientes'), ('aprobada', 'Aprobadas'),
+                  ('rechazada', 'Rechazadas'))
 
 # Tope del mensaje al aprobar y del motivo al rechazar (el mismo que las respuestas)
 LONGITUD_MAXIMA = cuestionario.LONGITUD_MAXIMA
@@ -80,6 +87,13 @@ def nueva(mascota_id):
     mascota = db.get_or_404(Mascota, mascota_id)
     # El rollback de un error de adopciones expira la mascota
     nombre = mascota.nombre
+
+    # El admin revisa solicitudes (y podría aprobar la suya): 403 propio (P-45)
+    if current_user.is_admin():
+        return pagina_error(403, TITULO_ADMIN_NO_SOLICITA, MENSAJE_ADMIN_NO_SOLICITA.format(nombre=nombre),
+                            salidas=(GESTIONAR_SOLICITUDES, INICIO),
+                            primera=(f'Volver a la ficha de {nombre}',
+                                     url_for('mascotas.detalle', mascota_id=mascota_id)))
 
     # Antes que la disponibilidad: si su solicitud se aprobó, la mascota ya no está disponible
     solicitud_existente = solicitud_propia(mascota_id)
@@ -164,35 +178,44 @@ def detalle(solicitud_id):
 @admin_required
 def admin_lista():
     """
-    Panel de administración: lista de todas las solicitudes.
+    Gestión de solicitudes: lista paginada con filtro por estado.
 
-    Muestra todas las solicitudes con filtro por estado.
+    Las pendientes van primero, de la más antigua a la más reciente, para
+    que ninguna espere de más (P-28); las resueltas, después y de la más
+    reciente a la más antigua. Un estado desconocido se trata como «Todas».
     Solo accesible para administradores.
     """
-
-    # Obtener filtro de estado si existe
     estado_filtro = request.args.get('estado', '')
+    if estado_filtro not in ETIQUETAS_ESTADO['solicitud']:
+        estado_filtro = ''
 
-    # Query base
-    # Cargar mascota y usuario en la misma consulta: la plantilla los muestra
-    # en cada fila y, si no, se hacían dos consultas más por solicitud
-    query = Solicitud.query.options(joinedload(Solicitud.mascota), joinedload(Solicitud.usuario))
-
-    # Aplicar filtro de estado si existe
+    # Mascota y solicitante en la misma consulta: la plantilla los muestra en
+    # cada fila (sin N+1, tests/test_rendimiento.py)
+    consulta = db.select(Solicitud).options(joinedload(Solicitud.mascota), joinedload(Solicitud.usuario))
     if estado_filtro:
-        query = query.filter_by(estado=estado_filtro)
+        consulta = consulta.where(Solicitud.estado == estado_filtro)
+    consulta = consulta.order_by(*orden_de_lista(estado_filtro))
 
-    # Ordenar por fecha (más recientes primero)
-    pagina = query.order_by(Solicitud.fecha_solicitud.desc()).paginate(
-        page=request.args.get('page', 1, type=int),
-        per_page=current_app.config['ADMIN_POR_PAGINA'],
-        error_out=False,
-    )
+    pagina = db.paginate(consulta, page=request.args.get('page', 1, type=int),
+                         per_page=current_app.config['ADMIN_POR_PAGINA'], error_out=False)
 
-    return render_template('solicitudes/admin/lista.html',
-                         solicitudes=pagina.items,
-                         pagina=pagina,
-                         estado_filtro=estado_filtro)
+    return render_template('solicitudes/admin/lista.html', solicitudes=pagina.items, pagina=pagina,
+                           estado_filtro=estado_filtro, filtros=FILTROS_ESTADO)
+
+
+def orden_de_lista(estado):
+    """
+    Criterios de orden de la lista: pendientes de la más antigua a la más
+    reciente; resueltas de la más reciente a la más antigua. El id desempata
+    para que la paginación sea estable.
+    """
+    if estado == 'pendiente':
+        return Solicitud.fecha_solicitud.asc(), Solicitud.id.asc()
+    if estado:
+        return Solicitud.fecha_solicitud.desc(), Solicitud.id.desc()
+    pendiente = Solicitud.estado == 'pendiente'
+    return (case((pendiente, 0), else_=1), case((pendiente, Solicitud.fecha_solicitud)).asc(),
+            case((pendiente, Solicitud.id)).asc(), Solicitud.fecha_solicitud.desc(), Solicitud.id.desc())
 
 
 @bp.route('/admin/revisar/<int:solicitud_id>', methods=['GET', 'POST'])
@@ -216,7 +239,7 @@ def admin_revisar(solicitud_id):
     """
 
     solicitud = db.get_or_404(Solicitud, solicitud_id, options=[
-        joinedload(Solicitud.mascota), joinedload(Solicitud.usuario)])
+        joinedload(Solicitud.mascota), joinedload(Solicitud.usuario), joinedload(Solicitud.revisor)])
 
     if request.method == 'GET':
         return mostrar_revision(solicitud)
@@ -235,8 +258,8 @@ def admin_revisar(solicitud_id):
     valores = {campo: request.form.get(campo, '') for campo in ('comentarios', 'motivo')}
     errores = validar_decision(accion, valores)
     if errores:
-        flash(MENSAJE_REVISAR, 'danger')
-        # Como en el cuestionario, se repinta como mucho un carácter de más
+        # El resumen de errores de la plantilla avisa y lleva al campo. Como en
+        # el cuestionario, se repinta como mucho un carácter de más
         repintar = {campo: valor[:LONGITUD_MAXIMA + 1] for campo, valor in valores.items()}
         return mostrar_revision(solicitud, repintar, errores, 400)
 
@@ -275,17 +298,30 @@ def validar_decision(accion, valores):
     return {}
 
 
+def otras_solicitudes(solicitud):
+    """
+    Las demás solicitudes de la misma mascota, con su solicitante en la
+    misma consulta: primero las pendientes y, dentro de cada grupo, de la más
+    antigua a la más reciente.
+    """
+    pendiente = Solicitud.estado == 'pendiente'
+    consulta = (db.select(Solicitud).options(joinedload(Solicitud.usuario))
+                .where(Solicitud.mascota_id == solicitud.mascota_id, Solicitud.id != solicitud.id)
+                .order_by(case((pendiente, 0), else_=1), Solicitud.fecha_solicitud, Solicitud.id))
+    return db.session.scalars(consulta).all()
+
+
 def mostrar_revision(solicitud, valores=None, errores=None, codigo=200):
     """
     Renderiza la revisión con el contrato `valores`/`errores`.
 
-    `otras_pendientes` son las pendientes que se rechazarán al aprobar esta
-    (sale en la confirmación de «Aprobar»).
+    `otras` son las demás candidatas de la mascota; `otras_pendientes`, las
+    que se rechazarán al aprobar esta (sale en el aviso y en la confirmación
+    de «Aprobar»).
     """
-    otras = 0
-    if solicitud.esta_pendiente():
-        otras = adopciones.pendientes_por_mascota([solicitud.mascota_id]).get(solicitud.mascota_id, 1) - 1
+    otras = otras_solicitudes(solicitud)
+    otras_pendientes = sum(otra.esta_pendiente() for otra in otras) if solicitud.esta_pendiente() else 0
     return render_template('solicitudes/admin/revisar.html', solicitud=solicitud,
-                           secciones=cuestionario.SECCIONES, otras_pendientes=otras,
+                           secciones=cuestionario.SECCIONES, otras=otras, otras_pendientes=otras_pendientes,
                            longitud_maxima=LONGITUD_MAXIMA, valores=valores or {},
                            errores=errores or {}), codigo

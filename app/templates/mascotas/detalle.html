@@ -65,9 +65,11 @@
             <p class="ficha__descripcion">{{ mascota.descripcion }}</p>
         </section>
 
-        {% if mascota.estado == 'disponible' %}
+        {#- El refugio no solicita adopciones (P-45): el admin no ve la acción #}
+        {%- set usuario = usuario_nav() %}
+        {% if mascota.estado == 'disponible' and not (usuario and usuario.admin) %}
         <section class="ficha__accion" aria-label="Solicitar la adopción de {{ mascota.nombre }}">
-            {% if usuario_nav() %}
+            {% if usuario %}
             {{ c.enlace_boton('Solicitar adopción', url_for('solicitudes.nueva', mascota_id=mascota.id)) }}
             <p>Deberás completar un cuestionario de adopción.</p>
             {% else %}

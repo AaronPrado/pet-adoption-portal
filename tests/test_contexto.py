@@ -31,7 +31,7 @@ def test_anonimo(app):
 def test_con_sesion(app, usuario_admin):
     with app.test_request_context('/'):
         login_user(usuario_admin)
-        assert contexto.usuario_nav() == contexto.UsuarioNav(nombre='Admin Test', admin=True)
+        assert contexto.usuario_nav() == contexto.UsuarioNav(nombre='Admin Test', admin=True, pendientes=0)
 
 
 def test_adoptante(app, usuario_adoptante):

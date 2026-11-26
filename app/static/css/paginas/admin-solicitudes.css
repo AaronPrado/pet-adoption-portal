@@ -1,0 +1,125 @@
+/*
+  Solicitudes del admin (B5.3): solicitudes/admin/lista.html y revisar.html.
+  Solo tokens de sistema.css. Va en la capa `componentes`, la misma que los
+  componentes que reutiliza (`tabla`, `chapa`, `boton`, `aviso`, `campo`), y
+  solo define clases propias (`filtros-estado*`, `tabla-solicitudes__*`,
+  `candidatas*`, `decision*`). La revisión carga también solicitudes.css
+  (detalle y respuestas, compartidos con el adoptante).
+*/
+@layer componentes {
+  /* Filtro por estado: enlaces con el activo marcado por aria-current */
+  .filtros-estado {
+    margin-block-end: var(--esp-5);
+  }
+
+  .filtros-estado__lista {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--esp-2);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .filtros-estado__enlace {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--objetivo-min);
+    padding: var(--esp-2) var(--esp-4);
+    color: var(--color-texto);
+    text-decoration: none;
+    background-color: var(--color-superficie);
+    border: 1px solid var(--color-borde-control);
+    border-radius: var(--radio-total);
+  }
+
+  .filtros-estado__enlace:hover {
+    background-color: var(--color-acento-suave);
+  }
+
+  .filtros-estado__enlace[aria-current="page"] {
+    color: var(--color-sobre-acento);
+    font-weight: var(--peso-fuerte);
+    background-color: var(--color-acento);
+    border-color: var(--color-acento);
+  }
+
+  /* Tabla: segunda línea de cada celda (especie, correo) */
+  .tabla-solicitudes__dato {
+    display: block;
+    color: var(--color-texto-suave);
+    font-size: var(--texto-sm);
+    font-weight: var(--peso-normal);
+  }
+
+  .tabla-solicitudes__fecha {
+    white-space: nowrap;
+  }
+
+  /* Revisión: demás candidatas de la misma mascota */
+  .candidatas__lista {
+    display: grid;
+    gap: var(--esp-2);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .candidatas__item {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--esp-2) var(--esp-3);
+    padding-block-end: var(--esp-2);
+    border-block-end: 1px solid var(--color-borde);
+  }
+
+  .candidatas__item a {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--objetivo-min);
+    font-weight: var(--peso-fuerte);
+    overflow-wrap: anywhere;
+  }
+
+  /* Decisión: el efecto de aprobar y los dos formularios */
+  .decision {
+    display: grid;
+    gap: var(--esp-5);
+    padding: var(--esp-5);
+    background-color: var(--color-superficie);
+    border-radius: var(--radio-md);
+    box-shadow: var(--sombra-1);
+  }
+
+  .decision h2,
+  .decision h3,
+  .decision p {
+    margin: 0;
+  }
+
+  .decision__formulario {
+    display: grid;
+    justify-items: start;
+    gap: var(--esp-3);
+  }
+
+  .decision__formulario + .decision__formulario {
+    padding-block-start: var(--esp-5);
+    border-block-start: 1px solid var(--color-borde);
+  }
+
+  .decision__formulario .campo {
+    justify-self: stretch;
+  }
+
+  .decision__mensaje {
+    overflow-wrap: anywhere;
+  }
+
+  @media (max-width: 30rem) {
+    .decision {
+      padding: var(--esp-4);
+    }
+  }
+}

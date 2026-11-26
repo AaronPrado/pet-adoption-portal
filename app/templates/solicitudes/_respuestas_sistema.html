@@ -1,8 +1,8 @@
 {# Respuestas del cuestionario con su etiqueta legible (app/cuestionario.py),
-   para las páginas de la base nueva. Necesita `solicitud` y `secciones`
-   (cuestionario.SECCIONES). El parcial con Bootstrap, `_respuestas.html`, es
-   el de admin/revisar.html y se borra con él en la fase 5. Los títulos de
-   sección son h3: la página pone antes el h2 «Respuestas del cuestionario». #}
+   para detalle.html y admin/revisar.html. Necesita `solicitud` y `secciones`
+   (cuestionario.SECCIONES); sus estilos están en paginas/solicitudes.css. Los
+   títulos de sección son h3: la página pone antes el h2 «Respuestas del
+   cuestionario». #}
 {% for titulo, campos in secciones %}
 <section class="respuestas__seccion">
     <h3>{{ titulo }}</h3>

@@ -32,10 +32,12 @@ def app(tmp_path):
     # peticiones del cliente, así que todas comparten `g`. Flask-Login guarda
     # ahí el usuario cargado y, sin limpiarlo, load_user no se volvía a
     # ejecutar en las peticiones siguientes (en producción cada petición
-    # tiene su propio `g`).
+    # tiene su propio `g`). Lo mismo con el recuento de pendientes del menú
+    # del admin (app/contexto.py), que se hace una vez por petición.
     @app.teardown_request
     def limpiar_usuario_cargado(exc):
         g.pop('_login_user', None)
+        g.pop('pendientes_nav', None)
 
     # Establecer contexto de aplicación
     with app.app_context():
