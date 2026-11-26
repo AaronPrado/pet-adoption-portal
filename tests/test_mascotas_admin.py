@@ -711,7 +711,7 @@ class TestEliminarMascota:
         mascota_id = solicitud_pendiente.mascota_id
         response = client.post(f'/mascotas/admin/eliminar/{mascota_id}', follow_redirects=True)
 
-        assert 'tiene solicitudes de adopción asociadas' in response.data.decode()
+        assert 'No puedes eliminar a Cerbero porque tiene solicitudes.' in response.data.decode()
         assert db.session.get(Mascota, mascota_id) is not None
 
     def test_elimina_la_foto(self, app, client, auth_headers_admin, con_foto_local):
@@ -887,9 +887,8 @@ class TestListaSinEnProceso:
 
         assert 'Cerbero' in html
         assert 'Luna' in html
-        todas = html.split('>\n                        Todas', 1)[0].rsplit('<a ', 1)[1]
-        assert 'btn-primary' in todas
-        assert f'estado={estado}' not in html
+        assert '<a class="filtro-estado__enlace" href="/mascotas/admin" aria-current="page">Todas</a>' in html
+        assert 'Todas las mascotas</caption>' in html
 
     def test_estado_heredado_no_se_muestra_como_adoptado(self, client, auth_headers_admin, mascota_disponible):
         mascota_disponible.estado = 'en_proceso'
@@ -898,7 +897,7 @@ class TestListaSinEnProceso:
         html = client.get('/mascotas/admin').data.decode()
 
         assert 'Cerbero' in html
-        assert 'badge bg-secondary">Adoptado' not in html
+        assert '</span>Adoptada</span>' not in html
 
 
 class TestLimiteDeFotoEnElNavegador:

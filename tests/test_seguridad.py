@@ -110,7 +110,7 @@ class TestXSS:
 
         # El nombre ya no se interpola en JavaScript inline, solo en un atributo escapado
         assert 'onclick' not in html
-        assert 'data-confirmar="¿Estás seguro de eliminar a x&#39;);alert(1);//?"' in html
+        assert 'data-confirmar="¿Eliminar a x&#39;);alert(1);//? Su ficha se borrará y no se puede deshacer."' in html
 
 
 @pytest.mark.parametrize('metodo', ['get', 'post'])

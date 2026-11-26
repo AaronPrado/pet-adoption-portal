@@ -7,6 +7,7 @@ import re
 from pathlib import Path
 
 import pytest
+from flask import render_template_string
 
 from app import db
 from app.models import Mascota, Solicitud, Usuario
@@ -179,8 +180,11 @@ class TestPaginacion:
         assert 'especie=Gato&amp;page=2' in html
         assert '_external' not in html and 'endpoint=' not in html
 
-    def test_macro_bootstrap_de_las_paginas_admin_sigue_igual(self, client, auth_headers_admin, treinta):
-        html = html_de(client, '/mascotas/admin')
+    def test_macro_bootstrap_sigue_disponible_hasta_b5_4(self, app, treinta):
+        """La macro `paginacion` de Bootstrap no se borra hasta retirar base_bootstrap.html (B5.4)."""
+        plantilla = "{% from 'macros/paginacion.html' import paginacion %}{{ paginacion(pagina, 'mascotas.catalogo') }}"
+        with app.test_request_context(CATALOGO):
+            html = render_template_string(plantilla, pagina=db.paginate(db.select(Mascota), per_page=12))
 
         assert 'class="pagination' in html and 'page-link' in html
 

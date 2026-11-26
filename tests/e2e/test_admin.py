@@ -33,17 +33,20 @@ def test_admin_crea_y_borra_mascota(page, errores_js):
     page.get_by_role('button', name='Crear Mascota').click()
     expect(page.get_by_text('Mascota "Rex" creada exitosamente.')).to_be_visible()
 
-    # Cancelar la confirmación no borra nada
-    page.once('dialog', lambda dialog: dialog.dismiss())
-    page.get_by_role('button', name='Eliminar Rex').click()
-    expect(page.get_by_role('button', name='Eliminar Rex')).to_be_visible()
+    # Cancelar la confirmación no borra nada; el mensaje nombra a la mascota (P-43)
+    dialogos = []
+    page.once('dialog', lambda dialog: (dialogos.append(dialog.message), dialog.dismiss()))
+    page.get_by_role('button', name='Eliminar a Rex').click()
+    expect(page.get_by_role('button', name='Eliminar a Rex')).to_be_visible()
+    assert dialogos == ['¿Eliminar a Rex? Su ficha se borrará y no se puede deshacer.']
     # ... ni deja el formulario bloqueado como «enviando»
     expect(page.locator('form[aria-busy="true"]')).to_have_count(0)
 
     # Aceptarla envía el formulario (con su token CSRF)
     page.once('dialog', lambda dialog: dialog.accept())
-    page.get_by_role('button', name='Eliminar Rex').click()
-    expect(page.get_by_text('Mascota "Rex" eliminada exitosamente.')).to_be_visible()
+    page.get_by_role('button', name='Eliminar a Rex').click()
+    expect(page.get_by_text('Se ha eliminado a Rex.')).to_be_visible()
+    expect(page.get_by_role('rowheader', name='Rex')).to_have_count(0)
 
 
 def test_alta_de_mascota_con_error_conserva_lo_escrito(page, errores_js):
@@ -149,6 +152,48 @@ def test_foto_subida_se_ve_en_la_ficha(page, errores_js):
     # Con srcset, naturalWidth es el ancho de la variante dividido por su densidad: basta con que cargue
     expect(foto).to_have_js_property('complete', True)
     assert foto.evaluate('imagen => imagen.naturalWidth') > 0
+
+
+@pytest.mark.parametrize('ancho', [320, 375])
+def test_lista_de_mascotas_en_el_movil_se_desplaza_la_tabla(page, errores_js, ancho):
+    """P-23: la página no se desplaza en horizontal; la región de la tabla sí, y llega a Estado y Acciones."""
+    iniciar_sesion(page, *ADMIN)
+    page.set_viewport_size({'width': ancho, 'height': 800})
+    page.goto('/mascotas/admin')
+
+    assert page.evaluate('document.documentElement.scrollWidth') <= ancho
+    region = page.get_by_role('region', name='Todas las mascotas')
+    # Ninguna columna se oculta
+    expect(region.get_by_role('columnheader')).to_have_count(8)
+    acciones = region.get_by_role('columnheader', name='Acciones')
+    expect(acciones).not_to_be_in_viewport()
+
+    # Con el teclado: la región se enfoca y se desplaza con las flechas
+    region.focus()
+    expect(region).to_be_focused()
+    page.keyboard.press('End')
+    for _ in range(40):
+        page.keyboard.press('ArrowRight')
+    expect(region.get_by_role('columnheader', name='Estado', exact=False)).to_be_in_viewport()
+    expect(acciones).to_be_in_viewport()
+    assert page.evaluate('document.documentElement.scrollWidth') <= ancho
+
+
+def test_mascota_con_solicitudes_no_ofrece_eliminar(page, errores_js, app_e2e):
+    """P-46: en su lugar se dice cuántas solicitudes tiene y se ofrece marcarla como adoptada."""
+    _solicitud_pendiente(app_e2e, 'Trufa')
+    iniciar_sesion(page, *ADMIN)
+    page.goto('/mascotas/admin')
+
+    fila = page.get_by_role('row').filter(has=page.get_by_role('rowheader', name='Trufa'))
+    expect(fila.get_by_role('button', name='Eliminar a Trufa')).to_have_count(0)
+    expect(fila.get_by_text('Tiene 1 solicitud')).to_be_visible()
+    # Las que no tienen solicitudes sí se pueden eliminar
+    expect(page.get_by_role('button', name='Eliminar a Misu')).to_be_visible()
+    expect(fila.get_by_role('link', name='Ver la ficha de Trufa')).to_be_visible()
+
+    fila.get_by_role('link', name='Marcar como adoptada a Trufa').click()
+    expect(page.get_by_role('button', name='Marcar como adoptada fuera del portal')).to_be_visible()
 
 
 def _solicitud_pendiente(app_e2e, nombre_mascota):

@@ -711,7 +711,11 @@ páginas las adoptan en las fases 4 y 5.
   (los parámetros que ya usa el admin) y su nombre accesible dice qué hará el
   clic («Nombre, ordenar ascendente»). La flecha es decorativa y sin
   opacidad, para no bajar de 3:1. Las filas van en `{% call %}`, con la celda que identifica
-  la fila como `<th scope="row">`; sin filas se pinta `vacia`.
+  la fila como `<th scope="row">`; sin filas se pinta `vacia`. La región es
+  `position: relative` para que los textos `visualmente-oculto` (absolutos)
+  de las celdas no desborden la página en el móvil. La usa la lista de
+  mascotas del admin (`mascotas/admin/lista.html`, CSS en
+  `paginas/admin-mascotas.css`).
 - **`estado_vacio(titulo, texto, accion_url, accion_texto, nivel=2)`**:
   título, texto y una acción secundaria opcional.
 - **`enlace_boton(texto, url, variante)`** (P-15): un `<a>` con las clases de
@@ -728,7 +732,8 @@ páginas las adoptan en las fases 4 y 5.
   `url_for`: `?endpoint=1` daba un 500.
 - `url_pagina(endpoint, numero)`, global de Jinja, hace lo mismo para
   `paginacion_sistema` (`macros/paginacion.html`, base nueva; clases en
-  `paginas/catalogo.css`). `paginacion` conserva Bootstrap para el panel.
+  `paginas/catalogo.css`). `paginacion` conserva Bootstrap para las páginas
+  del panel que siguen en `base_bootstrap.html`.
 - El filtro `url_segura` valida `enlace_boton`, `volver_url` y `accion_url`.
   Solo admite rutas propias (`/...`, pero no `//` ni `/\`) y `http:`,
   `https:` y `mailto:`, sin distinguir mayúsculas ni tener en cuenta los

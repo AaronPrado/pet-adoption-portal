@@ -111,6 +111,23 @@ class TestNMasUno:
         assert html.count('Tiene solicitudes en curso') == 12
         assert consultas_en(client, '/mascotas/catalogo') == con_1
 
+    def test_admin_mascotas_cuenta_solicitudes_con_una_consulta(self, client, auth_headers_admin):
+        """«Eliminar» o «Tiene N solicitudes» sale de un recuento agregado (P-46), no de una consulta por fila."""
+        crear_solicitudes(2)
+        con_2 = consultas_en(client, '/mascotas/admin')
+
+        crear_solicitudes(10, prefijo='x')
+        db.session.add_all([Mascota(nombre=f'Sin {i}', especie='Gato', descripcion='Descripción larga')
+                            for i in range(5)])
+        db.session.commit()
+
+        html = client.get('/mascotas/admin').data.decode()
+        assert html.count('Tiene 1 solicitud<') == 12
+        assert html.count('/mascotas/admin/eliminar/') == 5
+        db.session.expunge_all()
+        assert consultas_en(client, '/mascotas/admin') == con_2
+        # Usuario de la sesión, total de la paginación, la página y el recuento
+        assert con_2 == 4
 
     def test_portada_no_crece_con_las_mascotas(self, client):
         """Tres contadores y las destacadas: cuatro consultas, sean cuantas sean las mascotas."""
@@ -162,7 +179,7 @@ class TestPaginacion:
         html = client.get('/mascotas/admin').data.decode()
 
         assert 'Total: 30 mascotas' in html
-        assert html.count('title="Eliminar"') == 20
+        assert html.count('/mascotas/admin/eliminar/') == 20
 
     def test_admin_solicitudes_paginado(self, client, auth_headers_admin):
         crear_solicitudes(25)
